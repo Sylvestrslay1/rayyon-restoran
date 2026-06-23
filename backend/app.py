@@ -335,6 +335,189 @@ def get_stats():
     return jsonify(result)
 
 
+# ===== BUXGALTERIYA: HISOBOTLAR =====
+@app.route("/api/accounting/report", methods=["GET"])
+def accounting_report():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    period = request.args.get("period", "daily")
+    conn   = get_conn()
+
+    if USE_PG:
+        if period == "daily":
+            date_filter = "date_trunc('day', created_at) = CURRENT_DATE"
+            exp_filter  = "date = CURRENT_DATE::text"
+        elif period == "weekly":
+            date_filter = "created_at >= date_trunc('week', CURRENT_DATE)"
+            exp_filter  = "date >= date_trunc('week', CURRENT_DATE)::text"
+        else:
+            date_filter = "date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)"
+            exp_filter  = "to_char(created_at,'YYYY-MM') = to_char(CURRENT_DATE,'YYYY-MM')"
+    else:
+        if period == "daily":
+            date_filter = "date(created_at,'localtime') = date('now','localtime')"
+            exp_filter  = "date = date('now','localtime')"
+        elif period == "weekly":
+            date_filter = "date(created_at,'localtime') >= date('now','localtime','-6 days')"
+            exp_filter  = "date >= date('now','localtime','-6 days')"
+        else:
+            date_filter = "strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', 'localtime')"
+            exp_filter  = "strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')"
+
+    def val(sql):
+        cur = conn.cursor()
+        cur.execute(sql)
+        row = cur.fetchone()
+        return row[0] if row else 0
+
+    revenue   = val(f"SELECT COALESCE(SUM(total_price),0) FROM orders WHERE status='done' AND {date_filter}")
+    orders_ct = val(f"SELECT COUNT(*) FROM orders WHERE {date_filter}")
+    expenses  = val(f"SELECT COALESCE(SUM(amount),0) FROM expenses WHERE {exp_filter}")
+
+    # Kunlik daromad grafigi (oxirgi 7 kun)
+    if USE_PG:
+        chart_sql = """
+            SELECT date_trunc('day', created_at)::date::text AS day,
+                   COALESCE(SUM(total_price),0) AS rev
+            FROM orders WHERE status='done'
+              AND created_at >= CURRENT_DATE - INTERVAL '6 days'
+            GROUP BY 1 ORDER BY 1
+        """
+    else:
+        chart_sql = """
+            SELECT date(created_at,'localtime') AS day,
+                   COALESCE(SUM(total_price),0) AS rev
+            FROM orders WHERE status='done'
+              AND date(created_at,'localtime') >= date('now','localtime','-6 days')
+            GROUP BY 1 ORDER BY 1
+        """
+    cur2 = conn.cursor()
+    cur2.execute(chart_sql)
+    if USE_PG:
+        chart = [{"day": r[0], "rev": r[1]} for r in cur2.fetchall()]
+    else:
+        chart = [{"day": r[0], "rev": r[1]} for r in cur2.fetchall()]
+
+    # Kategoriya bo'yicha chiqimlar
+    cur3 = conn.cursor()
+    cur3.execute(f"SELECT category, COALESCE(SUM(amount),0) AS total FROM expenses WHERE {exp_filter} GROUP BY category ORDER BY total DESC")
+    if USE_PG:
+        exp_by_cat = [{"cat": r[0], "total": r[1]} for r in cur3.fetchall()]
+    else:
+        exp_by_cat = [{"cat": r[0], "total": r[1]} for r in cur3.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "revenue": revenue,
+        "expenses": expenses,
+        "profit": revenue - expenses,
+        "orders": orders_ct,
+        "chart": chart,
+        "expenses_by_cat": exp_by_cat,
+    })
+
+
+@app.route("/api/expenses", methods=["GET"])
+def get_expenses():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM expenses ORDER BY date DESC, id DESC")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/expenses", methods=["POST"])
+def add_expense():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn,
+        "INSERT INTO expenses (category, description, amount, date) VALUES (?,?,?,?)",
+        (d.get("category"), d.get("description"), d.get("amount", 0), d.get("date"))
+    )
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/expenses/<int:eid>", methods=["DELETE"])
+def delete_expense(eid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM expenses WHERE id=?", (eid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+# ===== OMBOR =====
+@app.route("/api/inventory", methods=["GET"])
+def get_inventory():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM inventory ORDER BY name")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/inventory", methods=["POST"])
+def add_inventory():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn,
+        "INSERT INTO inventory (name, unit, quantity, min_quantity, price_per_unit) VALUES (?,?,?,?,?)",
+        (d.get("name"), d.get("unit","kg"), d.get("quantity",0), d.get("min_quantity",0), d.get("price_per_unit",0))
+    )
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/inventory/<int:iid>", methods=["PUT"])
+def update_inventory(iid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d    = request.json or {}
+    conn = get_conn()
+    # Miqdor o'zgartirish va log yozish
+    cur  = db_exec(conn, "SELECT name, quantity FROM inventory WHERE id=?", (iid,))
+    row  = cur.fetchone()
+    if row:
+        old_name = row["name"] if not USE_PG else row[0]
+        old_qty  = row["quantity"] if not USE_PG else row[1]
+        new_qty  = d.get("quantity", old_qty)
+        diff     = new_qty - old_qty
+        move_type = "kirim" if diff > 0 else "chiqim"
+        if diff != 0:
+            db_exec(conn,
+                "INSERT INTO inventory_log (item_id, item_name, type, quantity, note) VALUES (?,?,?,?,?)",
+                (iid, old_name, move_type, abs(diff), d.get("note", ""))
+            )
+    db_exec(conn,
+        "UPDATE inventory SET name=?, unit=?, quantity=?, min_quantity=?, price_per_unit=? WHERE id=?",
+        (d.get("name"), d.get("unit","kg"), d.get("quantity",0), d.get("min_quantity",0), d.get("price_per_unit",0), iid)
+    )
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/inventory/<int:iid>", methods=["DELETE"])
+def delete_inventory(iid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM inventory WHERE id=?", (iid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/inventory/log", methods=["GET"])
+def get_inventory_log():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM inventory_log ORDER BY created_at DESC")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
 # ===== STATIC FILES =====
 @app.route("/")
 def serve_site():

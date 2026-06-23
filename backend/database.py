@@ -163,6 +163,74 @@ def init_db():
             )
         """)
 
+    # Buxgalteriya jadvallari
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id SERIAL PRIMARY KEY,
+                category TEXT NOT NULL,
+                description TEXT,
+                amount INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventory (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                unit TEXT DEFAULT 'kg',
+                quantity REAL DEFAULT 0,
+                min_quantity REAL DEFAULT 0,
+                price_per_unit INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventory_log (
+                id SERIAL PRIMARY KEY,
+                item_id INTEGER,
+                item_name TEXT,
+                type TEXT,
+                quantity REAL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                description TEXT,
+                amount INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                unit TEXT DEFAULT 'kg',
+                quantity REAL DEFAULT 0,
+                min_quantity REAL DEFAULT 0,
+                price_per_unit INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventory_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER,
+                item_name TEXT,
+                type TEXT,
+                quantity REAL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
     # Default settings
     defaults = [
         ("restaurant_name", "Rayyon Restoran"),

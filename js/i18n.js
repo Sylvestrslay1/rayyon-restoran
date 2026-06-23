@@ -191,6 +191,9 @@ const TRANSLATIONS = {
     "cat.milliy":"🇺🇿 Milliy","cat.grill":"🔥 Grill","cat.salad":"🥗 Salat","cat.drink":"🥤 Ichimlik",
     // RECENT ORDERS
     "dash.recent":  "So'nggi buyurtmalar",
+    "adm.accounting":   "Buxgalteriya",
+    "adm.acc.title":    "Buxgalteriya",
+    "adm.acc.sub":      "Daromad, chiqim va ombor boshqaruvi",
   },
 
   ru: {
@@ -346,6 +349,9 @@ const TRANSLATIONS = {
     "toast.img":"Фото загружено","toast.error":"Ошибка",
     "cat.milliy":"🇺🇿 Национальные","cat.grill":"🔥 Гриль","cat.salad":"🥗 Салаты","cat.drink":"🥤 Напитки",
     "dash.recent":"Последние заказы",
+    "adm.accounting":   "Бухгалтерия",
+    "adm.acc.title":    "Бухгалтерия",
+    "adm.acc.sub":      "Доход, расходы и управление складом",
   },
 
   en: {
@@ -501,6 +507,9 @@ const TRANSLATIONS = {
     "toast.img":"Image uploaded","toast.error":"Error",
     "cat.milliy":"🇺🇿 National","cat.grill":"🔥 Grill","cat.salad":"🥗 Salads","cat.drink":"🥤 Drinks",
     "dash.recent":"Recent Orders",
+    "adm.accounting":   "Accounting",
+    "adm.acc.title":    "Accounting",
+    "adm.acc.sub":      "Revenue, expenses and inventory management",
   }
 };
 
