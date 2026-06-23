@@ -77,11 +77,9 @@ body {
   max-width: 1200px; margin: 0 auto; padding: 0 28px;
   display: flex; align-items: center; justify-content: space-between;
 }
-.logo {
-  font-family: 'Cinzel', serif;
-  font-size: 1.7rem; font-weight: 700;
-  text-decoration: none; letter-spacing: 4px;
-}
+.logo { text-decoration: none; display: flex; align-items: center; }
+.logo-img { height: 52px; width: auto; transition: filter var(--transition); }
+.logo-img:hover { filter: drop-shadow(0 0 12px rgba(0,212,255,0.6)); }
 .logo-ray { color: var(--cyan); }
 .logo-yon { color: var(--gold); }
 
@@ -627,4 +625,93 @@ body {
   .reservation-form { padding: 24px 20px; }
   .footer-inner { flex-direction: column; align-items: flex-start; }
   .about-stats { gap: 10px; }
+  .gallery-grid { grid-template-columns: 1fr 1fr; }
+  .gallery-large, .gallery-wide { grid-column: span 1; grid-row: span 1; }
+  .promo-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== GALLERY ===== */
+.gallery-section { padding: 100px 0; position: relative; z-index: 1; }
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 220px 220px;
+  gap: 14px; margin-top: 48px;
+}
+.gallery-large { grid-column: span 1; grid-row: span 2; }
+.gallery-wide  { grid-column: span 2; }
+.gallery-item  { border-radius: 10px; overflow: hidden; cursor: pointer; }
+.gallery-inner { position: relative; width: 100%; height: 100%; }
+.gallery-placeholder {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  transition: transform 0.4s ease;
+}
+.gallery-item:hover .gallery-placeholder { transform: scale(1.06); }
+.g1 { background: linear-gradient(135deg,#0a1628,#1a3a6e); border: 1px solid rgba(200,169,110,0.3); }
+.g2 { background: linear-gradient(135deg,#0d1f3c,#0a2463); border: 1px solid rgba(0,212,255,0.2); }
+.g3 { background: linear-gradient(135deg,#050d20,#0a1628); border: 1px solid rgba(200,169,110,0.25); }
+.g4 { background: linear-gradient(135deg,#0a2463,#0d1f3c); border: 1px solid rgba(0,212,255,0.2); }
+.g5 { background: linear-gradient(135deg,#030810,#0a1628); border: 1px solid rgba(200,169,110,0.2); }
+.g6 { background: linear-gradient(135deg,#0d1629,#1a3a6e); border: 1px solid rgba(0,212,255,0.2); }
+.g-emoji { font-size: 3.5rem; }
+.g-label {
+  font-family: 'Rajdhani', sans-serif; font-size: 0.8rem;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+}
+.gallery-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,212,255,0.15), transparent);
+  display: flex; align-items: flex-end; padding: 16px;
+  opacity: 0; transition: opacity 0.3s;
+  font-family: 'Cinzel', serif; font-size: 0.9rem;
+  color: var(--gold); letter-spacing: 2px;
+}
+.gallery-item:hover .gallery-overlay { opacity: 1; }
+
+/* ===== PROMOTIONS ===== */
+.promo-section { padding: 100px 0; position: relative; z-index: 1; }
+.promo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px; margin-top: 48px;
+}
+.promo-card {
+  padding: 32px 28px; position: relative; overflow: hidden;
+  text-align: center;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.promo-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0,212,255,0.1);
+}
+.promo-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--gold), transparent);
+}
+.promo-badge {
+  position: absolute; top: 16px; right: 16px;
+  background: linear-gradient(135deg, var(--cyan), var(--gold));
+  color: var(--black); font-family: 'Cinzel', serif;
+  font-size: 0.75rem; font-weight: 700;
+  padding: 4px 10px; border-radius: 20px;
+  letter-spacing: 1px;
+}
+.promo-icon { font-size: 3rem; margin-bottom: 16px; }
+.promo-card h3 {
+  font-family: 'Cinzel', serif; font-size: 1.1rem;
+  color: var(--gold); margin-bottom: 12px; letter-spacing: 1px;
+}
+.promo-card p {
+  color: var(--muted); font-size: 0.88rem; line-height: 1.6;
+  margin-bottom: 20px;
+}
+.promo-time {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--cyan); font-size: 0.8rem; letter-spacing: 1.5px;
+  font-family: 'Rajdhani', sans-serif; font-weight: 600;
+}
+.promo-time svg { width: 14px; height: 14px; }

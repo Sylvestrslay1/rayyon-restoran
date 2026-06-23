@@ -38,11 +38,13 @@
   <nav class="navbar" id="navbar">
     <div class="nav-container">
       <a href="#" class="logo">
-        <span class="logo-ray">RAY</span><span class="logo-yon">YON</span>
+        <img src="assets/logo.svg" alt="Rayyon Restoran" class="logo-img" />
       </a>
       <ul class="nav-links" id="navLinks">
         <li><a href="#home"        data-i18n="nav.home">Bosh sahifa</a></li>
         <li><a href="#menu"        data-i18n="nav.menu">Menyu</a></li>
+        <li><a href="#gallery"     data-i18n="nav.gallery">Galereya</a></li>
+        <li><a href="#promo"       data-i18n="nav.promo">Aksiyalar</a></li>
         <li><a href="#about"       data-i18n="nav.about">Biz haqimizda</a></li>
         <li><a href="#reservation" data-i18n="nav.reservation">Bron qilish</a></li>
         <li><a href="#contact"     data-i18n="nav.contact">Aloqa</a></li>
@@ -155,6 +157,119 @@
         <button class="tab-btn" data-category="drink"         data-i18n="menu.drink">Ichimliklar</button>
       </div>
       <div class="menu-grid" id="menuGrid"></div>
+    </div>
+  </section>
+
+  <!-- GALLERY -->
+  <section class="gallery-section" id="gallery">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label" data-i18n="gallery.label">Foto</p>
+        <h2 class="section-title" data-i18n="gallery.title">Galereya</h2>
+        <p class="section-desc" data-i18n="gallery.desc">Rayyon atmosferasi va taomlarimizdan lavhalar</p>
+      </div>
+      <div class="gallery-grid">
+        <div class="gallery-item gallery-large reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g1">
+              <span class="g-emoji">🍚</span>
+              <span class="g-label" data-i18n="gallery.g1">Milliy palov</span>
+            </div>
+            <div class="gallery-overlay">
+              <span data-i18n="gallery.g1">Milliy palov</span>
+            </div>
+          </div>
+        </div>
+        <div class="gallery-item reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g2">
+              <span class="g-emoji">🍢</span>
+              <span class="g-label" data-i18n="gallery.g2">Kebab</span>
+            </div>
+            <div class="gallery-overlay"><span data-i18n="gallery.g2">Kebab</span></div>
+          </div>
+        </div>
+        <div class="gallery-item reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g3">
+              <span class="g-emoji">🏛</span>
+              <span class="g-label" data-i18n="gallery.g3">Zal</span>
+            </div>
+            <div class="gallery-overlay"><span data-i18n="gallery.g3">Zal ko'rinishi</span></div>
+          </div>
+        </div>
+        <div class="gallery-item reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g4">
+              <span class="g-emoji">🍜</span>
+              <span class="g-label" data-i18n="gallery.g4">Lag'mon</span>
+            </div>
+            <div class="gallery-overlay"><span data-i18n="gallery.g4">Lag'mon</span></div>
+          </div>
+        </div>
+        <div class="gallery-item gallery-wide reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g5">
+              <span class="g-emoji">🌙</span>
+              <span class="g-label" data-i18n="gallery.g5">Kechki muhit</span>
+            </div>
+            <div class="gallery-overlay"><span data-i18n="gallery.g5">Kechki muhit</span></div>
+          </div>
+        </div>
+        <div class="gallery-item reveal">
+          <div class="gallery-inner">
+            <div class="gallery-placeholder g6">
+              <span class="g-emoji">🍗</span>
+              <span class="g-label" data-i18n="gallery.g6">Grill tovuq</span>
+            </div>
+            <div class="gallery-overlay"><span data-i18n="gallery.g6">Grill tovuq</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROMOTIONS -->
+  <section class="promo-section" id="promo">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label" data-i18n="promo.label">Maxsus</p>
+        <h2 class="section-title" data-i18n="promo.title">Aksiyalar</h2>
+        <p class="section-desc" data-i18n="promo.desc">Chegirmalar va maxsus takliflardan foydalaning</p>
+      </div>
+      <div class="promo-grid" id="promoGrid">
+        <!-- Default promolar -->
+        <div class="promo-card glass-card reveal">
+          <div class="promo-badge">-20%</div>
+          <div class="promo-icon">🌅</div>
+          <h3 data-i18n="promo.1.title">Ertalabki chegirma</h3>
+          <p data-i18n="promo.1.desc">Har kuni 10:00–12:00 orasida barcha taomlardan 20% chegirma</p>
+          <div class="promo-time">
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.2"/><polyline points="10 6 10 10 13 12" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            <span data-i18n="promo.1.time">10:00 – 12:00</span>
+          </div>
+        </div>
+        <div class="promo-card glass-card reveal">
+          <div class="promo-badge">2+1</div>
+          <div class="promo-icon">👨‍👩‍👧‍👦</div>
+          <h3 data-i18n="promo.2.title">Oilaviy set</h3>
+          <p data-i18n="promo.2.desc">4 kishilik buyurtmada bitta taom bepul. Oilaviy kechalar uchun ideal</p>
+          <div class="promo-time">
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.2"/><polyline points="10 6 10 10 13 12" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            <span data-i18n="promo.2.time">Har kuni</span>
+          </div>
+        </div>
+        <div class="promo-card glass-card reveal">
+          <div class="promo-badge">🎁</div>
+          <div class="promo-icon">🎂</div>
+          <h3 data-i18n="promo.3.title">Tug'ilgan kun</h3>
+          <p data-i18n="promo.3.desc">Tug'ilgan kuningizda dessert sovg'a va 15% chegirma. Oldindan xabar bering</p>
+          <div class="promo-time">
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.2"/><polyline points="10 6 10 10 13 12" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            <span data-i18n="promo.3.time">Maxsus kun</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -370,7 +485,7 @@
     </div>
     <div class="container footer-inner">
       <div class="footer-brand">
-        <span class="logo"><span class="logo-ray">RAY</span><span class="logo-yon">YON</span></span>
+        <img src="assets/logo.svg" alt="Rayyon" style="height:44px;opacity:0.85;" />
         <p data-i18n="footer.brand">Buyuk Ipak Yo'lining ta'mlari</p>
         <div class="footer-girih">
           <svg viewBox="0 0 60 60" width="60">
@@ -383,6 +498,8 @@
       <div class="footer-links">
         <a href="#home"        data-i18n="nav.home">Bosh sahifa</a>
         <a href="#menu"        data-i18n="nav.menu">Menyu</a>
+        <a href="#gallery"     data-i18n="nav.gallery">Galereya</a>
+        <a href="#promo"       data-i18n="nav.promo">Aksiyalar</a>
         <a href="#about"       data-i18n="nav.about">Biz haqimizda</a>
         <a href="#reservation" data-i18n="nav.reservation">Bron</a>
         <a href="#contact"     data-i18n="nav.contact">Aloqa</a>
