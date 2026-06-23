@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+backend/rayyon.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.env
+.env

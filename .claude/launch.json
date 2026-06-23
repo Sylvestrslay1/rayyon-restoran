@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rayyon-site",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "3456", "C:\\Users\\user\\Documents\\rayyon-restaurant"],
+      "port": 3456
+    }
+  ]
+}

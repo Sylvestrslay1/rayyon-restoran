@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rayyon — Neo-Sharq Restoran</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* LANG SWITCHER */
+    .lang-switcher {
+      display: flex; align-items: center; gap: 2px;
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.15);
+      border-radius: 3px; padding: 2px;
+    }
+    .lang-btn {
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,0.45); font-family: 'Rajdhani',sans-serif;
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 1.5px;
+      padding: 4px 9px; border-radius: 2px; transition: all 0.2s;
+      clip-path: polygon(3px 0%,100% 0%,calc(100% - 3px) 100%,0% 100%);
+    }
+    .lang-btn:hover { color: #fff; background: rgba(0,212,255,0.08); }
+    .lang-btn.active {
+      background: linear-gradient(135deg, rgba(0,100,170,0.6), rgba(0,180,220,0.4));
+      color: #00d4ff;
+      box-shadow: 0 0 8px rgba(0,212,255,0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="particleCanvas"></canvas>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="#" class="logo">
+        <span class="logo-ray">RAY</span><span class="logo-yon">YON</span>
+      </a>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#home"        data-i18n="nav.home">Bosh sahifa</a></li>
+        <li><a href="#menu"        data-i18n="nav.menu">Menyu</a></li>
+        <li><a href="#about"       data-i18n="nav.about">Biz haqimizda</a></li>
+        <li><a href="#reservation" data-i18n="nav.reservation">Bron qilish</a></li>
+        <li><a href="#contact"     data-i18n="nav.contact">Aloqa</a></li>
+      </ul>
+      <div class="lang-switcher">
+        <button class="lang-btn active" data-lang="uz">UZ</button>
+        <button class="lang-btn" data-lang="ru">RU</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" id="home">
+    <div class="hero-girih" id="heroGirih"></div>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="badge-line"></span>
+        <span data-i18n="hero.badge">O'zbekiston · Toshkent · 2014</span>
+        <span class="badge-line"></span>
+      </div>
+      <h1 class="hero-title">
+        <span class="title-ray" data-text="RAYYON">RAYYON</span>
+        <span class="title-sub" data-i18n="hero.subtitle">RESTORAN</span>
+      </h1>
+      <p class="hero-desc" data-i18n="hero.desc">Buyuk Ipak Yo'lining ta'mlari — zamonaviy makonida</p>
+      <div class="hero-btns">
+        <a href="#menu" class="btn btn-cyan">
+          <svg class="btn-icon-bodom" viewBox="0 0 24 24"><path d="M12 2C8 2 5 5.5 5 10c0 5 4 9 7 11 3-2 7-6 7-11 0-4.5-3-8-7-8z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span data-i18n="hero.btn1">Menyuni ko'rish</span>
+        </a>
+        <a href="#reservation" class="btn btn-outline-cyan" data-i18n="hero.btn2">Stol bron qilish</a>
+      </div>
+    </div>
+    <div class="hero-scroll-indicator">
+      <div class="scroll-line"></div>
+      <span data-i18n="hero.scroll">Pastga aylantiring</span>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <div class="container">
+      <div class="feature-grid">
+        <div class="feature-card glass-card reveal">
+          <div class="feature-anor">
+            <svg viewBox="0 0 40 40"><circle cx="20" cy="22" r="12" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M20 10 Q22 4 20 2 Q18 4 20 10" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="20" cy="22" r="4" fill="currentColor" opacity="0.3"/></svg>
+          </div>
+          <h3 data-i18n="feat.fresh.title">Yangi mahsulotlar</h3>
+          <p data-i18n="feat.fresh.desc">Har kuni tabiiy va yangi ingredientlardan tayyorlangan taomlar</p>
+        </div>
+        <div class="feature-card glass-card reveal">
+          <div class="feature-anor">
+            <svg viewBox="0 0 40 40"><polygon points="20,4 36,32 4,32" fill="none" stroke="currentColor" stroke-width="1.2"/><polygon points="20,12 30,28 10,28" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.5"/></svg>
+          </div>
+          <h3 data-i18n="feat.quality.title">Sifat kafolati</h3>
+          <p data-i18n="feat.quality.desc">Professional oshpazlar jamoasi bilan eng yuqori sifat standarti</p>
+        </div>
+        <div class="feature-card glass-card reveal">
+          <div class="feature-anor">
+            <svg viewBox="0 0 40 40"><path d="M8 20 Q8 8 20 8 Q32 8 32 20 Q32 32 20 32" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 20 Q8 32 20 32" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.5"/><circle cx="8" cy="20" r="2" fill="currentColor"/></svg>
+          </div>
+          <h3 data-i18n="feat.delivery.title">Yetkazib berish</h3>
+          <p data-i18n="feat.delivery.desc">Shahar bo'ylab tez va qulay yetkazib berish xizmati</p>
+        </div>
+        <div class="feature-card glass-card reveal">
+          <div class="feature-anor">
+            <svg viewBox="0 0 40 40"><path d="M20 6 L34 14 L34 26 L20 34 L6 26 L6 14 Z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M20 12 L28 17 L28 23 L20 28 L12 23 L12 17 Z" fill="none" stroke="currentColor" stroke-width="0.7" opacity="0.5"/></svg>
+          </div>
+          <h3 data-i18n="feat.cozy.title">Qulay muhit</h3>
+          <p data-i18n="feat.cozy.desc">Oilaviy kechalar va maxsus tadbirlar uchun ideal makon</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIVIDER -->
+  <div class="silk-divider">
+    <svg viewBox="0 0 1200 60" preserveAspectRatio="none">
+      <path d="M0,30 Q150,0 300,30 Q450,60 600,30 Q750,0 900,30 Q1050,60 1200,30" fill="none" stroke="url(#silkGrad)" stroke-width="1.5"/>
+      <defs>
+        <linearGradient id="silkGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#00d4ff" stop-opacity="0"/>
+          <stop offset="30%" stop-color="#00d4ff" stop-opacity="0.6"/>
+          <stop offset="50%" stop-color="#c8a96e" stop-opacity="0.9"/>
+          <stop offset="70%" stop-color="#00d4ff" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <!-- MENU -->
+  <section class="menu-section" id="menu">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label" data-i18n="menu.label">Bizning</p>
+        <h2 class="section-title" data-i18n="menu.title">Menyu</h2>
+        <p class="section-desc" data-i18n="menu.desc">Ipak yo'li ta'mlaridan ilhomlangan har bir taom</p>
+      </div>
+      <div class="menu-tabs">
+        <button class="tab-btn active" data-category="all"    data-i18n="menu.all">Barchasi</button>
+        <button class="tab-btn" data-category="milliy"        data-i18n="menu.milliy">Milliy taomlar</button>
+        <button class="tab-btn" data-category="grill"         data-i18n="menu.grill">Grill</button>
+        <button class="tab-btn" data-category="salad"         data-i18n="menu.salad">Salatlar</button>
+        <button class="tab-btn" data-category="drink"         data-i18n="menu.drink">Ichimliklar</button>
+      </div>
+      <div class="menu-grid" id="menuGrid"></div>
+    </div>
+  </section>
+
+  <!-- SILK ROAD DIVIDER -->
+  <div class="silk-divider flip">
+    <svg viewBox="0 0 1200 60" preserveAspectRatio="none">
+      <path d="M0,30 Q150,60 300,30 Q450,0 600,30 Q750,60 900,30 Q1050,0 1200,30" fill="none" stroke="url(#silkGrad2)" stroke-width="1.5"/>
+      <defs>
+        <linearGradient id="silkGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#c8a96e" stop-opacity="0"/>
+          <stop offset="30%" stop-color="#c8a96e" stop-opacity="0.6"/>
+          <stop offset="50%" stop-color="#00d4ff" stop-opacity="0.9"/>
+          <stop offset="70%" stop-color="#c8a96e" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#c8a96e" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <!-- ABOUT -->
+  <section class="about-section" id="about">
+    <div class="container about-grid">
+      <div class="about-visual reveal">
+        <div class="about-girih-frame">
+          <svg class="girih-svg" viewBox="0 0 300 300">
+            <defs>
+              <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#c8a96e"/>
+                <stop offset="50%" stop-color="#00d4ff"/>
+                <stop offset="100%" stop-color="#c8a96e"/>
+              </linearGradient>
+            </defs>
+            <polygon points="150,20 260,80 260,200 150,260 40,200 40,80" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" opacity="0.6"/>
+            <polygon points="150,50 230,95 230,185 150,230 70,185 70,95" fill="none" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
+            <polygon points="150,80 210,113 210,178 150,210 90,178 90,113" fill="none" stroke="#00d4ff" stroke-width="0.8" opacity="0.5"/>
+            <circle cx="150" cy="150" r="35" fill="none" stroke="url(#goldGrad)" stroke-width="1.2"/>
+            <circle cx="150" cy="150" r="20" fill="none" stroke="#00d4ff" stroke-width="0.8" opacity="0.6"/>
+            <circle cx="150" cy="150" r="6" fill="#c8a96e" opacity="0.4"/>
+            <line x1="150" y1="20" x2="150" y2="260" stroke="#c8a96e" stroke-width="0.4" opacity="0.2"/>
+            <line x1="40" y1="140" x2="260" y2="140" stroke="#c8a96e" stroke-width="0.4" opacity="0.2"/>
+            <line x1="150" y1="115" x2="150" y2="100" stroke="#00d4ff" stroke-width="1" opacity="0.5"/>
+            <line x1="150" y1="185" x2="150" y2="200" stroke="#00d4ff" stroke-width="1" opacity="0.5"/>
+            <line x1="115" y1="150" x2="100" y2="150" stroke="#00d4ff" stroke-width="1" opacity="0.5"/>
+            <line x1="185" y1="150" x2="200" y2="150" stroke="#00d4ff" stroke-width="1" opacity="0.5"/>
+          </svg>
+          <div class="about-center-text">
+            <span class="about-year">2014</span>
+            <span class="about-since" data-i18n="about.since">dan buyon</span>
+          </div>
+        </div>
+        <div class="about-badge-cyber">
+          <span class="badge-num">10+</span>
+          <span class="badge-text" data-i18n="about.exp">Yillik tajriba</span>
+        </div>
+      </div>
+      <div class="about-content reveal">
+        <p class="section-label" data-i18n="about.label">Biz haqimizda</p>
+        <h2 class="section-title" data-i18n="about.title">Rayyon — bu faqat<br/>ovqat emas</h2>
+        <p class="about-text" data-i18n="about.text1">2014-yildan buyon Rayyon restoran mehmonlarimizga eng yaxshi taomlar va xizmatni taqdim etib kelmoqda.</p>
+        <p class="about-text" data-i18n="about.text2">Professional oshpazlarimiz milliy va xalqaro taomlarni eng yangi ingredientlardan tayyorlaydi.</p>
+        <div class="about-stats">
+          <div class="stat glass-card">
+            <span class="stat-num">50+</span>
+            <span class="stat-label" data-i18n="about.dishes">Taom turi</span>
+          </div>
+          <div class="stat glass-card">
+            <span class="stat-num">1000+</span>
+            <span class="stat-label" data-i18n="about.clients">Mamnun mijoz</span>
+          </div>
+          <div class="stat glass-card">
+            <span class="stat-num">15</span>
+            <span class="stat-label" data-i18n="about.tables">Stol soni</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESERVATION -->
+  <section class="reservation-section" id="reservation">
+    <div class="reservation-pattern"></div>
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label" data-i18n="res.label">Online</p>
+        <h2 class="section-title" data-i18n="res.title">Stol bron qilish</h2>
+        <p class="section-desc" data-i18n="res.desc">Oldindan joy band qiling va qulay vaqtda tashrif buyuring</p>
+      </div>
+      <form class="reservation-form glass-card reveal" id="reservationForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="res.name">Ism Familiya</label>
+            <input type="text" id="resName" data-i18n-ph="res.name.ph" placeholder="Ism Familiya" required />
+          </div>
+          <div class="form-group">
+            <label data-i18n="res.phone">Telefon raqam</label>
+            <input type="tel" id="resPhone" data-i18n-ph="res.phone.ph" placeholder="+998 90 000 00 00" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="res.date">Sana</label>
+            <input type="date" id="resDate" required />
+          </div>
+          <div class="form-group">
+            <label data-i18n="res.time">Vaqt</label>
+            <input type="time" id="resTime" min="10:00" max="22:00" required />
+          </div>
+          <div class="form-group">
+            <label data-i18n="res.guests">Mehmonlar soni</label>
+            <select id="resGuests">
+              <option value="1" data-i18n="res.g1">1 kishi</option>
+              <option value="2" selected data-i18n="res.g2">2 kishi</option>
+              <option value="3" data-i18n="res.g3">3 kishi</option>
+              <option value="4" data-i18n="res.g4">4 kishi</option>
+              <option value="5" data-i18n="res.g5">5+ kishi</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label data-i18n="res.note">Qo'shimcha izoh</label>
+          <textarea id="resNote" data-i18n-ph="res.note.ph" placeholder="Maxsus xohishlar, tug'ilgan kun va h.k." rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn btn-cyan btn-full">
+          <svg class="btn-icon-bodom" viewBox="0 0 24 24"><path d="M12 2C8 2 5 5.5 5 10c0 5 4 9 7 11 3-2 7-6 7-11 0-4.5-3-8-7-8z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span data-i18n="res.btn">Bron qilish</span>
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section class="contact-section" id="contact">
+    <div class="container contact-grid">
+      <div class="contact-info reveal">
+        <p class="section-label" data-i18n="contact.label">Aloqa</p>
+        <h2 class="section-title" data-i18n="contact.title">Biz bilan<br/>bog'laning</h2>
+        <div class="contact-items">
+          <div class="contact-item glass-card">
+            <div class="c-icon-wrap">
+              <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            </div>
+            <div>
+              <strong data-i18n="contact.address">Manzil</strong>
+              <p data-i18n="contact.address.v">Toshkent sh., Yunusobod tumani, Amir Temur ko'chasi 15</p>
+            </div>
+          </div>
+          <div class="contact-item glass-card">
+            <div class="c-icon-wrap">
+              <svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            </div>
+            <div>
+              <strong data-i18n="contact.phone">Telefon</strong>
+              <p>+998 71 123 45 67</p>
+              <p>+998 90 123 45 67</p>
+            </div>
+          </div>
+          <div class="contact-item glass-card">
+            <div class="c-icon-wrap">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.2"/><polyline points="12 6 12 12 16 14" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            </div>
+            <div>
+              <strong data-i18n="contact.hours">Ish vaqti</strong>
+              <p data-i18n="contact.hours.v1">Du–Sha: 10:00 – 23:00</p>
+              <p data-i18n="contact.hours.v2">Yak: 11:00 – 22:00</p>
+            </div>
+          </div>
+          <div class="contact-item glass-card">
+            <div class="c-icon-wrap telegram-icon">
+              <svg viewBox="0 0 24 24"><path d="M22 2L11 13" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M22 2L15 22L11 13L2 9L22 2Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            </div>
+            <div>
+              <strong data-i18n="contact.telegram">Telegram bot</strong>
+              <a href="https://t.me/rayyon_restoran_bot" target="_blank">@rayyon_restoran_bot</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="map-hologram reveal">
+        <div class="map-inner">
+          <svg viewBox="0 0 300 200" class="map-grid-svg">
+            <defs>
+              <pattern id="mapGrid" width="30" height="30" patternUnits="userSpaceOnUse">
+                <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#00d4ff" stroke-width="0.3" opacity="0.3"/>
+              </pattern>
+            </defs>
+            <rect width="300" height="200" fill="url(#mapGrid)"/>
+            <circle cx="150" cy="100" r="30" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.5"/>
+            <circle cx="150" cy="100" r="15" fill="none" stroke="#c8a96e" stroke-width="1.5" opacity="0.7"/>
+            <circle cx="150" cy="100" r="5" fill="#c8a96e" opacity="0.8"/>
+            <line x1="150" y1="0" x2="150" y2="200" stroke="#00d4ff" stroke-width="0.4" opacity="0.2"/>
+            <line x1="0" y1="100" x2="300" y2="100" stroke="#00d4ff" stroke-width="0.4" opacity="0.2"/>
+          </svg>
+          <div class="map-label" data-i18n="map.label">Toshkent · Yunusobod</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-naqsh">
+      <svg viewBox="0 0 1200 120" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="footerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.1"/>
+            <stop offset="50%" stop-color="#c8a96e" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#00d4ff" stop-opacity="0.1"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,60 Q100,20 200,60 Q300,100 400,60 Q500,20 600,60 Q700,100 800,60 Q900,20 1000,60 Q1100,100 1200,60" fill="none" stroke="url(#footerGrad)" stroke-width="1"/>
+        <path d="M0,80 Q100,40 200,80 Q300,120 400,80 Q500,40 600,80 Q700,120 800,80 Q900,40 1000,80 Q1100,120 1200,80" fill="none" stroke="url(#footerGrad)" stroke-width="0.5" opacity="0.5"/>
+      </svg>
+    </div>
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="logo"><span class="logo-ray">RAY</span><span class="logo-yon">YON</span></span>
+        <p data-i18n="footer.brand">Buyuk Ipak Yo'lining ta'mlari</p>
+        <div class="footer-girih">
+          <svg viewBox="0 0 60 60" width="60">
+            <polygon points="30,4 54,17 54,43 30,56 6,43 6,17" fill="none" stroke="#c8a96e" stroke-width="0.8" opacity="0.4"/>
+            <polygon points="30,14 44,21 44,39 30,46 16,39 16,21" fill="none" stroke="#00d4ff" stroke-width="0.6" opacity="0.3"/>
+            <circle cx="30" cy="30" r="6" fill="none" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
+          </svg>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="#home"        data-i18n="nav.home">Bosh sahifa</a>
+        <a href="#menu"        data-i18n="nav.menu">Menyu</a>
+        <a href="#about"       data-i18n="nav.about">Biz haqimizda</a>
+        <a href="#reservation" data-i18n="nav.reservation">Bron</a>
+        <a href="#contact"     data-i18n="nav.contact">Aloqa</a>
+      </div>
+      <div class="footer-social">
+        <a href="https://t.me/rayyon_restoran_bot" target="_blank" class="social-btn" aria-label="Telegram">
+          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        </a>
+        <a href="#" class="social-btn" aria-label="Instagram">
+          <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>
+        </a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p data-i18n="footer.copy">&copy; 2024 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li</p>
+    </div>
+  </footer>
+
+  <!-- ORDER MODAL -->
+  <div class="modal-overlay" id="orderModal">
+    <div class="modal glass-card">
+      <button class="modal-close" id="modalClose">&times;</button>
+      <h3 data-i18n="order.title">Buyurtma berish</h3>
+      <div id="orderItemInfo"></div>
+      <div class="form-group">
+        <label data-i18n="order.qty">Miqdor</label>
+        <div class="qty-control">
+          <button class="qty-btn" id="qtyMinus">−</button>
+          <span id="qtyValue">1</span>
+          <button class="qty-btn" id="qtyPlus">+</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label data-i18n="order.name">Ism</label>
+        <input type="text" id="orderName" data-i18n-ph="order.name.ph" placeholder="Ismingiz" />
+      </div>
+      <div class="form-group">
+        <label data-i18n="order.phone">Telefon</label>
+        <input type="tel" id="orderPhone" placeholder="+998 90 000 00 00" />
+      </div>
+      <p class="order-total" id="orderTotal"></p>
+      <button class="btn btn-cyan btn-full" id="confirmOrder">
+        <svg class="btn-icon-bodom" viewBox="0 0 24 24"><path d="M12 2C8 2 5 5.5 5 10c0 5 4 9 7 11 3-2 7-6 7-11 0-4.5-3-8-7-8z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span data-i18n="order.confirm">Buyurtmani tasdiqlash</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

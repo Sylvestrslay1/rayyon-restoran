@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel — Rayyon</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    .lang-switcher {
+      display: flex; gap: 2px; padding: 8px 10px 6px;
+      border-bottom: 1px solid rgba(0,212,255,0.18);
+    }
+    .lang-btn {
+      flex: 1; background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,0.35); font-family: 'Rajdhani',sans-serif;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 1.5px;
+      padding: 5px 4px; border-radius: 2px; transition: all 0.2s;
+      clip-path: polygon(3px 0%,100% 0%,calc(100% - 3px) 100%,0% 100%);
+    }
+    .lang-btn:hover { color: #fff; background: rgba(0,212,255,0.08); }
+    .lang-btn.active { background: rgba(0,212,255,0.12); color: #00d4ff; border: 1px solid rgba(0,212,255,0.2); }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --black:  #030810; --dark: #080f1e; --dark2: #0d1629;
+      --cyan:   #00d4ff; --cyan2: #00aacc;
+      --gold:   #c8a96e; --gold2: #a8843e;
+      --white:  #ffffff; --muted: rgba(255,255,255,0.45);
+      --border-cyan: rgba(0,212,255,0.18);
+      --border-gold: rgba(200,169,110,0.22);
+      --red:    #ff5757; --green: #4ade80; --blue: #60a5fa; --yellow: #fbbf24;
+    }
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background: var(--black); color: var(--white);
+      display: flex; min-height: 100vh; overflow-x: hidden;
+    }
+
+    /* BG NAQSH */
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cpolygon points='50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5' fill='none' stroke='%2300d4ff' stroke-width='0.35' stroke-opacity='0.08'/%3E%3Ccircle cx='50' cy='50' r='12' fill='none' stroke='%23c8a96e' stroke-width='0.3' stroke-opacity='0.07'/%3E%3C/svg%3E");
+      background-size: 100px 100px;
+      animation: bgDrift 50s linear infinite;
+    }
+    @keyframes bgDrift { to { background-position: 100px 100px; } }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 240px; min-height: 100vh;
+      background: rgba(8,15,30,0.95);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border-cyan);
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 28px 24px;
+      border-bottom: 1px solid var(--border-cyan);
+    }
+    .sidebar-logo h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 1.5rem; font-weight: 900; letter-spacing: 4px;
+    }
+    .logo-ray { color: var(--cyan); }
+    .logo-yon { color: var(--gold); }
+    .sidebar-logo p {
+      font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--muted); margin-top: 4px;
+    }
+    .sidebar-girih {
+      padding: 12px 24px 0;
+    }
+    .sidebar-girih svg { width: 100%; opacity: 0.25; }
+
+    .nav { flex: 1; padding: 12px 10px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px; border-radius: 4px; cursor: pointer;
+      color: var(--muted); font-size: 0.82rem; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      transition: all 0.25s; margin-bottom: 3px;
+      border: none; background: none; width: 100%; text-align: left;
+      font-family: 'Rajdhani', sans-serif;
+      clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+    }
+    .nav-item:hover { background: rgba(0,212,255,0.06); color: var(--cyan); }
+    .nav-item.active {
+      background: rgba(0,212,255,0.1);
+      color: var(--cyan);
+      border-left: 2px solid var(--cyan);
+    }
+    .nav-item .n-icon { font-size: 1rem; width: 18px; text-align: center; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto; background: var(--red); color: #fff;
+      font-size: 0.65rem; font-weight: 700; padding: 2px 7px;
+      border-radius: 2px; clip-path: polygon(3px 0%,100% 0%,calc(100% - 3px) 100%,0% 100%);
+    }
+
+    .sidebar-bottom {
+      padding: 12px 10px; border-top: 1px solid var(--border-cyan);
+    }
+    .logout-btn {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 4px; cursor: pointer;
+      color: var(--muted); font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      background: none; border: none; width: 100%;
+      font-family: 'Rajdhani', sans-serif; transition: color 0.25s;
+    }
+    .logout-btn:hover { color: var(--red); }
+
+    /* MAIN */
+    .main { margin-left: 240px; flex: 1; padding: 32px; position: relative; z-index: 1; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* PAGE HEADER */
+    .page-header { margin-bottom: 28px; }
+    .page-header h2 {
+      font-family: 'Cinzel', serif; font-size: 1.4rem; font-weight: 700;
+      background: linear-gradient(135deg, #fff 30%, var(--gold));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      letter-spacing: 2px;
+    }
+    .page-header p { color: var(--muted); font-size: 0.82rem; margin-top: 4px; letter-spacing: 0.5px; }
+
+    /* STAT CARDS */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card {
+      background: rgba(10,36,99,0.12);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-cyan);
+      border-radius: 6px; padding: 18px 20px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+    .stat-card:hover { border-color: rgba(0,212,255,0.4); box-shadow: 0 0 24px rgba(0,212,255,0.06); }
+    .s-label {
+      font-size: 0.65rem; color: var(--muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 2px;
+    }
+    .s-value { font-family: 'Cinzel', serif; font-size: 1.9rem; font-weight: 700; margin: 6px 0 2px; }
+    .s-sub { font-size: 0.72rem; color: var(--muted); }
+    .stat-card.gold .s-value { color: var(--gold); }
+    .stat-card.cyan .s-value { color: var(--cyan); }
+    .stat-card.red  .s-value { color: var(--red); }
+    .stat-card.green .s-value { color: var(--green); }
+
+    /* TABLE */
+    .table-wrap {
+      background: rgba(8,15,30,0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-cyan);
+      border-radius: 6px; overflow: hidden;
+    }
+    .table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border-cyan);
+      background: rgba(0,212,255,0.03);
+    }
+    .table-header h3 {
+      font-family: 'Rajdhani', sans-serif; font-size: 0.85rem;
+      font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 11px 16px; text-align: left;
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 2px; color: var(--muted);
+      border-bottom: 1px solid var(--border-cyan);
+    }
+    tbody tr { transition: background 0.15s; }
+    tbody tr:hover { background: rgba(0,212,255,0.03); }
+    tbody td {
+      padding: 12px 16px; font-size: 0.85rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: middle;
+    }
+    .empty-row td { text-align: center; color: var(--muted); padding: 40px; font-size: 0.85rem; letter-spacing: 1px; }
+
+    /* BADGES */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 2px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      clip-path: polygon(4px 0%,100% 0%,calc(100% - 4px) 100%,0% 100%);
+    }
+    .badge-new       { background: rgba(251,191,36,0.12); color: var(--yellow); border: 1px solid rgba(251,191,36,0.2); }
+    .badge-done      { background: rgba(74,222,128,0.12); color: var(--green);  border: 1px solid rgba(74,222,128,0.2); }
+    .badge-cancelled { background: rgba(255,87,87,0.12);  color: var(--red);    border: 1px solid rgba(255,87,87,0.2); }
+    .badge-confirmed { background: rgba(0,212,255,0.12);  color: var(--cyan);   border: 1px solid rgba(0,212,255,0.2); }
+
+    /* BUTTONS */
+    .btn {
+      padding: 9px 18px; border-radius: 3px; font-size: 0.78rem; font-weight: 700;
+      cursor: pointer; border: none; transition: all 0.2s; font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      clip-path: polygon(5px 0%,100% 0%,calc(100% - 5px) 100%,0% 100%);
+    }
+    .btn-cyan { background: linear-gradient(135deg, #0066aa, var(--cyan2)); color: #fff; box-shadow: 0 0 16px rgba(0,212,255,0.2); }
+    .btn-cyan:hover { box-shadow: 0 0 28px rgba(0,212,255,0.4); transform: translateY(-1px); }
+    .btn-gold { background: linear-gradient(135deg, var(--gold2), var(--gold)); color: #0a0a0a; }
+    .btn-gold:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(200,169,110,0.3); }
+    .btn-outline {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border-cyan);
+    }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); }
+    .btn-danger { background: rgba(255,87,87,0.1); color: var(--red); border: 1px solid rgba(255,87,87,0.2); }
+    .btn-danger:hover { background: rgba(255,87,87,0.2); }
+    .btn-sm { padding: 5px 12px; font-size: 0.7rem; }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(3,8,16,0.85);
+      backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+      padding: 20px;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: rgba(8,15,30,0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-cyan);
+      border-radius: 8px; padding: 32px;
+      width: 100%; max-width: 520px;
+      transform: scale(0.94) translateY(10px); transition: transform 0.25s;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 0 60px rgba(0,212,255,0.08);
+    }
+    .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+    .modal-title {
+      font-family: 'Cinzel', serif; font-size: 1.05rem;
+      color: var(--gold); letter-spacing: 2px; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .modal-title::before {
+      content: ''; display: block; width: 24px; height: 1px; background: var(--gold); opacity: 0.5;
+    }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* FORM */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block; font-size: 0.65rem; font-weight: 700;
+      color: var(--cyan); margin-bottom: 6px;
+      letter-spacing: 2px; text-transform: uppercase;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%; padding: 10px 14px;
+      background: rgba(0,212,255,0.04);
+      border: 1px solid var(--border-cyan);
+      border-radius: 3px; color: var(--white);
+      font-size: 0.88rem; font-family: 'Rajdhani', sans-serif;
+      font-weight: 400; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { border-color: var(--cyan); box-shadow: 0 0 14px rgba(0,212,255,0.1); }
+    .form-group input::placeholder,
+    .form-group textarea::placeholder { color: rgba(255,255,255,0.2); }
+    .form-group select option { background: var(--dark2); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--muted); cursor: pointer; }
+
+    /* SEARCH BAR */
+    .search-bar { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+    .search-bar input,
+    .search-bar select {
+      padding: 9px 14px;
+      background: rgba(0,212,255,0.04);
+      border: 1px solid var(--border-cyan);
+      border-radius: 3px; color: var(--white);
+      font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; outline: none;
+    }
+    .search-bar input { flex: 1; min-width: 180px; }
+    .search-bar input:focus,
+    .search-bar select:focus { border-color: var(--cyan); }
+
+    /* UPLOAD */
+    .upload-area {
+      border: 1px dashed var(--border-cyan); border-radius: 6px;
+      padding: 20px; text-align: center; cursor: pointer; transition: border-color 0.2s;
+      background: rgba(0,212,255,0.02);
+    }
+    .upload-area:hover { border-color: var(--cyan); background: rgba(0,212,255,0.05); }
+    .upload-area .u-icon { font-size: 1.8rem; margin-bottom: 6px; }
+    .upload-area p { font-size: 0.78rem; color: var(--muted); letter-spacing: 1px; }
+    .upload-area input[type=file] { display: none; }
+    .upload-preview { width: 100%; max-height: 120px; object-fit: cover; border-radius: 4px; margin-top: 10px; }
+
+    /* MENU GRID */
+    .menu-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .menu-admin-card {
+      background: rgba(10,36,99,0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-gold);
+      border-radius: 6px; overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .menu-admin-card:hover { border-color: rgba(200,169,110,0.45); box-shadow: 0 0 20px rgba(200,169,110,0.08); }
+    .mac-img {
+      height: 110px; display: flex; align-items: center; justify-content: center;
+      font-size: 2.8rem; background: linear-gradient(135deg, #0a1628, #0d1f3c);
+      position: relative;
+    }
+    .mac-img img { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+    .mac-body { padding: 12px 14px; }
+    .mac-cat { font-size: 0.62rem; color: var(--cyan); font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 3px; }
+    .mac-name { font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 3px; }
+    .mac-price { font-size: 0.9rem; font-weight: 700; color: var(--gold); }
+    .mac-actions { display: flex; gap: 7px; margin-top: 10px; }
+    .mac-unavail { opacity: 0.4; }
+
+    /* NEWS */
+    .news-card {
+      background: rgba(10,36,99,0.08);
+      border: 1px solid var(--border-cyan);
+      border-radius: 6px; padding: 16px 18px; margin-bottom: 10px;
+      display: flex; gap: 14px; align-items: flex-start;
+      transition: border-color 0.2s;
+    }
+    .news-card:hover { border-color: rgba(0,212,255,0.35); }
+    .news-emoji { font-size: 1.8rem; flex-shrink: 0; }
+    .news-body { flex: 1; }
+    .news-title { font-weight: 700; font-size: 0.92rem; letter-spacing: 0.5px; margin-bottom: 3px; }
+    .news-content { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
+    .news-actions { display: flex; gap: 7px; align-items: center; }
+
+    /* SETTINGS */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .settings-grid, .form-row { grid-template-columns: 1fr; } }
+
+    /* SECTION DIVIDER */
+    .cyber-divider {
+      display: flex; align-items: center; gap: 10px; margin: 20px 0;
+    }
+    .cyber-divider::before, .cyber-divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border-cyan));
+    }
+    .cyber-divider::after { transform: scaleX(-1); }
+    .cyber-divider span {
+      font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase; color: var(--cyan); opacity: 0.6;
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      background: rgba(8,15,30,0.95);
+      backdrop-filter: blur(12px);
+      color: var(--white); padding: 13px 20px; border-radius: 4px;
+      font-size: 0.85rem; font-weight: 500; letter-spacing: 0.5px;
+      border-left: 3px solid var(--cyan);
+      transform: translateY(80px); opacity: 0;
+      transition: all 0.4s cubic-bezier(.34,1.56,.64,1);
+      box-shadow: 0 0 32px rgba(0,212,255,0.15); max-width: 320px;
+      clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1><span class="logo-ray">RAY</span><span class="logo-yon">YON</span></h1>
+    <p>Admin panel</p>
+  </div>
+  <div class="lang-switcher">
+    <button class="lang-btn active" data-lang="uz">UZ</button>
+    <button class="lang-btn" data-lang="ru">RU</button>
+    <button class="lang-btn" data-lang="en">EN</button>
+  </div>
+  <div class="sidebar-girih">
+    <svg viewBox="0 0 200 20">
+      <path d="M0,10 Q50,0 100,10 Q150,20 200,10" fill="none" stroke="#00d4ff" stroke-width="0.8"/>
+      <path d="M0,10 Q50,20 100,10 Q150,0 200,10" fill="none" stroke="#c8a96e" stroke-width="0.5" opacity="0.5"/>
+    </svg>
+  </div>
+  <nav class="nav">
+    <button class="nav-item active" data-page="dashboard">
+      <span class="n-icon">◈</span> <span data-i18n="adm.dashboard">Dashboard</span>
+    </button>
+    <button class="nav-item" data-page="orders">
+      <span class="n-icon">◇</span> <span data-i18n="adm.orders">Buyurtmalar</span>
+      <span class="nav-badge" id="ordersCount" style="display:none">0</span>
+    </button>
+    <button class="nav-item" data-page="reservations">
+      <span class="n-icon">◆</span> <span data-i18n="adm.reservations">Bronlar</span>
+    </button>
+    <button class="nav-item" data-page="menu">
+      <span class="n-icon">⬡</span> <span data-i18n="adm.menu">Menyu</span>
+    </button>
+    <button class="nav-item" data-page="news">
+      <span class="n-icon">◉</span> <span data-i18n="adm.news">Yangiliklar</span>
+    </button>
+    <button class="nav-item" data-page="settings">
+      <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
+    </button>
+  </nav>
+  <div class="sidebar-bottom">
+    <button class="logout-btn" id="logoutBtn">
+      <span>⊗</span> <span data-i18n="adm.logout">Chiqish</span>
+    </button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <h2 data-i18n="adm.dash.title">Dashboard</h2>
+      <p data-i18n="adm.dash.sub">Umumiy ko'rinish va real vaqt statistikasi</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card red">
+        <div class="s-label" data-i18n="st.new_orders">Yangi buyurtmalar</div>
+        <div class="s-value" id="st-new-orders">—</div>
+        <div class="s-sub" data-i18n="st.new_sub">Ko'rib chiqilmagan</div>
+      </div>
+      <div class="stat-card cyan">
+        <div class="s-label" data-i18n="st.total">Jami buyurtmalar</div>
+        <div class="s-value" id="st-total-orders">—</div>
+        <div class="s-sub" data-i18n="st.total_sub">Barcha vaqt</div>
+      </div>
+      <div class="stat-card gold">
+        <div class="s-label" data-i18n="st.revenue">Daromad</div>
+        <div class="s-value" id="st-revenue">—</div>
+        <div class="s-sub" data-i18n="st.revenue_sub">Bajarilgan buyurtmalar</div>
+      </div>
+      <div class="stat-card green">
+        <div class="s-label" data-i18n="st.res_today">Bugungi bronlar</div>
+        <div class="s-value" id="st-reservations">—</div>
+        <div class="s-sub" data-i18n="st.res_sub">Bugungi kun</div>
+      </div>
+      <div class="stat-card">
+        <div class="s-label" data-i18n="st.menu_cnt">Aktiv taomlar</div>
+        <div class="s-value" id="st-menu" style="color:var(--muted)">—</div>
+        <div class="s-sub" data-i18n="st.menu_sub">Menyuda mavjud</div>
+      </div>
+    </div>
+    <div class="cyber-divider"><span data-i18n="dash.recent">So'nggi buyurtmalar</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th data-i18n="th.id">#</th><th data-i18n="th.dish">Taom</th><th data-i18n="th.client">Mijoz</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.price">Narx</th><th data-i18n="th.status">Status</th><th data-i18n="th.time">Vaqt</th></tr></thead>
+        <tbody id="dashOrdersBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div class="page" id="page-orders">
+    <div class="page-header">
+      <h2 data-i18n="adm.ord.title">Buyurtmalar</h2>
+      <p data-i18n="adm.ord.sub">Barcha buyurtmalarni boshqarish</p>
+    </div>
+    <div class="search-bar">
+      <select id="orderFilter">
+        <option value=""    data-i18n="filter.all">Barcha statuslar</option>
+        <option value="new" data-i18n="filter.new">Yangi</option>
+        <option value="confirmed" data-i18n="filter.confirmed">Tasdiqlangan</option>
+        <option value="done"      data-i18n="filter.done">Bajarilgan</option>
+        <option value="cancelled" data-i18n="filter.cancelled">Bekor</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th data-i18n="th.id">#</th><th data-i18n="th.dish">Taom</th><th data-i18n="th.qty">Miqdor</th><th data-i18n="th.client">Mijoz</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.price">Narx</th><th data-i18n="th.status">Status</th><th data-i18n="th.time">Vaqt</th><th data-i18n="th.action">Amal</th></tr></thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RESERVATIONS -->
+  <div class="page" id="page-reservations">
+    <div class="page-header">
+      <h2 data-i18n="adm.res.title">Bronlar</h2>
+      <p data-i18n="adm.res.sub">Stol bronlarini boshqarish</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th data-i18n="th.id">#</th><th data-i18n="th.name">Ism</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.date">Sana</th><th data-i18n="th.time">Vaqt</th><th data-i18n="th.guests">Mehmon</th><th data-i18n="th.status">Status</th><th data-i18n="th.action">Amal</th></tr></thead>
+        <tbody id="reservationsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MENU -->
+  <div class="page" id="page-menu">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><h2 data-i18n="adm.menu.title">Menyu</h2><p data-i18n="adm.menu.sub">Taomlarni qo'shish, tahrirlash, o'chirish</p></div>
+      <button class="btn btn-gold" id="addMenuBtn" data-i18n="adm.menu.add">+ Taom qo'shish</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="menuSearch" data-i18n-ph="search.menu" placeholder="Taom nomi bo'yicha..." />
+      <select id="menuCatFilter">
+        <option value="">—</option>
+        <option value="milliy" data-i18n="menu.milliy">Milliy taomlar</option>
+        <option value="grill"  data-i18n="menu.grill">Grill</option>
+        <option value="salad"  data-i18n="menu.salad">Salatlar</option>
+        <option value="drink"  data-i18n="menu.drink">Ichimliklar</option>
+      </select>
+    </div>
+    <div class="menu-admin-grid" id="menuGrid"></div>
+  </div>
+
+  <!-- NEWS -->
+  <div class="page" id="page-news">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><h2 data-i18n="adm.news.title">Yangiliklar</h2><p data-i18n="adm.news.sub">E'lonlar va yangiliklar boshqaruvi</p></div>
+      <button class="btn btn-gold" id="addNewsBtn" data-i18n="adm.news.add">+ Yangilik qo'shish</button>
+    </div>
+    <div id="newsList"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="page-header"><h2 data-i18n="adm.set.title">Sozlamalar</h2><p data-i18n="adm.set.sub">Restoran ma'lumotlari va xavfsizlik</p></div>
+    <div class="table-wrap" style="padding:28px;">
+      <div class="settings-grid">
+        <div class="form-group"><label data-i18n="set.name">Restoran nomi</label><input type="text" id="set-name" /></div>
+        <div class="form-group"><label data-i18n="set.phone">Telefon</label><input type="text" id="set-phone" /></div>
+        <div class="form-group"><label data-i18n="set.address">Manzil</label><input type="text" id="set-address" /></div>
+        <div class="form-group"><label data-i18n="set.hours">Ish vaqti</label><input type="text" id="set-hours" /></div>
+        <div class="form-group"><label data-i18n="set.telegram">Telegram bot</label><input type="text" id="set-telegram" /></div>
+        <div class="form-group"><label data-i18n="set.password">Yangi parol</label><input type="password" id="set-password" data-i18n-ph="set.pass.ph" placeholder="O'zgartirmoqchi bo'lsangiz kiriting" /></div>
+      </div>
+      <div class="cyber-divider"><span></span></div>
+      <button class="btn btn-cyan" id="saveSettings" data-i18n="set.save">Saqlash</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- MENU MODAL -->
+<div class="modal-overlay" id="menuModal">
+  <div class="modal">
+    <div class="modal-title" id="menuModalTitle" data-i18n="mm.add">Taom qo'shish</div>
+    <input type="hidden" id="menuId" />
+    <div class="form-row">
+      <div class="form-group"><label data-i18n="mm.name">Nomi</label><input type="text" id="mName" placeholder="Taom nomi" /></div>
+      <div class="form-group"><label data-i18n="mm.emoji">Emoji</label><input type="text" id="mEmoji" placeholder="🍽" maxlength="4" /></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label data-i18n="mm.cat">Kategoriya</label>
+        <select id="mCategory">
+          <option value="milliy" data-i18n="menu.milliy">Milliy taomlar</option>
+          <option value="grill"  data-i18n="menu.grill">Grill</option>
+          <option value="salad"  data-i18n="menu.salad">Salatlar</option>
+          <option value="drink"  data-i18n="menu.drink">Ichimliklar</option>
+        </select>
+      </div>
+      <div class="form-group"><label data-i18n="mm.price">Narxi (so'm)</label><input type="number" id="mPrice" placeholder="35000" /></div>
+    </div>
+    <div class="form-group"><label data-i18n="mm.desc">Tavsif</label><textarea id="mDesc" rows="2" placeholder="Qisqacha tavsif..."></textarea></div>
+    <div class="form-group">
+      <label data-i18n="mm.img">Rasm</label>
+      <div class="upload-area" id="menuUploadArea">
+        <div class="u-icon">📷</div>
+        <p data-i18n="upload.click">Rasm tanlash uchun bosing</p>
+        <input type="file" id="menuImageFile" accept="image/*" />
+        <img class="upload-preview" id="menuImgPreview" style="display:none;" />
+      </div>
+    </div>
+    <label class="form-check"><input type="checkbox" id="mAvailable" checked /> <span data-i18n="mm.visible">Saytda ko'rsatish</span></label>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="menuModalClose" data-i18n="btn.cancel">Bekor</button>
+      <button class="btn btn-gold" id="menuModalSave" data-i18n="btn.save">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEWS MODAL -->
+<div class="modal-overlay" id="newsModal">
+  <div class="modal">
+    <div class="modal-title" id="newsModalTitle" data-i18n="nm.add">Yangilik qo'shish</div>
+    <input type="hidden" id="newsId" />
+    <div class="form-group"><label data-i18n="nm.title">Sarlavha</label><input type="text" id="nTitle" placeholder="Yangilik sarlavhasi" /></div>
+    <div class="form-group"><label data-i18n="nm.content">Matn</label><textarea id="nContent" rows="4" placeholder="Yangilik matni..."></textarea></div>
+    <div class="form-group">
+      <label data-i18n="nm.img">Rasm</label>
+      <div class="upload-area" id="newsUploadArea">
+        <div class="u-icon">🖼️</div>
+        <p data-i18n="upload.click">Rasm tanlash uchun bosing</p>
+        <input type="file" id="newsImageFile" accept="image/*" />
+        <img class="upload-preview" id="newsImgPreview" style="display:none;" />
+      </div>
+    </div>
+    <label class="form-check"><input type="checkbox" id="nActive" checked /> <span data-i18n="nm.active">Saytda ko'rsatish</span></label>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="newsModalClose" data-i18n="btn.cancel">Bekor</button>
+      <button class="btn btn-gold" id="newsModalSave" data-i18n="btn.save">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="../js/i18n.js"></script>
+<script>
+const API = '';
+let adminToken = localStorage.getItem('admin_token');
+if (!adminToken) window.location.href = 'login.html';
+
+const H = () => ({ 'Content-Type': 'application/json', 'X-Admin-Token': adminToken });
+
+function priceFmt(p) { return Number(p).toLocaleString('uz-UZ') + " so'm"; }
+function timeFmt(s)  { if (!s) return '—'; return s.slice(0,16).replace('T',' '); }
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderLeftColor = ok ? 'var(--cyan)' : 'var(--red)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+function statusBadge(s) {
+  const keys = { new:'filter.new', confirmed:'filter.confirmed', done:'filter.done', cancelled:'filter.cancelled' };
+  const cls  = { new:'badge-new', confirmed:'badge-confirmed', done:'badge-done', cancelled:'badge-cancelled' };
+  return `<span class="badge ${cls[s]||''}">${typeof t==='function'?t(keys[s]||''):s}</span>`;
+}
+function catLabel(c) {
+  return typeof t==='function' ? t('cat.'+c) : c;
+}
+function statusSelect(id, cur, type) {
+  const opts = ['new','confirmed','done','cancelled'];
+  const keys = { new:'filter.new', confirmed:'filter.confirmed', done:'filter.done', cancelled:'filter.cancelled' };
+  return `<select class="${type}-sel" data-id="${id}" style="padding:5px 8px;background:rgba(0,212,255,0.05);border:1px solid var(--border-cyan);border-radius:3px;color:#fff;font-size:0.72rem;font-family:'Rajdhani',sans-serif;outline:none;">
+    ${opts.map(v=>`<option value="${v}" ${cur===v?'selected':''}>${typeof t==='function'?t(keys[v]):v}</option>`).join('')}
+  </select>`;
+}
+
+// NAV
+document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    loadPage(btn.dataset.page);
+  });
+});
+function loadPage(p) {
+  if (p==='dashboard')   loadDashboard();
+  else if (p==='orders') loadOrders();
+  else if (p==='reservations') loadReservations();
+  else if (p==='menu')   { if (allMenuItems.length) renderMenuGrid(); loadMenu(); }
+  else if (p==='news')   loadNews();
+  else if (p==='settings') loadSettings();
+}
+
+// DASHBOARD
+async function loadDashboard() {
+  const r = await fetch(`${API}/api/stats`, { headers: H() });
+  const d = await r.json();
+  document.getElementById('st-new-orders').textContent  = d.orders_new;
+  document.getElementById('st-total-orders').textContent = d.orders_total;
+  document.getElementById('st-revenue').textContent     = d.revenue > 0 ? priceFmt(d.revenue) : '0';
+  document.getElementById('st-reservations').textContent = d.reservations_today;
+  document.getElementById('st-menu').textContent        = d.menu_count;
+  const badge = document.getElementById('ordersCount');
+  badge.textContent = d.orders_new;
+  badge.style.display = d.orders_new > 0 ? '' : 'none';
+
+  const r2 = await fetch(`${API}/api/orders`, { headers: H() });
+  const orders = await r2.json();
+  const tbody = document.getElementById('dashOrdersBody');
+  if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${t('empty.orders')}</td></tr>`; return; }
+  tbody.innerHTML = orders.slice(0,8).map(o => `<tr>
+    <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
+    <td>${o.item_name}</td><td>${o.customer_name}</td><td>${o.customer_phone}</td>
+    <td style="color:var(--gold);font-weight:700">${priceFmt(o.total_price)}</td>
+    <td>${statusBadge(o.status)}</td><td style="color:var(--muted)">${timeFmt(o.created_at)}</td>
+  </tr>`).join('');
+}
+
+// ORDERS
+async function loadOrders() {
+  const status = document.getElementById('orderFilter').value;
+  const url = status ? `${API}/api/orders?status=${status}` : `${API}/api/orders`;
+  const r = await fetch(url, { headers: H() });
+  const orders = await r.json();
+  const tbody = document.getElementById('ordersBody');
+  if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${t('empty.orders')}</td></tr>`; return; }
+  tbody.innerHTML = orders.map(o => `<tr>
+    <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
+    <td>${o.item_name}</td><td>${o.quantity}</td>
+    <td>${o.customer_name}</td><td>${o.customer_phone}</td>
+    <td style="color:var(--gold);font-weight:700">${priceFmt(o.total_price)}</td>
+    <td>${statusBadge(o.status)}</td>
+    <td style="color:var(--muted)">${timeFmt(o.created_at)}</td>
+    <td>${statusSelect(o.id, o.status, 'order')}</td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.order-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      await fetch(`${API}/api/orders/${sel.dataset.id}`, { method:'PUT', headers:H(), body:JSON.stringify({status:sel.value}) });
+      toast(t('toast.updated')); loadDashboard();
+    });
+  });
+}
+document.getElementById('orderFilter').addEventListener('change', loadOrders);
+
+// RESERVATIONS
+async function loadReservations() {
+  const r = await fetch(`${API}/api/reservations`, { headers: H() });
+  const rows = await r.json();
+  const tbody = document.getElementById('reservationsBody');
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">${t('empty.res')}</td></tr>`; return; }
+  tbody.innerHTML = rows.map(row => `<tr>
+    <td style="color:var(--cyan);font-weight:700">#${row.id}</td>
+    <td>${row.customer_name}</td><td>${row.customer_phone}</td>
+    <td>${row.date}</td><td>${row.time}</td>
+    <td>${row.guests} kishi</td><td>${statusBadge(row.status)}</td>
+    <td>${statusSelect(row.id, row.status, 'res')}</td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.res-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      await fetch(`${API}/api/reservations/${sel.dataset.id}`, { method:'PUT', headers:H(), body:JSON.stringify({status:sel.value}) });
+      toast(t('toast.updated'));
+    });
+  });
+}
+
+// MENU
+let allMenuItems = [];
+async function loadMenu() {
+  const grid = document.getElementById('menuGrid');
+  if (!grid) return;
+  grid.innerHTML = '<p style="color:rgba(255,255,255,0.5);padding:20px">⟳ Yuklanmoqda...</p>';
+  let data;
+  try {
+    const r = await fetch(API + '/api/menu?_=' + Date.now());
+    data = await r.json();
+  } catch(e) {
+    grid.innerHTML = '<p style="color:#ff5757;padding:20px">⚠ Backend ishlamayapti: ' + e.message + '</p>';
+    return;
+  }
+  if (!Array.isArray(data)) {
+    grid.innerHTML = '<p style="color:#ff5757;padding:20px">⚠ API noto\'g\'ri javob qaytardi</p>';
+    return;
+  }
+  allMenuItems = data;
+  if (!allMenuItems.length) {
+    grid.innerHTML = '<p style="color:rgba(255,255,255,0.5);padding:20px">Taomlar yo\'q. + Taom qo\'shish tugmasini bosing.</p>';
+    return;
+  }
+  renderMenuGrid();
+}
+function renderMenuGrid() {
+  const grid = document.getElementById('menuGrid');
+  if (!grid) return;
+  const search = (document.getElementById('menuSearch') || {value:''}).value.toLowerCase();
+  const cat    = (document.getElementById('menuCatFilter') || {value:''}).value;
+  let items = allMenuItems;
+  if (cat)    items = items.filter(i => i.category === cat);
+  if (search) items = items.filter(i => i.name.toLowerCase().includes(search));
+  if (!items.length) { grid.innerHTML = '<p style="color:rgba(255,255,255,0.5);padding:20px">Taom topilmadi</p>'; return; }
+  grid.innerHTML = items.map(function(item) {
+    var nm = (item.name || '').replace(/'/g, "&#39;");
+    return '<div class="menu-admin-card' + (item.available ? '' : ' mac-unavail') + '">' +
+      '<div class="mac-img">' +
+        (item.image ? '<img src="' + API + item.image + '" />' : '') +
+        '<span style="position:relative;z-index:1">' + (item.emoji || '🍽') + '</span>' +
+      '</div>' +
+      '<div class="mac-body">' +
+        '<div class="mac-cat">' + catLabel(item.category) + '</div>' +
+        '<div class="mac-name">' + (item.name || '') + '</div>' +
+        '<div class="mac-price">' + priceFmt(item.price) + '</div>' +
+        '<div class="mac-actions">' +
+          '<button class="btn btn-outline btn-sm" onclick="openMenuEdit(' + item.id + ')">✏ Tahrir</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="deleteMenu(' + item.id + ',\'' + nm + '\')">✕</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+document.getElementById('menuSearch').addEventListener('input', renderMenuGrid);
+document.getElementById('menuCatFilter').addEventListener('change', renderMenuGrid);
+
+function openMenuEdit(id) {
+  const item = allMenuItems.find(i => i.id === id);
+  document.getElementById('menuModalTitle').textContent = t('mm.edit');
+  document.getElementById('menuId').value    = id;
+  document.getElementById('mName').value     = item.name;
+  document.getElementById('mEmoji').value    = item.emoji || '🍽';
+  document.getElementById('mCategory').value = item.category;
+  document.getElementById('mPrice').value    = item.price;
+  document.getElementById('mDesc').value     = item.description || '';
+  document.getElementById('mAvailable').checked = !!item.available;
+  const prev = document.getElementById('menuImgPreview');
+  if (item.image) { prev.src = API + item.image; prev.style.display = 'block'; prev.dataset.url = item.image; }
+  else prev.style.display = 'none';
+  document.getElementById('menuModal').classList.add('open');
+}
+document.getElementById('addMenuBtn').addEventListener('click', () => {
+  document.getElementById('menuModalTitle').textContent = t('mm.add');
+  document.getElementById('menuId').value = '';
+  ['mName','mPrice','mDesc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('mEmoji').value = '🍽';
+  document.getElementById('mAvailable').checked = true;
+  document.getElementById('menuImgPreview').style.display = 'none';
+  document.getElementById('menuModal').classList.add('open');
+});
+document.getElementById('menuModalClose').addEventListener('click', () => document.getElementById('menuModal').classList.remove('open'));
+document.getElementById('menuUploadArea').addEventListener('click', () => document.getElementById('menuImageFile').click());
+document.getElementById('menuImageFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch(`${API}/api/upload`, { method:'POST', headers:{'X-Admin-Token':adminToken}, body:fd });
+  const d = await r.json();
+  if (d.ok) { const prev = document.getElementById('menuImgPreview'); prev.src = API+d.url; prev.style.display = 'block'; prev.dataset.url = d.url; toast(t('toast.img')); }
+});
+document.getElementById('menuModalSave').addEventListener('click', async () => {
+  const id   = document.getElementById('menuId').value;
+  const prev = document.getElementById('menuImgPreview');
+  const payload = {
+    name: document.getElementById('mName').value, emoji: document.getElementById('mEmoji').value,
+    category: document.getElementById('mCategory').value, price: parseInt(document.getElementById('mPrice').value)||0,
+    description: document.getElementById('mDesc').value, available: document.getElementById('mAvailable').checked ? 1 : 0,
+    image: prev.style.display !== 'none' ? (prev.dataset.url || null) : null,
+  };
+  const r = await fetch(id ? `${API}/api/menu/${id}` : `${API}/api/menu`,
+    { method: id ? 'PUT' : 'POST', headers: H(), body: JSON.stringify(payload) });
+  const d = await r.json();
+  if (d.ok) { toast(t(id ? 'toast.saved' : 'toast.added')); document.getElementById('menuModal').classList.remove('open'); loadMenu(); }
+  else toast(t('toast.error'), false);
+});
+async function deleteMenu(id, name) {
+  if (!confirm(`"${name}" o'chirasizmi?`)) return;
+  const r = await fetch(`${API}/api/menu/${id}`, { method:'DELETE', headers:H() });
+  if ((await r.json()).ok) { toast(t('toast.deleted')); loadMenu(); }
+}
+
+// NEWS
+let newsImageUrl = null, allNews = [];
+async function loadNews() {
+  const r = await fetch(`${API}/api/news`, { headers: H() });
+  const items = await r.json(); allNews = items;
+  const list = document.getElementById('newsList');
+  if (!items.length) { list.innerHTML = `<p style="color:var(--muted);padding:20px">${t('empty.news')}</p>`; return; }
+  list.innerHTML = items.map(n => `
+    <div class="news-card">
+      <div class="news-emoji">${n.active ? '📢' : '📭'}</div>
+      <div class="news-body">
+        <div class="news-title">${n.title}</div>
+        <div class="news-content">${n.content || ''}</div>
+        <div class="news-actions">
+          <button class="btn btn-outline btn-sm" onclick="openNewsEdit(${n.id})">✏ Tahrir</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteNews(${n.id})">✕ O'chirish</button>
+          <span class="badge ${n.active ? 'badge-confirmed' : 'badge-cancelled'}">${n.active ? 'Aktiv' : 'Yashirin'}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function openNewsEdit(id) {
+  const n = allNews.find(i => i.id === id);
+  document.getElementById('newsModalTitle').textContent = t('nm.edit');
+  document.getElementById('newsId').value    = id;
+  document.getElementById('nTitle').value    = n.title;
+  document.getElementById('nContent').value  = n.content || '';
+  document.getElementById('nActive').checked = !!n.active;
+  newsImageUrl = n.image || null;
+  const prev = document.getElementById('newsImgPreview');
+  if (n.image) { prev.src = API+n.image; prev.style.display = 'block'; } else prev.style.display = 'none';
+  document.getElementById('newsModal').classList.add('open');
+}
+document.getElementById('addNewsBtn').addEventListener('click', () => {
+  document.getElementById('newsModalTitle').textContent = t('nm.add');
+  document.getElementById('newsId').value = ''; document.getElementById('nTitle').value = ''; document.getElementById('nContent').value = '';
+  document.getElementById('nActive').checked = true; newsImageUrl = null;
+  document.getElementById('newsImgPreview').style.display = 'none';
+  document.getElementById('newsModal').classList.add('open');
+});
+document.getElementById('newsModalClose').addEventListener('click', () => document.getElementById('newsModal').classList.remove('open'));
+document.getElementById('newsUploadArea').addEventListener('click', () => document.getElementById('newsImageFile').click());
+document.getElementById('newsImageFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch(`${API}/api/upload`, { method:'POST', headers:{'X-Admin-Token':adminToken}, body:fd });
+  const d = await r.json();
+  if (d.ok) { newsImageUrl = d.url; const prev = document.getElementById('newsImgPreview'); prev.src = API+d.url; prev.style.display = 'block'; toast(t('toast.img')); }
+});
+document.getElementById('newsModalSave').addEventListener('click', async () => {
+  const id = document.getElementById('newsId').value;
+  const payload = { title: document.getElementById('nTitle').value, content: document.getElementById('nContent').value, active: document.getElementById('nActive').checked?1:0, image: newsImageUrl };
+  const r = await fetch(id ? `${API}/api/news/${id}` : `${API}/api/news`, { method:id?'PUT':'POST', headers:H(), body:JSON.stringify(payload) });
+  if ((await r.json()).ok) { toast(t(id?'toast.saved':'toast.added')); document.getElementById('newsModal').classList.remove('open'); loadNews(); }
+  else toast(t('toast.error'), false);
+});
+async function deleteNews(id) {
+  if (!confirm('Bu yangilikni o\'chirasizmi?')) return;
+  if ((await (await fetch(`${API}/api/news/${id}`,{method:'DELETE',headers:H()})).json()).ok) { toast(t('toast.deleted')); loadNews(); }
+}
+
+// SETTINGS
+async function loadSettings() {
+  const r = await fetch(`${API}/api/settings`, { headers: H() });
+  const d = await r.json();
+  document.getElementById('set-name').value     = d.restaurant_name || '';
+  document.getElementById('set-phone').value    = d.phone || '';
+  document.getElementById('set-address').value  = d.address || '';
+  document.getElementById('set-hours').value    = d.working_hours || '';
+  document.getElementById('set-telegram').value = d.telegram_bot || '';
+  document.getElementById('set-password').value = '';
+}
+document.getElementById('saveSettings').addEventListener('click', async () => {
+  const payload = { restaurant_name: document.getElementById('set-name').value, phone: document.getElementById('set-phone').value, address: document.getElementById('set-address').value, working_hours: document.getElementById('set-hours').value, telegram_bot: document.getElementById('set-telegram').value };
+  const pw = document.getElementById('set-password').value;
+  if (pw) payload.admin_password = pw;
+  const r = await fetch(`${API}/api/settings`, { method:'PUT', headers:H(), body:JSON.stringify(payload) });
+  if ((await r.json()).ok) toast(t('toast.saved'));
+  else toast(t('toast.error'), false);
+});
+
+// LOGOUT
+document.getElementById('logoutBtn').addEventListener('click', () => { localStorage.removeItem('admin_token'); window.location.href = 'login.html'; });
+
+// INIT
+loadDashboard();
+loadMenu();
+setInterval(loadDashboard, 30000);
+</script>
+</body>
+</html>
