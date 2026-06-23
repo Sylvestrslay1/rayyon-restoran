@@ -1,533 +1,208 @@
-import logging
-import requests
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    ReplyKeyboardMarkup, KeyboardButton
-)
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ConversationHandler, filters, ContextTypes
-)
-from config import BOT_TOKEN, ADMIN_IDS, ADMIN_GROUP_ID, RESTAURANT_NAME, RESTAURANT_PHONE, RESTAURANT_ADDRESS, WORKING_HOURS
+"""
+Rayyon Restoran Telegram Bot
+Muhit o'zgaruvchilari:
+  TELEGRAM_BOT_TOKEN  - BotFather dan olingan token
+  TELEGRAM_CHAT_ID    - Bildirishnomalar yuboriluvchi chat ID
+  RAYYON_API_URL      - Backend URL (masalan https://rayyon-restoran.onrender.com)
+  RAYYON_ADMIN_PASS   - Admin paroli
+Ishga tushirish: python bot/bot.py
+"""
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+import os, time, urllib.request, urllib.parse, json, logging
 
-API = "http://localhost:5000"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+log = logging.getLogger("rayyon-bot")
 
-# ===== STATES =====
-(
-    ORDER_CATEGORY, ORDER_ITEM, ORDER_QTY, ORDER_NAME, ORDER_PHONE, ORDER_CONFIRM,
-    RESERVE_DATE, RESERVE_TIME, RESERVE_GUESTS, RESERVE_NAME, RESERVE_PHONE, RESERVE_CONFIRM
-) = range(12)
+TOKEN      = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+API_URL    = os.environ.get("RAYYON_API_URL", "http://localhost:5000")
+ADMIN_PASS = os.environ.get("RAYYON_ADMIN_PASS", "rayyon2024")
+
+BASE = f"https://api.telegram.org/bot{TOKEN}"
+admin_token = None
 
 
-# ===== HELPERS =====
-def price_fmt(p):
-    return f"{int(p):,} so'm".replace(",", " ")
-
-def get_menu(category=None):
+def tg(method, **kwargs):
+    url  = f"{BASE}/{method}"
+    data = urllib.parse.urlencode({
+        k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
+        for k, v in kwargs.items()
+    }).encode()
     try:
-        url = f"{API}/api/menu"
-        if category:
-            url += f"?category={category}"
-        res = requests.get(url, timeout=5)
-        return res.json()
-    except:
-        return []
+        with urllib.request.urlopen(
+            urllib.request.Request(url, data=data, method="POST"), timeout=10
+        ) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log.error(f"TG error {method}: {e}")
+        return {}
 
-def get_categories():
-    return {
-        "milliy": "🇺🇿 Milliy taomlar",
-        "grill":  "🔥 Grill",
-        "salad":  "🥗 Salatlar",
-        "drink":  "🥤 Ichimliklar",
-    }
 
-def save_order(data):
+def api(method, path, data=None):
+    url     = API_URL + path
+    headers = {"Content-Type": "application/json"}
+    if admin_token:
+        headers["X-Admin-Token"] = admin_token
+    body = json.dumps(data).encode() if data else None
+    req  = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
-        requests.post(f"{API}/api/orders", json=data, timeout=5)
-    except:
-        pass
-
-def save_reservation(data):
-    try:
-        requests.post(f"{API}/api/reservations", json=data, timeout=5)
-    except:
-        pass
-
-def main_keyboard():
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("🍽 Menyu"), KeyboardButton("🛒 Buyurtma berish")],
-        [KeyboardButton("📅 Stol bron qilish"), KeyboardButton("📞 Aloqa")],
-        [KeyboardButton("📰 Yangiliklar"), KeyboardButton("ℹ️ Biz haqimizda")],
-    ], resize_keyboard=True)
-
-async def notify_admins(bot, text):
-    if ADMIN_GROUP_ID:
-        try:
-            await bot.send_message(ADMIN_GROUP_ID, text, parse_mode="Markdown")
-            return
-        except:
-            pass
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(admin_id, text, parse_mode="Markdown")
-        except:
-            pass
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log.error(f"API error {path}: {e}")
+        return {}
 
 
-# ===== START =====
-async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    await update.message.reply_text(
-        f"👋 Assalomu alaykum, *{user.first_name}*!\n\n"
-        f"🍽 *{RESTAURANT_NAME}* botiga xush kelibsiz!\n\n"
-        "Quyidagi tugmalardan birini tanlang:",
-        parse_mode="Markdown",
-        reply_markup=main_keyboard()
-    )
+def login():
+    global admin_token
+    res = api("POST", "/api/login", {"password": ADMIN_PASS})
+    if res.get("ok"):
+        admin_token = res["token"]
+        log.info("Admin login OK")
+    else:
+        log.warning("Admin login FAILED — buyurtma statusini o'zgartirish ishlamas")
 
 
-# ===== MENU =====
-async def show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    items = get_menu()
-    if not items:
-        await update.message.reply_text("Menyu hozircha mavjud emas.", reply_markup=main_keyboard())
-        return
-
-    cats = get_categories()
-    text = f"📋 *{RESTAURANT_NAME} — Menyu*\n\n"
-    for cat_key, cat_name in cats.items():
-        cat_items = [i for i in items if i["category"] == cat_key and i.get("available", 1)]
-        if cat_items:
-            text += f"*{cat_name}*\n"
-            for item in cat_items:
-                text += f"  {item.get('emoji','🍽')} {item['name']} — {price_fmt(item['price'])}\n"
-            text += "\n"
-
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=main_keyboard())
+STATUS_LABELS = {
+    "new":       "🆕 Yangi",
+    "confirmed": "✅ Tasdiqlangan",
+    "done":      "✔️ Bajarilgan",
+    "cancelled": "❌ Bekor qilingan",
+}
 
 
-# ===== ORDER FLOW =====
-async def order_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data.clear()
-    cats = get_categories()
-    buttons = [[InlineKeyboardButton(name, callback_data=f"cat_{key}")] for key, name in cats.items()]
-    await update.message.reply_text(
-        "🛒 *Buyurtma berish*\n\nQaysi bo'limdan tanlaysiz?",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-    return ORDER_CATEGORY
+def send_kb(chat_id, text, buttons):
+    tg("sendMessage",
+       chat_id=chat_id,
+       text=text,
+       parse_mode="HTML",
+       reply_markup={"inline_keyboard": buttons})
 
 
-async def order_category(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    cat_key = query.data.replace("cat_", "")
-    ctx.user_data["category"] = cat_key
+def handle_message(msg):
+    chat_id = msg["chat"]["id"]
+    text    = msg.get("text", "").strip()
 
-    items = [i for i in get_menu(cat_key) if i.get("available", 1)]
-    if not items:
-        await query.edit_message_text("Bu bo'limda taomlar yo'q.")
-        return ConversationHandler.END
-
-    cats = get_categories()
-    buttons = [
-        [InlineKeyboardButton(f"{i.get('emoji','🍽')} {i['name']} — {price_fmt(i['price'])}", callback_data=f"item_{i['id']}")]
-        for i in items
-    ]
-    buttons.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="back_cat")])
-    await query.edit_message_text(
-        f"*{cats.get(cat_key, cat_key)}* bo'limidan tanlang:",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-    return ORDER_ITEM
-
-
-async def order_item(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    if query.data == "back_cat":
-        await query.answer()
-        cats = get_categories()
-        buttons = [[InlineKeyboardButton(name, callback_data=f"cat_{key}")] for key, name in cats.items()]
-        await query.edit_message_text("Qaysi bo'limdan tanlaysiz?", reply_markup=InlineKeyboardMarkup(buttons))
-        return ORDER_CATEGORY
-
-    await query.answer()
-    item_id = int(query.data.replace("item_", ""))
-    all_items = get_menu()
-    item = next((i for i in all_items if i["id"] == item_id), None)
-    if not item:
-        await query.edit_message_text("Taom topilmadi.")
-        return ConversationHandler.END
-
-    ctx.user_data["item"] = item
-    buttons = [
-        [InlineKeyboardButton(str(q), callback_data=f"qty_{q}") for q in [1, 2, 3]],
-        [InlineKeyboardButton(str(q), callback_data=f"qty_{q}") for q in [4, 5, 6]],
-    ]
-    await query.edit_message_text(
-        f"{item.get('emoji','🍽')} *{item['name']}*\n"
-        f"_{item.get('description','')}_\n\n"
-        f"💰 Narxi: *{price_fmt(item['price'])}*\n\n"
-        "Nechtadan buyurtma bermoqchisiz?",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-    return ORDER_QTY
-
-
-async def order_qty(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    qty = int(query.data.replace("qty_", ""))
-    ctx.user_data["qty"] = qty
-    item = ctx.user_data["item"]
-    total = item["price"] * qty
-    ctx.user_data["total"] = total
-    await query.edit_message_text(
-        f"✅ {item.get('emoji','🍽')} *{item['name']}* × {qty} = *{price_fmt(total)}*\n\n"
-        "👤 Ismingizni kiriting:",
-        parse_mode="Markdown"
-    )
-    return ORDER_NAME
-
-
-async def order_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["name"] = update.message.text.strip()
-    await update.message.reply_text("📱 Telefon raqamingizni kiriting:\n(masalan: +998901234567)")
-    return ORDER_PHONE
-
-
-async def order_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["phone"] = update.message.text.strip()
-    d = ctx.user_data
-    item = d["item"]
-    text = (
-        f"📋 *Buyurtmangizni tasdiqlang:*\n\n"
-        f"{item.get('emoji','🍽')} *{item['name']}*\n"
-        f"🔢 Miqdor: {d['qty']} dona\n"
-        f"💰 Jami: *{price_fmt(d['total'])}*\n\n"
-        f"👤 Ism: {d['name']}\n"
-        f"📞 Telefon: {d['phone']}"
-    )
-    buttons = [[
-        InlineKeyboardButton("✅ Tasdiqlash", callback_data="order_confirm"),
-        InlineKeyboardButton("❌ Bekor", callback_data="order_cancel")
-    ]]
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
-    return ORDER_CONFIRM
-
-
-async def order_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    d = ctx.user_data
-
-    if query.data == "order_cancel":
-        await query.edit_message_text("❌ Buyurtma bekor qilindi.")
-        return ConversationHandler.END
-
-    item = d["item"]
-    user = query.from_user
-
-    # API ga saqlash
-    save_order({
-        "item_name": item["name"],
-        "item_id": item["id"],
-        "quantity": d["qty"],
-        "total_price": d["total"],
-        "customer_name": d["name"],
-        "customer_phone": d["phone"],
-    })
-
-    # Adminga xabar
-    await notify_admins(
-        ctx.bot,
-        f"🆕 *Yangi buyurtma!*\n\n"
-        f"{item.get('emoji','🍽')} {item['name']} × {d['qty']}\n"
-        f"💰 {price_fmt(d['total'])}\n\n"
-        f"👤 {d['name']}\n"
-        f"📞 {d['phone']}\n"
-        f"📱 Telegram: @{user.username or 'N/A'}"
-    )
-
-    await query.edit_message_text(
-        f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-        f"Tez orada *{RESTAURANT_PHONE}* raqamidan siz bilan bog'lanamiz.\n\n"
-        f"Rahmat! 🙏",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🏠 Bosh sahifa")]], resize_keyboard=True)
-    )
-    return ConversationHandler.END
-
-
-# ===== RESERVATION FLOW =====
-async def reserve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data.clear()
-    await update.message.reply_text(
-        "📅 *Stol bron qilish*\n\n"
-        "Qaysi *sanada* kelmoqchisiz?\n"
-        "Formatda yozing: *KK.OO.YYYY*\n"
-        "_(masalan: 25.07.2025)_",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup([["🏠 Bosh sahifa"]], resize_keyboard=True)
-    )
-    return RESERVE_DATE
-
-
-async def reserve_date(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["date"] = update.message.text.strip()
-    await update.message.reply_text(
-        "⏰ Qaysi *vaqtda* kelasiz?\n_(masalan: 19:00)_",
-        parse_mode="Markdown"
-    )
-    return RESERVE_TIME
-
-
-async def reserve_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["time"] = update.message.text.strip()
-    buttons = [
-        [InlineKeyboardButton("1 kishi", callback_data="g_1"), InlineKeyboardButton("2 kishi", callback_data="g_2")],
-        [InlineKeyboardButton("3 kishi", callback_data="g_3"), InlineKeyboardButton("4 kishi", callback_data="g_4")],
-        [InlineKeyboardButton("5 kishi", callback_data="g_5"), InlineKeyboardButton("6+ kishi", callback_data="g_6+")],
-    ]
-    await update.message.reply_text(
-        "👥 Nechta kishi keladi?",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-    return RESERVE_GUESTS
-
-
-async def reserve_guests(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    ctx.user_data["guests"] = query.data.replace("g_", "")
-    await query.edit_message_text("👤 Ismingizni kiriting:")
-    return RESERVE_NAME
-
-
-async def reserve_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["name"] = update.message.text.strip()
-    await update.message.reply_text("📱 Telefon raqamingizni kiriting:")
-    return RESERVE_PHONE
-
-
-async def reserve_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["phone"] = update.message.text.strip()
-    d = ctx.user_data
-    text = (
-        f"📋 *Bron ma'lumotlari:*\n\n"
-        f"📅 Sana: *{d['date']}*\n"
-        f"⏰ Vaqt: *{d['time']}*\n"
-        f"👥 Mehmonlar: *{d['guests']} kishi*\n"
-        f"👤 Ism: {d['name']}\n"
-        f"📞 Telefon: {d['phone']}"
-    )
-    buttons = [[
-        InlineKeyboardButton("✅ Tasdiqlash", callback_data="res_confirm"),
-        InlineKeyboardButton("❌ Bekor", callback_data="res_cancel")
-    ]]
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
-    return RESERVE_CONFIRM
-
-
-async def reserve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    d = ctx.user_data
-
-    if query.data == "res_cancel":
-        await query.edit_message_text("❌ Bron bekor qilindi.")
-        return ConversationHandler.END
-
-    user = query.from_user
-
-    save_reservation({
-        "customer_name": d["name"],
-        "customer_phone": d["phone"],
-        "date": d["date"],
-        "time": d["time"],
-        "guests": d["guests"],
-    })
-
-    await notify_admins(
-        ctx.bot,
-        f"📅 *Yangi bron!*\n\n"
-        f"👤 {d['name']}\n"
-        f"📞 {d['phone']}\n"
-        f"📅 {d['date']} soat {d['time']}\n"
-        f"👥 {d['guests']} kishi\n"
-        f"📱 Telegram: @{user.username or 'N/A'}"
-    )
-
-    await query.edit_message_text(
-        f"✅ *Bron tasdiqlandi!*\n\n"
-        f"📅 {d['date']} kuni soat {d['time']}da\n"
-        f"👥 {d['guests']} kishilik stol band qilindi.\n\n"
-        f"Tez orada siz bilan bog'lanamiz. Rahmat! 🙏",
-        parse_mode="Markdown"
-    )
-    return ConversationHandler.END
-
-
-# ===== NEWS =====
-async def show_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    try:
-        res = requests.get(f"{API}/api/news?active=1", timeout=5)
-        items = res.json()
-    except:
-        items = []
-
-    if not items:
-        await update.message.reply_text("📭 Hozircha yangiliklar yo'q.", reply_markup=main_keyboard())
-        return
-
-    for n in items[:5]:
-        text = f"📢 *{n['title']}*\n\n{n.get('content','')}"
-        await update.message.reply_text(text, parse_mode="Markdown")
-
-    await update.message.reply_text("Boshqa savol bo'lsa:", reply_markup=main_keyboard())
-
-
-# ===== CONTACT & ABOUT =====
-async def contact(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"📞 *Aloqa ma'lumotlari*\n\n"
-        f"📱 Telefon: {RESTAURANT_PHONE}\n"
-        f"📍 Manzil: {RESTAURANT_ADDRESS}\n"
-        f"🕐 Ish vaqti: {WORKING_HOURS}\n"
-        f"🌐 Sayt: http://localhost:5000",
-        parse_mode="Markdown",
-        reply_markup=main_keyboard()
-    )
-
-
-async def about(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"ℹ️ *{RESTAURANT_NAME} haqida*\n\n"
-        "2014-yildan buyon sifatli va mazali taomlar taqdim etib kelmoqdamiz.\n\n"
-        "🍽 50+ taom turi\n"
-        "⭐ 10+ yillik tajriba\n"
-        "😊 1000+ mamnun mijoz\n"
-        "🚗 Yetkazib berish xizmati mavjud\n\n"
-        f"📞 {RESTAURANT_PHONE}",
-        parse_mode="Markdown",
-        reply_markup=main_keyboard()
-    )
-
-
-# ===== ADMIN COMMANDS =====
-async def admin_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    try:
-        res = requests.get(f"{API}/api/stats",
-                           headers={"X-Admin-Token": "admin_panel"}, timeout=5)
-        d = res.json()
-        await update.message.reply_text(
-            f"📊 *Statistika*\n\n"
-            f"🆕 Yangi buyurtmalar: {d['orders_new']}\n"
-            f"📦 Jami buyurtmalar: {d['orders_total']}\n"
-            f"💰 Daromad: {price_fmt(d['revenue'])}\n"
-            f"📅 Bugungi bronlar: {d['reservations_today']}\n"
-            f"🍽 Aktiv taomlar: {d['menu_count']}",
-            parse_mode="Markdown"
+    if text in ("/start", "/help"):
+        send_kb(chat_id,
+            "👋 <b>Rayyon Admin Bot</b>\n\nBuyurtmalar va bronlarni boshqarish:",
+            [[
+                {"text": "📦 Buyurtmalar", "callback_data": "orders"},
+                {"text": "📅 Bronlar",     "callback_data": "reservations"},
+            ]]
         )
-    except:
-        await update.message.reply_text("Backend bilan ulanib bo'lmadi.")
+    elif text == "/orders":
+        show_orders(chat_id)
+    elif text == "/reservations":
+        show_reservations(chat_id)
+    else:
+        tg("sendMessage", chat_id=chat_id,
+           text="📌 Komandalar:\n/orders — Buyurtmalar\n/reservations — Bronlar")
 
 
-async def admin_orders(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
+def show_orders(chat_id):
+    items = api("GET", "/api/orders?status=new")
+    if not isinstance(items, list) or not items:
+        tg("sendMessage", chat_id=chat_id, text="📦 Yangi buyurtmalar yo'q.")
         return
-    try:
-        res = requests.get(f"{API}/api/orders?status=new",
-                           headers={"X-Admin-Token": "admin_panel"}, timeout=5)
-        orders = res.json()
-    except:
-        await update.message.reply_text("Backend bilan ulanib bo'lmadi.")
-        return
-
-    if not orders:
-        await update.message.reply_text("✅ Yangi buyurtmalar yo'q.")
-        return
-
-    text = f"🆕 *Yangi buyurtmalar ({len(orders)} ta):*\n\n"
-    for o in orders[:10]:
-        text += (
-            f"#{o['id']} — {o['item_name']} × {o['quantity']}\n"
-            f"👤 {o['customer_name']} | 📞 {o['customer_phone']}\n"
-            f"💰 {price_fmt(o['total_price'])}\n\n"
+    for o in items[:10]:
+        txt = (
+            f"📦 <b>Buyurtma #{o['id']}</b>\n"
+            f"🍽 {o.get('item_name','')} x{o.get('quantity',1)}\n"
+            f"💰 {int(o.get('total_price',0)):,} so'm\n"
+            f"👤 {o.get('customer_name','')} · {o.get('customer_phone','')}\n"
+            + (f"📝 {o['note']}\n" if o.get("note") else "")
+            + f"📊 {STATUS_LABELS.get(o.get('status'), o.get('status',''))}"
         )
-    await update.message.reply_text(text, parse_mode="Markdown")
+        btns = [[
+            {"text": "✅ Tasdiqlash", "callback_data": f"ord_confirmed_{o['id']}"},
+            {"text": "✔️ Bajarildi",  "callback_data": f"ord_done_{o['id']}"},
+            {"text": "❌ Bekor",      "callback_data": f"ord_cancelled_{o['id']}"},
+        ]]
+        send_kb(chat_id, txt, btns)
 
 
-# ===== HOME =====
-async def home(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await start(update, ctx)
-    return ConversationHandler.END
+def show_reservations(chat_id):
+    items = api("GET", "/api/reservations")
+    if not isinstance(items, list):
+        tg("sendMessage", chat_id=chat_id, text="📅 Bronlar yo'q.")
+        return
+    new_only = [r for r in items if r.get("status") == "new"][:10]
+    if not new_only:
+        tg("sendMessage", chat_id=chat_id, text="📅 Yangi bronlar yo'q.")
+        return
+    for r in new_only:
+        txt = (
+            f"📅 <b>Bron #{r['id']}</b>\n"
+            f"👤 {r.get('customer_name','')} · {r.get('customer_phone','')}\n"
+            f"📆 {r.get('date','')} {r.get('time','')}\n"
+            f"👥 {r.get('guests',2)} mehmon\n"
+            + (f"📝 {r['note']}\n" if r.get("note") else "")
+            + f"📊 {STATUS_LABELS.get(r.get('status'), r.get('status',''))}"
+        )
+        btns = [[
+            {"text": "✅ Tasdiqlash", "callback_data": f"res_confirmed_{r['id']}"},
+            {"text": "❌ Bekor",      "callback_data": f"res_cancelled_{r['id']}"},
+        ]]
+        send_kb(chat_id, txt, btns)
 
 
-async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bekor qilindi.", reply_markup=main_keyboard())
-    return ConversationHandler.END
+def handle_callback(cb):
+    chat_id = cb["message"]["chat"]["id"]
+    msg_id  = cb["message"]["message_id"]
+    data    = cb.get("data", "")
+    cb_id   = cb["id"]
+
+    if data == "orders":
+        show_orders(chat_id)
+        tg("answerCallbackQuery", callback_query_id=cb_id)
+        return
+    if data == "reservations":
+        show_reservations(chat_id)
+        tg("answerCallbackQuery", callback_query_id=cb_id)
+        return
+
+    if data.startswith("ord_"):
+        _, status, oid = data.split("_", 2)
+        res   = api("PUT", f"/api/orders/{oid}", {"status": status})
+        label = STATUS_LABELS.get(status, status)
+        if res.get("ok"):
+            tg("editMessageText",
+               chat_id=chat_id, message_id=msg_id,
+               text=f"✅ Buyurtma #{oid} → {label}", parse_mode="HTML")
+        tg("answerCallbackQuery", callback_query_id=cb_id, text=label)
+
+    elif data.startswith("res_"):
+        _, status, rid = data.split("_", 2)
+        res   = api("PUT", f"/api/reservations/{rid}", {"status": status})
+        label = STATUS_LABELS.get(status, status)
+        if res.get("ok"):
+            tg("editMessageText",
+               chat_id=chat_id, message_id=msg_id,
+               text=f"✅ Bron #{rid} → {label}", parse_mode="HTML")
+        tg("answerCallbackQuery", callback_query_id=cb_id, text=label)
 
 
-# ===== MAIN =====
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    order_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🛒 Buyurtma berish$"), order_start)],
-        states={
-            ORDER_CATEGORY: [CallbackQueryHandler(order_category, pattern="^cat_")],
-            ORDER_ITEM:     [CallbackQueryHandler(order_item, pattern="^(item_|back_cat)")],
-            ORDER_QTY:      [CallbackQueryHandler(order_qty, pattern="^qty_")],
-            ORDER_NAME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, order_name)],
-            ORDER_PHONE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, order_phone)],
-            ORDER_CONFIRM:  [CallbackQueryHandler(order_confirm, pattern="^order_")],
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel),
-            MessageHandler(filters.Regex("^🏠 Bosh sahifa$"), home),
-        ]
-    )
-
-    reserve_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^📅 Stol bron qilish$"), reserve_start)],
-        states={
-            RESERVE_DATE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, reserve_date)],
-            RESERVE_TIME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, reserve_time)],
-            RESERVE_GUESTS:  [CallbackQueryHandler(reserve_guests, pattern="^g_")],
-            RESERVE_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, reserve_name)],
-            RESERVE_PHONE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, reserve_phone)],
-            RESERVE_CONFIRM: [CallbackQueryHandler(reserve_confirm, pattern="^res_")],
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel),
-            MessageHandler(filters.Regex("^🏠 Bosh sahifa$"), home),
-        ]
-    )
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stats", admin_stats))
-    app.add_handler(CommandHandler("orders", admin_orders))
-    app.add_handler(order_conv)
-    app.add_handler(reserve_conv)
-    app.add_handler(MessageHandler(filters.Regex("^🍽 Menyu$"), show_menu))
-    app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact))
-    app.add_handler(MessageHandler(filters.Regex("^ℹ️ Biz haqimizda$"), about))
-    app.add_handler(MessageHandler(filters.Regex("^📰 Yangiliklar$"), show_news))
-    app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh sahifa$"), start))
-
-    logger.info(f"✅ Bot ishga tushdi: @rayyon_restoran_bot")
-    app.run_polling(drop_pending_updates=True)
+def poll():
+    offset = 0
+    log.info(f"Bot polling boshlandi | API: {API_URL}")
+    while True:
+        res = tg("getUpdates", offset=offset, timeout=30)
+        for upd in res.get("result", []):
+            offset = upd["update_id"] + 1
+            try:
+                if "message" in upd:
+                    handle_message(upd["message"])
+                elif "callback_query" in upd:
+                    handle_callback(upd["callback_query"])
+            except Exception as e:
+                log.error(f"Handler error: {e}")
+        time.sleep(0.3)
 
 
 if __name__ == "__main__":
-    main()
+    if not TOKEN:
+        print("❌ TELEGRAM_BOT_TOKEN o'rnatilmagan!")
+        print("   export TELEGRAM_BOT_TOKEN=<token>")
+        exit(1)
+    login()
+    poll()

@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
-import os, time
+import os, time, urllib.request, urllib.parse, json
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -14,6 +14,26 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 init_db()
+
+TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TG_CHAT  = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def tg_send(text):
+    """Telegram guruhiga xabar yuborish"""
+    if not TG_TOKEN or not TG_CHAT:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+        data = urllib.parse.urlencode({
+            "chat_id": TG_CHAT,
+            "text": text,
+            "parse_mode": "HTML"
+        }).encode()
+        req = urllib.request.Request(url, data=data, method="POST")
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
 
 
 def allowed_file(filename):
@@ -135,6 +155,14 @@ def add_order():
          d.get("total_price"), d.get("customer_name"), d.get("customer_phone"), d.get("note"))
     )
     conn.commit(); conn.close()
+    tg_send(
+        f"🛒 <b>Yangi buyurtma!</b>\n"
+        f"📌 Taom: {d.get('item_name')} x{d.get('quantity',1)}\n"
+        f"💰 Narx: {d.get('total_price',0):,} so'm\n"
+        f"👤 Mijoz: {d.get('customer_name')}\n"
+        f"📞 Telefon: {d.get('customer_phone')}\n"
+        + (f"📝 Izoh: {d.get('note')}" if d.get("note") else "")
+    )
     return jsonify({"ok": True})
 
 
@@ -168,6 +196,14 @@ def add_reservation():
         (d.get("customer_name"), d.get("customer_phone"), d.get("date"), d.get("time"), d.get("guests", 2), d.get("note"))
     )
     conn.commit(); conn.close()
+    tg_send(
+        f"📅 <b>Yangi bron!</b>\n"
+        f"👤 Mijoz: {d.get('customer_name')}\n"
+        f"📞 Telefon: {d.get('customer_phone')}\n"
+        f"📆 Sana: {d.get('date')} {d.get('time')}\n"
+        f"👥 Mehmonlar: {d.get('guests',2)} kishi\n"
+        + (f"📝 Izoh: {d.get('note')}" if d.get("note") else "")
+    )
     return jsonify({"ok": True})
 
 
