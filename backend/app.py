@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
-import os, json, time
-from database import get_conn, init_db
+import os, time
+from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -11,7 +11,7 @@ CORS(app, supports_credentials=True)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 init_db()
 
@@ -20,38 +20,45 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
+def q(sql):
+    """? -> %s for PostgreSQL"""
+    return sql.replace("?", "%s") if USE_PG else sql
+
+
 def get_setting(key):
     conn = get_conn()
-    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    cur = conn.cursor()
+    cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
+    row = cur.fetchone()
     conn.close()
-    return row["value"] if row else None
+    if not row:
+        return None
+    return row["value"] if not USE_PG else row[0]
 
 
-def rows_to_list(rows):
-    return [dict(r) for r in rows]
+def check_auth():
+    return request.headers.get("X-Admin-Token", "").startswith("admin_")
+
+
+def db_exec(conn, sql, params=()):
+    cur = conn.cursor()
+    cur.execute(q(sql), params)
+    return cur
 
 
 # ===== AUTH =====
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.json or {}
-    password = data.get("password", "")
     correct = get_setting("admin_password")
-    if password == correct:
-        session["admin"] = True
+    if data.get("password") == correct:
         return jsonify({"ok": True, "token": "admin_" + str(int(time.time()))})
-    return jsonify({"ok": False, "error": "Noto'g'ri parol"}), 401
+    return jsonify({"ok": False}), 401
 
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
-    session.clear()
     return jsonify({"ok": True})
-
-
-def check_auth():
-    token = request.headers.get("X-Admin-Token", "")
-    return token.startswith("admin_")
 
 
 # ===== MENU =====
@@ -60,128 +67,117 @@ def get_menu():
     conn = get_conn()
     category = request.args.get("category")
     if category and category != "all":
-        rows = conn.execute("SELECT * FROM menu WHERE category=? ORDER BY id", (category,)).fetchall()
+        cur = db_exec(conn, "SELECT * FROM menu WHERE category=? ORDER BY id", (category,))
     else:
-        rows = conn.execute("SELECT * FROM menu ORDER BY category, id").fetchall()
+        cur = db_exec(conn, "SELECT * FROM menu ORDER BY category, id")
+    result = rows_to_list(cur)
     conn.close()
-    return jsonify(rows_to_list(rows))
+    return jsonify(result)
 
 
 @app.route("/api/menu", methods=["POST"])
 def add_menu():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "INSERT INTO menu (name, category, description, price, emoji, available) VALUES (?,?,?,?,?,?)",
         (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1))
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/menu/<int:item_id>", methods=["PUT"])
 def update_menu(item_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "UPDATE menu SET name=?, category=?, description=?, price=?, emoji=?, available=? WHERE id=?",
         (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1), item_id)
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/menu/<int:item_id>", methods=["DELETE"])
 def delete_menu(item_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    conn.execute("DELETE FROM menu WHERE id=?", (item_id,))
-    conn.commit()
-    conn.close()
+    db_exec(conn, "DELETE FROM menu WHERE id=?", (item_id,))
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 # ===== ORDERS =====
 @app.route("/api/orders", methods=["GET"])
 def get_orders():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     status = request.args.get("status")
     if status:
-        rows = conn.execute("SELECT * FROM orders WHERE status=? ORDER BY created_at DESC", (status,)).fetchall()
+        cur = db_exec(conn, "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC", (status,))
     else:
-        rows = conn.execute("SELECT * FROM orders ORDER BY created_at DESC").fetchall()
+        cur = db_exec(conn, "SELECT * FROM orders ORDER BY created_at DESC")
+    result = rows_to_list(cur)
     conn.close()
-    return jsonify(rows_to_list(rows))
+    return jsonify(result)
 
 
 @app.route("/api/orders", methods=["POST"])
 def add_order():
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "INSERT INTO orders (item_name, item_id, quantity, total_price, customer_name, customer_phone, note) VALUES (?,?,?,?,?,?,?)",
         (d.get("item_name"), d.get("item_id"), d.get("quantity", 1),
          d.get("total_price"), d.get("customer_name"), d.get("customer_phone"), d.get("note"))
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/orders/<int:order_id>", methods=["PUT"])
 def update_order(order_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute("UPDATE orders SET status=? WHERE id=?", (d.get("status"), order_id))
-    conn.commit()
-    conn.close()
+    db_exec(conn, "UPDATE orders SET status=? WHERE id=?", (d.get("status"), order_id))
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 # ===== RESERVATIONS =====
 @app.route("/api/reservations", methods=["GET"])
 def get_reservations():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM reservations ORDER BY created_at DESC").fetchall()
+    cur = db_exec(conn, "SELECT * FROM reservations ORDER BY created_at DESC")
+    result = rows_to_list(cur)
     conn.close()
-    return jsonify(rows_to_list(rows))
+    return jsonify(result)
 
 
 @app.route("/api/reservations", methods=["POST"])
 def add_reservation():
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "INSERT INTO reservations (customer_name, customer_phone, date, time, guests, note) VALUES (?,?,?,?,?,?)",
         (d.get("customer_name"), d.get("customer_phone"), d.get("date"), d.get("time"), d.get("guests", 2), d.get("note"))
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/reservations/<int:res_id>", methods=["PUT"])
 def update_reservation(res_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute("UPDATE reservations SET status=? WHERE id=?", (d.get("status"), res_id))
-    conn.commit()
-    conn.close()
+    db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (d.get("status"), res_id))
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
@@ -189,63 +185,55 @@ def update_reservation(res_id):
 @app.route("/api/news", methods=["GET"])
 def get_news():
     conn = get_conn()
-    active_only = request.args.get("active") == "1"
-    if active_only:
-        rows = conn.execute("SELECT * FROM news WHERE active=1 ORDER BY created_at DESC").fetchall()
+    if request.args.get("active") == "1":
+        cur = db_exec(conn, "SELECT * FROM news WHERE active=1 ORDER BY created_at DESC")
     else:
-        rows = conn.execute("SELECT * FROM news ORDER BY created_at DESC").fetchall()
+        cur = db_exec(conn, "SELECT * FROM news ORDER BY created_at DESC")
+    result = rows_to_list(cur)
     conn.close()
-    return jsonify(rows_to_list(rows))
+    return jsonify(result)
 
 
 @app.route("/api/news", methods=["POST"])
 def add_news():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "INSERT INTO news (title, content, image, active) VALUES (?,?,?,?)",
         (d.get("title"), d.get("content"), d.get("image"), d.get("active", 1))
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/news/<int:news_id>", methods=["PUT"])
 def update_news(news_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
-    conn.execute(
+    db_exec(conn,
         "UPDATE news SET title=?, content=?, active=? WHERE id=?",
         (d.get("title"), d.get("content"), d.get("active", 1), news_id)
     )
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/news/<int:news_id>", methods=["DELETE"])
 def delete_news(news_id):
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    conn.execute("DELETE FROM news WHERE id=?", (news_id,))
-    conn.commit()
-    conn.close()
+    db_exec(conn, "DELETE FROM news WHERE id=?", (news_id,))
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 # ===== IMAGE UPLOAD =====
 @app.route("/api/upload", methods=["POST"])
 def upload_image():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
-    if "file" not in request.files:
-        return jsonify({"error": "Fayl topilmadi"}), 400
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    if "file" not in request.files: return jsonify({"error": "Fayl topilmadi"}), 400
     file = request.files["file"]
     if file.filename == "" or not allowed_file(file.filename):
         return jsonify({"error": "Noto'g'ri fayl turi"}), 400
@@ -262,48 +250,53 @@ def uploaded_file(filename):
 # ===== SETTINGS =====
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    cur = db_exec(conn, "SELECT key, value FROM settings")
+    rows = cur.fetchall()
     conn.close()
+    if USE_PG:
+        return jsonify({r[0]: r[1] for r in rows})
     return jsonify({r["key"]: r["value"] for r in rows})
 
 
 @app.route("/api/settings", methods=["PUT"])
 def update_settings():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     conn = get_conn()
     for key, val in d.items():
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, str(val)))
-    conn.commit()
-    conn.close()
+        if USE_PG:
+            db_exec(conn, "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, str(val)))
+        else:
+            db_exec(conn, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, str(val)))
+    conn.commit(); conn.close()
     return jsonify({"ok": True})
 
 
 # ===== STATS =====
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
-    if not check_auth():
-        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    orders_total = conn.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"]
-    orders_new = conn.execute("SELECT COUNT(*) as c FROM orders WHERE status='new'").fetchone()["c"]
-    revenue = conn.execute("SELECT COALESCE(SUM(total_price),0) as s FROM orders WHERE status='done'").fetchone()["s"]
-    reservations_today = conn.execute(
-        "SELECT COUNT(*) as c FROM reservations WHERE date=date('now','localtime')"
-    ).fetchone()["c"]
-    menu_count = conn.execute("SELECT COUNT(*) as c FROM menu WHERE available=1").fetchone()["c"]
+
+    def val(sql):
+        cur = db_exec(conn, sql)
+        row = cur.fetchone()
+        return row[0] if row else 0
+
+    today_sql = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE" if USE_PG else \
+                "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
+
+    result = {
+        "orders_total": val("SELECT COUNT(*) FROM orders"),
+        "orders_new": val("SELECT COUNT(*) FROM orders WHERE status='new'"),
+        "revenue": val("SELECT COALESCE(SUM(total_price),0) FROM orders WHERE status='done'"),
+        "reservations_today": val(today_sql),
+        "menu_count": val("SELECT COUNT(*) FROM menu WHERE available=1"),
+    }
     conn.close()
-    return jsonify({
-        "orders_total": orders_total,
-        "orders_new": orders_new,
-        "revenue": revenue,
-        "reservations_today": reservations_today,
-        "menu_count": menu_count,
-    })
+    return jsonify(result)
 
 
 # ===== STATIC FILES =====
