@@ -225,9 +225,27 @@ function kpDel() { pin=pin.slice(0,-1); updDots(); }
 function updDots() {
   for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('on',i<pin.length);
 }
+// ===== GLOBAL XATO YORDAMCHISI =====
+function wErr(msg) { wToast('❌ '+msg); }
+
+async function safeFetch(url, opts={}) {
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      let msg = `Server xatosi (${res.status})`;
+      try { const d = await res.json(); msg = d.error || msg; } catch {}
+      wErr(msg); return null;
+    }
+    return res;
+  } catch {
+    wErr("Tarmoq xatosi. Internetni tekshiring."); return null;
+  }
+}
+
 async function kpOk() {
   if (pin.length<4) return;
-  const res  = await fetch(API+'/api/staff/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  const res = await safeFetch(API+'/api/staff/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  if (!res) { pin=''; updDots(); return; }
   const data = await res.json();
   if (data.ok) {
     waiter = {name: data.name, role: data.role, action: data.action, hours: data.hours};
@@ -271,7 +289,8 @@ function switchTab(t) {
 // ===== STOLLAR =====
 let tablesData = [];
 async function loadTables() {
-  const res = await fetch(API+'/api/tables');
+  const res = await safeFetch(API+'/api/tables');
+  if (!res) return;
   tablesData = await res.json();
   const grid = document.getElementById('tablesGrid');
   grid.innerHTML = tablesData.map(t=>{
@@ -320,16 +339,17 @@ function showOpenTablePrompt() {
 }
 
 async function openTableSession() {
-  const res  = await fetch(API+'/api/session/open',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})});
+  const res = await safeFetch(API+'/api/session/open', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})
+  });
+  if (!res) return;
   const data = await res.json();
   if (data.ok) {
     await loadTables();
     currentTable = tablesData.find(t=>t.id===currentTable.id);
     showMenuView();
-  } else if (data.token) {
-    // Allaqachon ochiq
+  } else if (data.session_id) {
     await loadSessionView();
   }
 }
@@ -338,7 +358,8 @@ async function loadSessionView() {
   document.getElementById('cartBar').style.display='none';
   if (!currentTable.current_session_id) { showMenuView(); return; }
   const sid = currentTable.current_session_id;
-  const res  = await fetch(API+'/api/session/'+sid, {headers:{'X-Admin-Token':localStorage.getItem('waiter_admin_token')||''}});
+  const res = await safeFetch(API+'/api/session/'+sid);
+  if (!res) return;
   currentSession = await res.json();
   const items = (currentSession.items||[]).filter(i=>i.status!=='cancelled');
   const statusLabel = {pending:'Kutmoqda',cooking:'Pishmoqda',ready:'Tayyor✓',served:'Berildi',cancelled:'Bekor'};
@@ -365,16 +386,18 @@ async function loadSessionView() {
 
 async function sendBillRequest() {
   if (!currentSession) return;
-  await fetch(API+'/api/session/'+currentSession.id+'/bill', {
-    method:'POST', headers:{'X-Session-Token':currentSession.token||'','X-Admin-Token':localStorage.getItem('waiter_admin_token')||''}
+  const res = await safeFetch(API+'/api/session/'+currentSession.id+'/bill', {
+    method:'POST', headers:{'Content-Type':'application/json','X-Session-Token':currentSession.token||''}
   });
+  if (!res) return;
   wToast('Kassirga signal yuborildi ✓');
   closeOrderPanel(); loadTables();
 }
 
 // ===== MENYU =====
 async function loadMenu() {
-  const res = await fetch(API+'/api/menu');
+  const res = await safeFetch(API+'/api/menu');
+  if (!res) return;
   allMenuItems = await res.json();
 }
 
@@ -477,28 +500,25 @@ function wCartQty(i,d) {
 
 async function submitWCart() {
   if (!currentTable || !currentTable.current_session_id) {
-    wToast("Stol sessiyasi topilmadi!"); return;
+    wErr("Stol sessiyasi topilmadi!"); return;
   }
   const sid   = currentTable.current_session_id;
   const token = currentTable.token || '';
   const items = wCart.map(c=>({
     menu_item_id:c.item.id, name:c.item.name, emoji:c.item.emoji,
-    price:c.item.price, quantity:c.qty, comment:c.comment, category:c.item.category
+    price:c.item.price, quantity:c.qty, comment:c.comment, category:c.item.category,
+    waiter_name: waiter.name
   }));
-  const res  = await fetch(API+'/api/session/'+sid+'/order',{
+  const res = await safeFetch(API+'/api/session/'+sid+'/order', {
     method:'POST',
     headers:{'Content-Type':'application/json','X-Session-Token':token},
     body:JSON.stringify({items, waiter_pin:waiterPin})
   });
-  const data = await res.json();
-  if (data.ok) {
-    wCart=[];
-    wToast('Buyurtma oshxonaga yuborildi ✓');
-    closeOrderPanel();
-    loadTables();
-  } else {
-    wToast('Xatolik: '+(data.error||'Qayta urinib ko\'ring'));
-  }
+  if (!res) return;
+  wCart=[];
+  wToast('Buyurtma oshxonaga yuborildi ✓');
+  closeOrderPanel();
+  loadTables();
 }
 
 function closeOrderPanel() {
@@ -508,7 +528,8 @@ function closeOrderPanel() {
 
 // ===== TAYYOR BUYURTMALAR =====
 async function loadReady() {
-  const res   = await fetch(API+'/api/kitchen/ready');
+  const res = await safeFetch(API+'/api/kitchen/ready');
+  if (!res) return;
   const items = await res.json();
   const badge = document.getElementById('readyBadge');
   badge.textContent  = items.length;
@@ -530,17 +551,19 @@ async function loadReady() {
 }
 
 async function markServed(sid, itemId) {
-  await fetch(API+'/api/session/'+sid+'/item/'+itemId+'/status',{
-    method:'PUT', headers:{'Content-Type':'application/json','X-Admin-Token':localStorage.getItem('waiter_admin_token')||''},
-    body:JSON.stringify({status:'served'})
+  const res = await safeFetch(API+'/api/session/'+sid+'/item/'+itemId+'/status', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({status:'served', waiter_pin:waiterPin})
   });
+  if (!res) return;
   wToast('Berildi deb belgilandi ✓');
   loadReady();
 }
 
 // ===== MENING BUYURTMALARIM =====
 async function loadMyOrders() {
-  const res    = await fetch(API+'/api/tables');
+  const res = await safeFetch(API+'/api/tables');
+  if (!res) return;
   const tables = await res.json();
   const active = tables.filter(t=>t.status!=='free');
   const el     = document.getElementById('myOrders');

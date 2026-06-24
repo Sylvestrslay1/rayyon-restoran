@@ -1,12 +1,27 @@
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import os, time, urllib.request, urllib.parse, json, secrets, hashlib
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
+import threading, datetime
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = "rayyon_secret_2024"
-CORS(app, supports_credentials=True)
+# Secret key muhit o'zgaruvchisidan olinadi (deploy da majburiy)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
+
+CORS(app, supports_credentials=True,
+     origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","))
+
+# ===== RATE LIMITER =====
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["500/day", "100/hour"],
+    storage_uri="memory://",
+    headers_enabled=True,
+)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -17,6 +32,63 @@ init_db()
 
 TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT  = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# ===== XAVFSIZLIK KONSTANTALARI =====
+TOKEN_TTL_HOURS = 8          # Smena uzunligi
+PBKDF2_ITERATIONS = 200_000  # NIST tavsiyasi 2024
+ALLOWED_PERIODS = {"daily", "weekly", "monthly"}
+
+# ===== TOKEN BOSHQARUVI (in-memory, single-process) =====
+# Multi-worker (Gunicorn) uchun Redis ishlatish tavsiya etiladi
+_tokens_lock = threading.Lock()
+ACTIVE_TOKENS: dict = {}  # token -> {"created": datetime, "ip": str}
+
+def _prune_expired_tokens():
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
+    with _tokens_lock:
+        expired = [t for t, info in ACTIVE_TOKENS.items() if info["created"] < cutoff]
+        for t in expired:
+            del ACTIVE_TOKENS[t]
+
+def create_admin_token(ip: str) -> str:
+    _prune_expired_tokens()
+    token = secrets.token_urlsafe(32)
+    with _tokens_lock:
+        ACTIVE_TOKENS[token] = {
+            "created": datetime.datetime.utcnow(),
+            "last_used": datetime.datetime.utcnow(),
+            "ip": ip,
+        }
+    return token
+
+def revoke_admin_token(token: str):
+    with _tokens_lock:
+        ACTIVE_TOKENS.pop(token, None)
+
+# ===== PAROL HASHING (pbkdf2_hmac + salt) =====
+def hash_password(password: str, salt: bytes = None):
+    """Yangi pbkdf2 hash yaratish. (hash_hex, salt_hex) qaytaradi."""
+    if salt is None:
+        salt = os.urandom(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    return h.hex(), salt.hex()
+
+def verify_password(password: str, stored_hash: str, stored_salt: str) -> bool:
+    """pbkdf2 hash tekshirish (timing-safe)."""
+    try:
+        salt = bytes.fromhex(stored_salt)
+        h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+        return hmac.compare_digest(h.hex(), stored_hash)
+    except Exception:
+        return False
+
+def verify_legacy_pin(pin: str, stored_hash: str) -> bool:
+    """Eski format (sha256[:8]) — orqaga moslashuv uchun (timing-safe)."""
+    try:
+        legacy = hashlib.sha256(str(pin).encode()).hexdigest()[:8]
+        return hmac.compare_digest(legacy, stored_hash)
+    except Exception:
+        return False
 
 
 def tg_send(text):
@@ -56,20 +128,60 @@ def get_setting(key):
     return row["value"] if not USE_PG else row[0]
 
 
-def check_auth():
-    return request.headers.get("X-Admin-Token", "").startswith("admin_")
+@app.after_request
+def add_security_headers(response):
+    """Barcha javoblarga xavfsizlik headerlari qo'shish."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
+
+def check_auth() -> bool:
+    """Token ni ACTIVE_TOKENS da tekshirish (muddati + mavjudligi)."""
+    token = request.headers.get("X-Admin-Token", "")
+    if not token or len(token) < 32:
+        return False
+    _prune_expired_tokens()
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
+    with _tokens_lock:
+        info = ACTIVE_TOKENS.get(token)
+        if not info or info["created"] < cutoff:
+            return False
+        info["last_used"] = datetime.datetime.utcnow()
+    return True
 
 
 def check_staff_pin(pin, conn=None):
-    """PIN to'g'ri staff (waiter/cashier) ga tegishli ekanligini tekshiradi"""
-    if not pin: return None
-    h = hashlib.sha256(str(pin).encode()).hexdigest()
+    """PIN to'g'ri xodimga tegishli ekanligini tekshiradi (yangi + eski format)."""
+    if not pin:
+        return None
+    pin_str = str(pin)
     close = conn is None
-    if close: conn = get_conn()
-    cur = db_exec(conn, "SELECT * FROM staff WHERE pin=? AND active=1", (h,))
-    rows = rows_to_list(cur)
-    if close: conn.close()
-    return rows[0] if rows else None
+    if close:
+        conn = get_conn()
+    # Barcha aktiv xodimlarni olamiz (PIN ni hash qilib solishtiramiz)
+    cur = db_exec(conn, "SELECT * FROM staff WHERE active=1", ())
+    all_staff = rows_to_list(cur)
+    found = None
+    for s in all_staff:
+        if not s.get("pin"):
+            continue
+        if s.get("pin_salt"):
+            # Yangi pbkdf2 format
+            if verify_password(pin_str, s["pin"], s["pin_salt"]):
+                found = s
+                break
+        else:
+            # Eski sha256[:8] format (orqaga moslashuv)
+            if verify_legacy_pin(pin_str, s["pin"]):
+                found = s
+                break
+    if close:
+        conn.close()
+    return found
 
 
 def db_exec(conn, sql, params=()):
@@ -80,17 +192,63 @@ def db_exec(conn, sql, params=()):
 
 # ===== AUTH =====
 @app.route("/api/login", methods=["POST"])
+@limiter.limit("5 per minute; 20 per hour")
 def login():
+    """
+    Admin login. Parol pbkdf2 bilan tekshiriladi.
+    Eski plaintext parollar ham ishla­ydi (birinchi kirish­da avtomatik
+    yangi hash ga o'tkaziladi).
+    """
     data = request.json or {}
-    correct = get_setting("admin_password")
-    if data.get("password") == correct:
-        return jsonify({"ok": True, "token": "admin_" + str(int(time.time()))})
-    return jsonify({"ok": False}), 401
+    password = data.get("password", "")
+    if not password:
+        return jsonify({"ok": False, "error": "Parol kiritilmadi"}), 400
+
+    stored_hash = get_setting("admin_password_hash")
+    stored_salt = get_setting("admin_password_salt")
+    stored_plain = get_setting("admin_password")
+
+    authenticated = False
+    if stored_hash and stored_salt:
+        # Yangi pbkdf2 format
+        authenticated = verify_password(password, stored_hash, stored_salt)
+    elif stored_plain:
+        # Eski plaintext — muvofiqligini tekshir va yangilash
+        if hmac.compare_digest(password, stored_plain):
+            authenticated = True
+            # Zudlik bilan yangi hash ga o'tkazish
+            new_hash, new_salt = hash_password(password)
+            conn = get_conn()
+            if USE_PG:
+                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+                        ("admin_password_hash", new_hash))
+                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+                        ("admin_password_salt", new_salt))
+            else:
+                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
+                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
+            conn.commit(); conn.close()
+
+    if not authenticated:
+        time.sleep(0.3)  # Vaqt hujumiga qarshi kechiktirish
+        return jsonify({"ok": False, "error": "Parol noto'g'ri"}), 401
+
+    ip = get_remote_address()
+    token = create_admin_token(ip)
+    return jsonify({"ok": True, "token": token, "ttl_hours": TOKEN_TTL_HOURS})
 
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
+    token = request.headers.get("X-Admin-Token", "")
+    revoke_admin_token(token)
     return jsonify({"ok": True})
+
+
+@app.route("/api/auth/check", methods=["GET"])
+def auth_check():
+    """Token hali ham amal qilishini tekshirish."""
+    return jsonify({"ok": check_auth()})
 
 
 # ===== MENU =====
@@ -557,9 +715,29 @@ def request_bill(sid):
     tg_send(f"🧾 <b>Stol #{s['table_number']} — Hisob so'radi!</b>\nJami: {s.get('total_amount',0):,} so'm")
     return jsonify({"ok": True})
 
+def _calc_session_total(sid, conn) -> int:
+    """Sessiya umumiy summasini server tomonida hisoblash (frontend ga ishonmaydi)."""
+    # Bekor qilinmagan itemlar summasi
+    cur = db_exec(conn,
+        "SELECT COALESCE(SUM(total_price),0) FROM order_items WHERE session_id=? AND status!='cancelled'",
+        (sid,))
+    row = cur.fetchone()
+    subtotal = int(row[0] if row and row[0] else 0)
+    # Xizmat haqi va chegirmani sessiyadan olish
+    cur2 = db_exec(conn, "SELECT service_charge, discount FROM sessions WHERE id=?", (sid,))
+    srow = cur2.fetchone()
+    sc_pct = disc_pct = 0
+    if srow:
+        sc_pct   = float(srow[0] if USE_PG else srow["service_charge"] or 0)
+        disc_pct = float(srow[1] if USE_PG else srow["discount"] or 0)
+    sc_amount   = int(subtotal * sc_pct   / 100)
+    disc_amount = int(subtotal * disc_pct / 100)
+    return subtotal + sc_amount - disc_amount
+
+
 @app.route("/api/session/<int:sid>/close", methods=["POST"])
 def close_session(sid):
-    """Sessiyani yopish va to'lovni qayd etish"""
+    """Sessiyani yopish va to'lovni qayd etish (server-da summa tekshiriladi)."""
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d    = request.json or {}
     conn = get_conn()
@@ -567,16 +745,36 @@ def close_session(sid):
     rows = rows_to_list(cur)
     if not rows: conn.close(); return jsonify({"error": "Topilmadi"}), 404
     s = rows[0]
+
+    # V5: Server tomonida haqiqiy summani hisoblash
+    server_total = _calc_session_total(sid, conn)
+    payments     = d.get("payments", [])
+    client_total = sum(int(p.get("amount", 0)) for p in payments)
+
+    # Tolerans ±500 so'm (yaxlitlash uchun)
+    if server_total > 0 and abs(server_total - client_total) > 500:
+        conn.close()
+        return jsonify({
+            "error": "To'lov miqdori mos emas",
+            "server_total": server_total,
+            "client_total": client_total,
+        }), 400
+
     # To'lovlarni qayd etish
-    payments = d.get("payments", [])
+    cashier_name = d.get("cashier_name", "")
     for p in payments:
-        db_exec(conn, "INSERT INTO payments (session_id, table_number, amount, method, notes) VALUES (?,?,?,?,?)",
-            (sid, s["table_number"], p.get("amount",0), p.get("method","cash"), p.get("notes","")))
+        db_exec(conn,
+            "INSERT INTO payments (session_id, table_number, amount, method, notes, cashier_name, verified) VALUES (?,?,?,?,?,?,1)",
+            (sid, s["table_number"], p.get("amount",0),
+             p.get("method","cash"), p.get("notes",""), cashier_name))
+
     # Sessiyani yopish
-    db_exec(conn, "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP WHERE id=?", (sid,))
+    db_exec(conn,
+        "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP, total_amount=? WHERE id=?",
+        (server_total, sid))
     db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
     conn.commit(); conn.close()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "total": server_total})
 
 @app.route("/api/session/<int:sid>/discount", methods=["PUT"])
 def set_discount(sid):
@@ -642,10 +840,14 @@ def get_staff():
 def add_staff():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    pin_hash = hashlib.sha256(str(d.get("pin","0000")).encode()).hexdigest()[:8] if d.get("pin") else None
+    pin = str(d.get("pin", "0000"))
+    if len(pin) < 4:
+        return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
+    pin_hash, pin_salt = hash_password(pin)
     conn = get_conn()
-    db_exec(conn, "INSERT INTO staff (name,role,pin,phone,salary_type,salary_amount) VALUES (?,?,?,?,?,?)",
-        (d.get("name"), d.get("role"), pin_hash, d.get("phone"), d.get("salary_type","monthly"), d.get("salary_amount",0)))
+    db_exec(conn, "INSERT INTO staff (name,role,pin,pin_salt,phone,salary_type,salary_amount) VALUES (?,?,?,?,?,?,?)",
+        (d.get("name"), d.get("role"), pin_hash, pin_salt,
+         d.get("phone"), d.get("salary_type","monthly"), d.get("salary_amount",0)))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -655,12 +857,18 @@ def update_staff(sid):
     d = request.json or {}
     conn = get_conn()
     if d.get("pin"):
-        pin_hash = hashlib.sha256(str(d["pin"]).encode()).hexdigest()[:8]
-        db_exec(conn, "UPDATE staff SET name=?,role=?,pin=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
-            (d.get("name"),d.get("role"),pin_hash,d.get("phone"),d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
+        pin = str(d["pin"])
+        if len(pin) < 4:
+            conn.close()
+            return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
+        pin_hash, pin_salt = hash_password(pin)
+        db_exec(conn, "UPDATE staff SET name=?,role=?,pin=?,pin_salt=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
+            (d.get("name"),d.get("role"),pin_hash,pin_salt,
+             d.get("phone"),d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
     else:
         db_exec(conn, "UPDATE staff SET name=?,role=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
-            (d.get("name"),d.get("role"),d.get("phone"),d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
+            (d.get("name"),d.get("role"),d.get("phone"),
+             d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -673,15 +881,21 @@ def delete_staff(sid):
     return jsonify({"ok": True})
 
 @app.route("/api/staff/checkin", methods=["POST"])
+@limiter.limit("10 per minute")
 def staff_checkin():
-    """PIN bilan kirish"""
+    """PIN bilan kirish/chiqish (yangi pbkdf2 + eski sha256 moslashuv)."""
     d = request.json or {}
-    pin_hash = hashlib.sha256(str(d.get("pin","")).encode()).hexdigest()[:8]
+    pin = str(d.get("pin", ""))
+    if not pin:
+        return jsonify({"ok": False, "error": "PIN kiritilmadi"}), 400
+
     conn = get_conn()
-    cur  = db_exec(conn, "SELECT * FROM staff WHERE pin=? AND active=1", (pin_hash,))
-    rows = rows_to_list(cur)
-    if not rows: conn.close(); return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
-    staff = rows[0]
+    # check_staff_pin barcha aktiv xodimlarni tekshiradi (timing-safe)
+    staff = check_staff_pin(pin, conn)
+    if not staff:
+        conn.close()
+        time.sleep(0.2)  # brute-force sekinlashtirish
+        return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     import datetime
     today = datetime.date.today().isoformat()
     # Bugun allaqachon kirganmi?
@@ -807,7 +1021,10 @@ def delete_promotion(pid):
 @app.route("/api/accounting/report", methods=["GET"])
 def accounting_report():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    # V4: SQL injection — whitelist tekshiruvi
     period = request.args.get("period", "daily")
+    if period not in ALLOWED_PERIODS:
+        period = "daily"
     conn   = get_conn()
 
     if USE_PG:
@@ -1088,7 +1305,10 @@ def toggle_stoplist(item_id):
 def analytics_summary():
     """Sessiyalar asosida to'liq hisobot"""
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    # V4: SQL injection — whitelist tekshiruvi
     period = request.args.get("period", "daily")
+    if period not in ALLOWED_PERIODS:
+        period = "daily"
     conn   = get_conn()
 
     if USE_PG:

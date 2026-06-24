@@ -1038,10 +1038,52 @@
 <script src="../js/i18n.js"></script>
 <script>
 const API = '';
-let adminToken = localStorage.getItem('admin_token');
+// ===== XAVFSIZLIK: sessionStorage (localStorage o'rniga — XSS himoya) =====
+let adminToken = sessionStorage.getItem('admin_token');
 if (!adminToken) window.location.href = 'login.html';
 
 const H = () => ({ 'Content-Type': 'application/json', 'X-Admin-Token': adminToken });
+
+// ===== GLOBAL XATO BOSHQARUVI =====
+// Barcha fetch chaqiruvlari uchun markaziy wrapper
+async function apiFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, { headers: H(), ...opts });
+    if (res.status === 401 || res.status === 403) {
+      // Token eskirgan yoki yaroqsiz — avtomatik logout
+      sessionStorage.removeItem('admin_token');
+      toast("Sessiya tugadi. Qayta kiring.", false);
+      setTimeout(() => window.location.href = 'login.html', 1500);
+      return null;
+    }
+    if (res.status === 429) {
+      toast("Juda tez so'rov. Biroz kuting.", false);
+      return null;
+    }
+    if (!res.ok) {
+      let msg = `Xato ${res.status}`;
+      try { const d = await res.json(); msg = d.error || msg; } catch {}
+      toast(msg, false);
+      return null;
+    }
+    return res;
+  } catch (err) {
+    toast("Tarmoq xatosi. Server bilan ulanib bo'lmadi.", false);
+    return null;
+  }
+}
+
+// Token muddatini tekshirish (8 soatda bir marta)
+async function checkTokenValidity() {
+  try {
+    const res = await fetch(`${API}/api/auth/check`, { headers: H() });
+    if (!res.ok || !(await res.json()).ok) {
+      sessionStorage.removeItem('admin_token');
+      window.location.href = 'login.html';
+    }
+  } catch {}
+}
+setInterval(checkTokenValidity, 15 * 60 * 1000); // 15 daqiqada bir
 
 function priceFmt(p) { return Number(p).toLocaleString('uz-UZ') + " so'm"; }
 function timeFmt(s)  { if (!s) return '—'; return s.slice(0,16).replace('T',' '); }
@@ -2149,7 +2191,12 @@ async function loadAnalytics() {
 }
 
 // LOGOUT
-document.getElementById('logoutBtn').addEventListener('click', () => { localStorage.removeItem('admin_token'); window.location.href = 'login.html'; });
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  // Serverdagi tokenni ham bekor qilish
+  try { await fetch(`${API}/api/logout`, { method:'POST', headers: H() }); } catch {}
+  sessionStorage.removeItem('admin_token');
+  window.location.href = 'login.html';
+});
 
 // INIT
 loadDashboard();

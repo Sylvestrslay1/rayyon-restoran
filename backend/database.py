@@ -241,6 +241,7 @@ def init_db():
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
                 pin TEXT,
+                pin_salt TEXT,
                 phone TEXT,
                 salary_type TEXT DEFAULT 'monthly',
                 salary_amount INTEGER DEFAULT 0,
@@ -337,6 +338,7 @@ def init_db():
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
                 pin TEXT,
+                pin_salt TEXT,
                 phone TEXT,
                 salary_type TEXT DEFAULT 'monthly',
                 salary_amount INTEGER DEFAULT 0,
@@ -575,6 +577,25 @@ def init_db():
                     "INSERT INTO menu (name, category, description, price, emoji) VALUES (?,?,?,?,?)",
                     item
                 )
+
+    # ===== MIGRATION: mavjud jadvalga yangi ustunlar qo'shish =====
+    migrations = [
+        "ALTER TABLE staff ADD COLUMN pin_salt TEXT",
+        "ALTER TABLE order_items ADD COLUMN void_by TEXT",
+        "ALTER TABLE order_items ADD COLUMN void_reason TEXT",
+        "ALTER TABLE payments ADD COLUMN cashier_name TEXT",
+        "ALTER TABLE payments ADD COLUMN verified INTEGER DEFAULT 0",
+    ]
+    for migration_sql in migrations:
+        try:
+            if USE_PG:
+                col = migration_sql.split("ADD COLUMN")[1].strip().split()[0]
+                tbl = migration_sql.split("ALTER TABLE")[1].strip().split()[0]
+                cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} TEXT")
+            else:
+                cur.execute(migration_sql)
+        except Exception:
+            pass  # Ustun allaqachon mavjud
 
     conn.commit()
     cur.close()

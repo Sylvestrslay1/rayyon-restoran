@@ -2,6 +2,29 @@
 const API_BASE = "";
 let menuItems = [];
 
+// ===== GLOBAL XATO BOSHQARUVI (mijoz sahifasi) =====
+function showToastErr(msg) {
+  // showToast mavjud bo'lsa ishlatadi, bo'lmasa console
+  if (typeof showToast === 'function') showToast('❌ ' + msg);
+  else console.error(msg);
+}
+
+async function apiFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      let msg = `Server xatosi (${res.status})`;
+      try { const d = await res.json(); msg = d.error || msg; } catch {}
+      showToastErr(msg);
+      return null;
+    }
+    return res;
+  } catch {
+    showToastErr("Tarmoq xatosi. Internetni tekshiring.");
+    return null;
+  }
+}
+
 // ===== FORMAT PRICE =====
 function formatPrice(p) {
   return Number(p).toLocaleString('uz-UZ') + " so'm";
@@ -387,11 +410,12 @@ async function submitCart() {
     category: c.item.category
   }));
   const note = document.getElementById('cartNote')?.value || '';
-  const res = await fetch(`${API_BASE}/api/session/${tableSession.session_id}/order`, {
+  const res = await apiFetch(`${API_BASE}/api/session/${tableSession.session_id}/order`, {
     method: 'POST',
     headers: { 'Content-Type':'application/json', 'X-Session-Token': tableSession.token },
     body: JSON.stringify({ items, note })
   });
+  if (!res) return;
   const data = await res.json();
   if (data.ok) {
     cart = [];
@@ -399,7 +423,7 @@ async function submitCart() {
     document.getElementById('cartModal').style.display = 'none';
     showSuccessModal();
   } else {
-    alert('Xatolik: ' + (data.error || 'Qayta urinib ko\'ring'));
+    showToastErr(data.error || "Qayta urinib ko'ring");
   }
 }
 
@@ -422,9 +446,10 @@ function showSuccessModal() {
 
 async function requestBill() {
   if (!tableSession?.session_id) return;
-  await fetch(`${API_BASE}/api/session/${tableSession.session_id}/bill`, {
-    method: 'POST', headers: { 'X-Session-Token': tableSession.token }
+  const res = await apiFetch(`${API_BASE}/api/session/${tableSession.session_id}/bill`, {
+    method: 'POST', headers: { 'Content-Type':'application/json', 'X-Session-Token': tableSession.token }
   });
+  if (!res) return;
   document.getElementById('cartModal').style.display = 'none';
   const div = document.createElement('div');
   div.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;

@@ -205,31 +205,74 @@
       requestAnimationFrame(loop);
     })();
 
-    // Auth
+    // ===== XAVFSIZLIK: Brute-force himoya =====
     const API = '';
-    if (localStorage.getItem('admin_token')) window.location.href = 'index.html';
+    const MAX_ATTEMPTS = 5;
+    const LOCKOUT_MS   = 30_000; // 30 soniya
+
+    // sessionStorage ishlatish (tab yopilganda o'chadi — XSS xavfi kamayadi)
+    if (sessionStorage.getItem('admin_token')) window.location.href = 'index.html';
+
+    let attempts = parseInt(sessionStorage.getItem('login_attempts') || '0');
+    let lockedUntil = parseInt(sessionStorage.getItem('login_locked_until') || '0');
+
+    function checkLock() {
+      if (Date.now() < lockedUntil) {
+        const secs = Math.ceil((lockedUntil - Date.now()) / 1000);
+        showErr(`Juda ko'p urinish. ${secs} soniyadan keyin qayta urinib ko'ring.`);
+        document.getElementById('loginBtn').disabled = true;
+        setTimeout(checkLock, 1000);
+        return true;
+      }
+      document.getElementById('loginBtn').disabled = false;
+      return false;
+    }
+    checkLock();
+
+    function showErr(msg) {
+      const err = document.getElementById('error');
+      err.textContent = msg; err.style.display = 'block';
+    }
 
     document.getElementById('loginForm').addEventListener('submit', async e => {
       e.preventDefault();
+      if (checkLock()) return;
+
       const btn = document.getElementById('loginBtn');
       const err = document.getElementById('error');
       btn.textContent = 'Tekshirilmoqda...'; btn.disabled = true; err.style.display = 'none';
+
       try {
         const res  = await fetch(`${API}/api/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: document.getElementById('password').value })
         });
         const data = await res.json();
+
         if (data.ok) {
-          localStorage.setItem('admin_token', data.token);
+          // Muvaffaqiyatli — sessionStorage ga yozish
+          sessionStorage.setItem('admin_token', data.token);
+          sessionStorage.removeItem('login_attempts');
+          sessionStorage.removeItem('login_locked_until');
           window.location.href = 'index.html';
         } else {
-          err.style.display = 'block';
-          btn.textContent = 'Kirish'; btn.disabled = false;
+          attempts++;
+          sessionStorage.setItem('login_attempts', attempts);
+          if (attempts >= MAX_ATTEMPTS) {
+            lockedUntil = Date.now() + LOCKOUT_MS;
+            sessionStorage.setItem('login_locked_until', lockedUntil);
+            attempts = 0;
+            sessionStorage.setItem('login_attempts', '0');
+            checkLock();
+          } else {
+            const left = MAX_ATTEMPTS - attempts;
+            showErr(`Noto'g'ri parol. Yana ${left} ta urinish qoldi.`);
+            btn.textContent = 'Kirish'; btn.disabled = false;
+          }
         }
       } catch {
-        err.textContent = 'Server bilan ulanib bo\'lmadi. Backend ishga tushganmi?';
-        err.style.display = 'block';
+        showErr("Server bilan ulanib bo'lmadi. Backend ishga tushganmi?");
         btn.textContent = 'Kirish'; btn.disabled = false;
       }
     });
