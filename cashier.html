@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kassir — Rayyon Restoran</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  .hidden{display:none!important}
+
+  /* PIN SCREEN */
+  #pin-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:24px}
+  .pin-logo{font-size:48px;margin-bottom:8px}
+  .pin-title{font-size:22px;font-weight:700;color:#f8fafc}
+  .pin-subtitle{font-size:14px;color:#94a3b8}
+  .pin-display{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:16px 32px;font-size:32px;letter-spacing:12px;min-width:200px;text-align:center;color:#38bdf8;min-height:64px}
+  .pin-grid{display:grid;grid-template-columns:repeat(3,80px);gap:10px}
+  .pin-btn{background:#1e293b;border:1.5px solid #334155;border-radius:12px;color:#e2e8f0;font-size:22px;font-weight:600;height:64px;cursor:pointer;transition:.15s}
+  .pin-btn:hover{background:#334155;border-color:#38bdf8}
+  .pin-btn.zero{grid-column:2}
+  .pin-btn.del{background:#7f1d1d;border-color:#991b1b;color:#fca5a5}
+  .pin-btn.del:hover{background:#991b1b}
+  .pin-enter-btn{background:#0369a1;border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;padding:14px 48px;cursor:pointer;transition:.15s;width:250px}
+  .pin-enter-btn:hover{background:#0284c7}
+  .pin-error{color:#f87171;font-size:14px;min-height:20px;text-align:center}
+
+  /* MAIN LAYOUT */
+  #main-screen{display:none;flex-direction:column;min-height:100vh}
+  header{background:#1e293b;border-bottom:1px solid #334155;padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+  .header-left{display:flex;align-items:center;gap:12px}
+  .shift-badge{background:#0c4a6e;border:1px solid #0369a1;border-radius:8px;padding:4px 12px;font-size:13px;font-weight:600;color:#38bdf8}
+  .cashier-name{font-weight:600;font-size:15px}
+  .header-btns{display:flex;gap:8px}
+  .btn{border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn-primary{background:#0369a1;color:#fff}
+  .btn-primary:hover{background:#0284c7}
+  .btn-danger{background:#7f1d1d;color:#fca5a5}
+  .btn-danger:hover{background:#991b1b}
+  .btn-outline{background:transparent;border:1.5px solid #475569;color:#cbd5e1}
+  .btn-outline:hover{border-color:#38bdf8;color:#38bdf8}
+  .btn-success{background:#14532d;color:#86efac}
+  .btn-success:hover{background:#166534}
+  .btn-warning{background:#78350f;color:#fcd34d}
+  .btn-sm{padding:6px 12px;font-size:12px}
+
+  /* TABLES GRID */
+  .content{flex:1;padding:20px}
+  .section-title{font-size:16px;font-weight:700;color:#94a3b8;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+  .table-card{background:#1e293b;border:1.5px solid #334155;border-radius:14px;padding:16px;cursor:pointer;transition:.2s;position:relative}
+  .table-card:hover{border-color:#38bdf8;transform:translateY(-2px)}
+  .table-card.occupied{border-color:#0369a1;background:#0c1929}
+  .table-card.free{opacity:.7}
+  .table-num{font-size:24px;font-weight:800;color:#f8fafc}
+  .table-status{font-size:12px;margin-top:4px;color:#64748b}
+  .table-card.occupied .table-status{color:#38bdf8}
+  .table-amount{font-size:15px;font-weight:700;color:#34d399;margin-top:8px}
+  .table-time{font-size:11px;color:#64748b;margin-top:2px}
+  .table-waiter{font-size:11px;color:#94a3b8}
+  .refresh-btn{background:#1e293b;border:1.5px solid #334155;border-radius:8px;padding:6px 12px;color:#94a3b8;font-size:12px;cursor:pointer}
+  .refresh-btn:hover{border-color:#38bdf8;color:#38bdf8}
+
+  /* SESSION MODAL */
+  .modal-overlay{position:fixed;inset:0;background:#000a;z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .15s}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .modal{background:#1e293b;border-top:2px solid #334155;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:24px}
+  .modal-title{font-size:18px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+  .close-btn{background:transparent;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1}
+  .close-btn:hover{color:#e2e8f0}
+  .items-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+  .order-item{background:#0f172a;border-radius:10px;padding:12px;display:flex;align-items:center;gap:12px}
+  .order-item.cancelled{opacity:.4;text-decoration:line-through}
+  .item-emoji{font-size:22px;width:36px;text-align:center}
+  .item-info{flex:1}
+  .item-name{font-weight:600;font-size:14px}
+  .item-qty{color:#94a3b8;font-size:13px}
+  .item-price{font-weight:700;color:#34d399;font-size:14px}
+  .void-btn{background:#7f1d1d;border:none;border-radius:6px;color:#fca5a5;font-size:11px;padding:4px 10px;cursor:pointer}
+  .void-btn:hover{background:#991b1b}
+  .divider{border:none;border-top:1px solid #334155;margin:12px 0}
+  .total-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+  .total-row .label{color:#94a3b8;font-size:14px}
+  .total-row .val{font-weight:600}
+  .grand-total{font-size:20px;font-weight:800;color:#38bdf8}
+  .pay-section{margin-top:16px}
+  .pay-methods{display:flex;gap:8px;margin-bottom:12px}
+  .pay-method-btn{flex:1;padding:10px;border-radius:10px;border:1.5px solid #334155;background:#0f172a;color:#e2e8f0;cursor:pointer;font-size:13px;font-weight:600;text-align:center;transition:.15s}
+  .pay-method-btn.active{border-color:#38bdf8;background:#0c2a3e;color:#38bdf8}
+  .pay-inputs{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .pay-row{display:flex;align-items:center;gap:8px}
+  .pay-label{width:90px;font-size:13px;color:#94a3b8}
+  .pay-input{flex:1;background:#0f172a;border:1.5px solid #334155;border-radius:8px;padding:10px;color:#e2e8f0;font-size:15px;outline:none}
+  .pay-input:focus{border-color:#38bdf8}
+  .discount-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .disc-input{width:80px;background:#0f172a;border:1.5px solid #334155;border-radius:8px;padding:8px;color:#e2e8f0;font-size:14px;outline:none;text-align:center}
+  .disc-label{font-size:13px;color:#94a3b8}
+  .pay-btn{width:100%;padding:14px;border:none;border-radius:12px;background:#0369a1;color:#fff;font-size:16px;font-weight:700;cursor:pointer;transition:.15s}
+  .pay-btn:hover{background:#0284c7}
+  .pay-btn:disabled{opacity:.5;cursor:not-allowed}
+
+  /* VOID REASON MODAL */
+  .mini-modal{position:fixed;inset:0;background:#000a;z-index:200;display:flex;align-items:center;justify-content:center}
+  .mini-modal-box{background:#1e293b;border:1.5px solid #334155;border-radius:16px;padding:24px;width:340px}
+  .mini-modal-title{font-size:16px;font-weight:700;margin-bottom:12px}
+  .reason-input{width:100%;background:#0f172a;border:1.5px solid #334155;border-radius:8px;padding:10px;color:#e2e8f0;font-size:14px;outline:none;resize:vertical;min-height:80px}
+  .reason-input:focus{border-color:#38bdf8}
+
+  /* RECEIPT MODAL */
+  .receipt-box{background:#fff;color:#111;border-radius:8px;padding:20px;font-family:monospace;font-size:13px;line-height:1.6}
+  .receipt-center{text-align:center}
+  .receipt-hr{border:none;border-top:1px dashed #999;margin:8px 0}
+  .receipt-row{display:flex;justify-content:space-between}
+
+  /* SHIFT REPORT MODAL */
+  .report-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .stat-card{background:#0f172a;border-radius:10px;padding:14px}
+  .stat-label{font-size:12px;color:#64748b;margin-bottom:4px}
+  .stat-val{font-size:20px;font-weight:800;color:#38bdf8}
+  .method-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1e293b}
+
+  /* TOAST */
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0369a1;color:#fff;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:600;z-index:999;opacity:0;transition:.3s;pointer-events:none}
+  #toast.show{opacity:1}
+  #toast.error{background:#991b1b}
+  #toast.success{background:#166534}
+</style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div class="pin-logo">💰</div>
+  <div class="pin-title">Kassir tizimi</div>
+  <div class="pin-subtitle">Rayyon Restoran — PIN kiriting</div>
+  <div class="pin-display" id="pin-display">——</div>
+  <div class="pin-grid">
+    <button class="pin-btn" onclick="pinPress('1')">1</button>
+    <button class="pin-btn" onclick="pinPress('2')">2</button>
+    <button class="pin-btn" onclick="pinPress('3')">3</button>
+    <button class="pin-btn" onclick="pinPress('4')">4</button>
+    <button class="pin-btn" onclick="pinPress('5')">5</button>
+    <button class="pin-btn" onclick="pinPress('6')">6</button>
+    <button class="pin-btn" onclick="pinPress('7')">7</button>
+    <button class="pin-btn" onclick="pinPress('8')">8</button>
+    <button class="pin-btn" onclick="pinPress('9')">9</button>
+    <button class="pin-btn zero" onclick="pinPress('0')">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <button class="pin-enter-btn" onclick="pinEnter()">Kirish →</button>
+  <div class="pin-error" id="pin-error"></div>
+</div>
+
+<!-- MAIN SCREEN -->
+<div id="main-screen">
+  <header>
+    <div class="header-left">
+      <span style="font-size:20px">💰</span>
+      <div>
+        <div class="cashier-name" id="cashier-name-lbl"></div>
+        <div class="shift-badge" id="shift-badge">Smena #—</div>
+      </div>
+    </div>
+    <div class="header-btns">
+      <button class="btn btn-outline btn-sm" onclick="loadTables()">🔄 Yangilash</button>
+      <button class="btn btn-warning btn-sm" onclick="openShiftReport()">📊 Hisobot</button>
+      <button class="btn btn-danger btn-sm" onclick="closeShiftConfirm()">🔒 Smena yopish</button>
+      <button class="btn btn-outline btn-sm" onclick="logout()">Chiqish</button>
+    </div>
+  </header>
+  <div class="content">
+    <div class="section-title">🪑 Stollar holati <span style="margin-left:auto" id="last-update"></span></div>
+    <div class="tables-grid" id="tables-grid"></div>
+  </div>
+</div>
+
+<!-- SESSION MODAL -->
+<div id="session-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-table-title">Stol</span>
+      <button class="close-btn" onclick="closeModal('session-modal')">✕</button>
+    </div>
+    <div class="items-list" id="modal-items"></div>
+    <hr class="divider">
+    <div class="total-row"><span class="label">Oraliq summa</span><span class="val" id="m-subtotal">0</span></div>
+    <div class="total-row" id="m-disc-row" style="display:none"><span class="label">Chegirma</span><span class="val" id="m-disc-val" style="color:#f87171">−0</span></div>
+    <div class="total-row" id="m-sc-row" style="display:none"><span class="label">Xizmat haqi</span><span class="val" id="m-sc-val">+0</span></div>
+    <div class="total-row"><span class="label" style="font-weight:700">JAMI</span><span class="grand-total" id="m-grand">0</span></div>
+    <div class="pay-section">
+      <div class="discount-row">
+        <span class="disc-label">Chegirma %:</span>
+        <input class="disc-input" type="number" id="m-disc-input" value="0" min="0" max="100" onchange="updateTotals()">
+        <span class="disc-label" style="margin-left:12px">X.Haqi %:</span>
+        <input class="disc-input" type="number" id="m-sc-input" value="0" min="0" max="50" onchange="updateTotals()">
+        <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="saveDiscounts()">Saqlash</button>
+      </div>
+      <div class="pay-methods">
+        <div class="pay-method-btn active" data-method="cash" onclick="selectMethod(this)">💵 Naqd</div>
+        <div class="pay-method-btn" data-method="card" onclick="selectMethod(this)">💳 Karta</div>
+        <div class="pay-method-btn" data-method="split" onclick="selectMethod(this)">🔀 Aralash</div>
+      </div>
+      <div class="pay-inputs" id="pay-inputs">
+        <div class="pay-row"><span class="pay-label">Naqd:</span><input class="pay-input" id="pay-cash" type="number" placeholder="0" oninput="calcChange()"></div>
+      </div>
+      <div class="total-row hidden" id="change-row"><span class="label">Qaytim</span><span class="val" id="change-val" style="color:#fbbf24">0 so'm</span></div>
+      <button class="pay-btn" onclick="submitPayment()">✅ To'lovni tasdiqlash</button>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-outline btn-sm" onclick="openReceipt()">🧾 Chek ko'rish</button>
+    </div>
+  </div>
+</div>
+
+<!-- VOID REASON MODAL -->
+<div id="void-modal" class="mini-modal hidden">
+  <div class="mini-modal-box">
+    <div class="mini-modal-title">🚫 Item bekor qilish</div>
+    <div style="font-size:13px;color:#94a3b8;margin-bottom:10px" id="void-item-name"></div>
+    <textarea class="reason-input" id="void-reason" placeholder="Sabab kiriting..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('void-modal')">Bekor</button>
+      <button class="btn btn-danger" style="flex:1" onclick="confirmVoid()">Void qilish</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECEIPT MODAL -->
+<div id="receipt-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">
+      🧾 Chek
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="printReceipt()">🖨 Chop etish</button>
+        <button class="close-btn" onclick="closeModal('receipt-modal')">✕</button>
+      </div>
+    </div>
+    <div id="receipt-content"></div>
+  </div>
+</div>
+
+<!-- SHIFT REPORT MODAL -->
+<div id="report-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">
+      📊 Smena hisoboti
+      <button class="close-btn" onclick="closeModal('report-modal')">✕</button>
+    </div>
+    <div id="report-content"></div>
+  </div>
+</div>
+
+<!-- CLOSE SHIFT CONFIRM MODAL -->
+<div id="close-shift-modal" class="mini-modal hidden">
+  <div class="mini-modal-box">
+    <div class="mini-modal-title">🔒 Smena yopish</div>
+    <div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Smena yopilgandan so'ng barcha to'lovlar qayd etiladi.</div>
+    <textarea class="reason-input" id="close-notes" placeholder="Izoh (ixtiyoriy)..." style="min-height:60px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('close-shift-modal')">Bekor</button>
+      <button class="btn btn-danger" style="flex:1" onclick="doCloseShift()">Ha, yopish</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+let PIN = '';
+let CASHIER = null;
+let SHIFT_ID = null;
+let CASHIER_ID = null;
+
+// ===== PIN =====
+function pinPress(d) {
+  if (PIN.length >= 6) return;
+  PIN += d;
+  renderPinDisplay();
+}
+function pinDel() {
+  PIN = PIN.slice(0, -1);
+  renderPinDisplay();
+}
+function renderPinDisplay() {
+  const el = document.getElementById('pin-display');
+  el.textContent = PIN ? '●'.repeat(PIN.length) : '——';
+}
+document.addEventListener('keydown', e => {
+  if (document.getElementById('pin-screen').style.display === 'none') return;
+  if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+  else if (e.key === 'Backspace') pinDel();
+  else if (e.key === 'Enter') pinEnter();
+});
+async function pinEnter() {
+  if (!PIN) return;
+  try {
+    const r = await fetch(`${API}/api/shift/current`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({pin: PIN})
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      document.getElementById('pin-error').textContent = data.error || 'PIN noto\'g\'ri';
+      PIN = ''; renderPinDisplay();
+      return;
+    }
+    CASHIER = data.cashier;
+    CASHIER_ID = data.cashier_id;
+    if (data.shift) {
+      SHIFT_ID = data.shift.id;
+      showMain();
+    } else {
+      // Ochiq smena yo'q — yangi ochish
+      const r2 = await fetch(`${API}/api/shift/open`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({pin: PIN})
+      });
+      const d2 = await r2.json();
+      if (d2.ok) {
+        SHIFT_ID = d2.shift_id;
+        showMain();
+      } else {
+        document.getElementById('pin-error').textContent = d2.error || 'Xato';
+        PIN = ''; renderPinDisplay();
+      }
+    }
+  } catch(e) {
+    document.getElementById('pin-error').textContent = 'Server bilan bog\'lanib bo\'lmadi';
+    PIN = ''; renderPinDisplay();
+  }
+}
+function showMain() {
+  document.getElementById('pin-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'flex';
+  document.getElementById('cashier-name-lbl').textContent = CASHIER;
+  document.getElementById('shift-badge').textContent = `Smena #${SHIFT_ID}`;
+  loadTables();
+  setInterval(loadTables, 30000);
+}
+function logout() {
+  if (!confirm('Tizimdan chiqmoqchimisiz?')) return;
+  PIN = ''; CASHIER = null; SHIFT_ID = null; CASHIER_ID = null;
+  renderPinDisplay();
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('main-screen').style.display = 'none';
+  document.getElementById('pin-screen').style.display = 'flex';
+}
+
+// ===== TABLES =====
+let tablesData = [];
+async function loadTables() {
+  try {
+    const r = await fetch(`${API}/api/tables`);
+    const data = await r.json();
+    tablesData = data.tables || data || [];
+    renderTables();
+    document.getElementById('last-update').textContent = '🕐 ' + new Date().toLocaleTimeString('uz');
+  } catch(e) { showToast('Stollar yuklanmadi', 'error'); }
+}
+function renderTables() {
+  const grid = document.getElementById('tables-grid');
+  if (!tablesData.length) {
+    grid.innerHTML = '<div style="color:#64748b;font-size:14px">Stollar topilmadi</div>';
+    return;
+  }
+  grid.innerHTML = tablesData.map(t => {
+    const occupied = !!t.current_session_id;
+    const amt = t.total_amount ? `<div class="table-amount">${fmt(t.total_amount)} so'm</div>` : '';
+    const time = t.opened_at ? `<div class="table-time">${timeAgo(t.opened_at)}</div>` : '';
+    const waiter = t.waiter_name ? `<div class="table-waiter">👤 ${esc(t.waiter_name)}</div>` : '';
+    return `<div class="table-card ${occupied ? 'occupied' : 'free'}" onclick="openTable(${t.number}, ${t.current_session_id || 'null'})">
+      <div class="table-num">Stol ${t.number}</div>
+      <div class="table-status">${occupied ? '🔴 Band' : '⚫ Bo\'sh'}</div>
+      ${amt}${time}${waiter}
+    </div>`;
+  }).join('');
+}
+
+// ===== SESSION MODAL =====
+let currentSession = null;
+let currentItems = [];
+let voidItemId = null;
+let voidItemName = '';
+
+async function openTable(tableNum, sessionId) {
+  if (!sessionId) { showToast('Bu stol bo\'sh'); return; }
+  try {
+    const r = await fetch(`${API}/api/receipt/${sessionId}?pin=${encodeURIComponent(PIN)}`);
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error || 'Xato', 'error'); return; }
+    currentSession = data.session;
+    currentItems = data.items || [];
+    renderSessionModal(data);
+    document.getElementById('session-modal').classList.remove('hidden');
+  } catch(e) { showToast('Sessiya yuklanmadi', 'error'); }
+}
+
+function renderSessionModal(data) {
+  document.getElementById('modal-table-title').textContent = `Stol ${data.session.table_number}`;
+  const disc = parseFloat(data.session.discount) || 0;
+  const sc   = parseFloat(data.session.service_charge) || 0;
+  document.getElementById('m-disc-input').value = disc;
+  document.getElementById('m-sc-input').value   = sc;
+
+  document.getElementById('modal-items').innerHTML = (data.items || []).map(it => {
+    const cancelled = it.status === 'cancelled';
+    const voidBtn = !cancelled
+      ? `<button class="void-btn" onclick="openVoid(${it.id},'${esc(it.item_name)}');event.stopPropagation()">Void</button>`
+      : '';
+    return `<div class="order-item ${cancelled ? 'cancelled' : ''}">
+      <div class="item-emoji">${esc(it.item_emoji || '🍽')}</div>
+      <div class="item-info">
+        <div class="item-name">${esc(it.item_name)}</div>
+        <div class="item-qty">x${it.quantity}</div>
+      </div>
+      <div class="item-price">${fmt(it.total_price)} so'm</div>
+      ${voidBtn}
+    </div>`;
+  }).join('');
+
+  updateTotals();
+  selectMethod(document.querySelector('.pay-method-btn[data-method="cash"]'));
+  document.getElementById('pay-cash').value = '';
+  document.getElementById('change-row').classList.add('hidden');
+}
+
+function updateTotals() {
+  if (!currentSession) return;
+  const subtotal = currentItems.filter(i=>i.status!=='cancelled').reduce((s,i)=>s+i.total_price,0);
+  const disc = parseFloat(document.getElementById('m-disc-input').value)||0;
+  const sc   = parseFloat(document.getElementById('m-sc-input').value)||0;
+  const discAmt = Math.round(subtotal * disc / 100);
+  const scAmt   = Math.round(subtotal * sc   / 100);
+  const grand   = subtotal + scAmt - discAmt;
+  document.getElementById('m-subtotal').textContent = fmt(subtotal)+' so\'m';
+  document.getElementById('m-grand').textContent    = fmt(grand)+' so\'m';
+  const dr = document.getElementById('m-disc-row');
+  const sr = document.getElementById('m-sc-row');
+  if (discAmt) { dr.style.display='flex'; document.getElementById('m-disc-val').textContent=`−${fmt(discAmt)} so'm`; } else dr.style.display='none';
+  if (scAmt)   { sr.style.display='flex'; document.getElementById('m-sc-val').textContent=`+${fmt(scAmt)} so'm`; }   else sr.style.display='none';
+}
+
+async function saveDiscounts() {
+  if (!currentSession) return;
+  const disc = parseFloat(document.getElementById('m-disc-input').value)||0;
+  const sc   = parseFloat(document.getElementById('m-sc-input').value)||0;
+  try {
+    await fetch(`${API}/api/session/${currentSession.id}/discount`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({discount:disc, service_charge:sc})
+    });
+    showToast('Saqlandi', 'success');
+  } catch(e) { showToast('Xato', 'error'); }
+}
+
+let payMethod = 'cash';
+function selectMethod(el) {
+  document.querySelectorAll('.pay-method-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  payMethod = el.dataset.method;
+  const inp = document.getElementById('pay-inputs');
+  if (payMethod === 'cash') {
+    inp.innerHTML = `<div class="pay-row"><span class="pay-label">Naqd:</span><input class="pay-input" id="pay-cash" type="number" placeholder="0" oninput="calcChange()"></div>`;
+  } else if (payMethod === 'card') {
+    inp.innerHTML = `<div class="pay-row"><span class="pay-label">Karta:</span><input class="pay-input" id="pay-card" type="number" placeholder="0"></div>`;
+  } else {
+    inp.innerHTML = `<div class="pay-row"><span class="pay-label">Naqd:</span><input class="pay-input" id="pay-cash" type="number" placeholder="0" oninput="calcChange()"></div>
+      <div class="pay-row"><span class="pay-label">Karta:</span><input class="pay-input" id="pay-card" type="number" placeholder="0"></div>`;
+  }
+  document.getElementById('change-row').classList.add('hidden');
+}
+
+function calcChange() {
+  if (!currentSession) return;
+  const grand = getGrand();
+  const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
+  const changeRow = document.getElementById('change-row');
+  if (cash > 0) {
+    const change = cash - grand;
+    changeRow.classList.remove('hidden');
+    document.getElementById('change-val').textContent = fmt(Math.max(0,change))+' so\'m';
+  } else changeRow.classList.add('hidden');
+}
+
+function getGrand() {
+  const subtotal = currentItems.filter(i=>i.status!=='cancelled').reduce((s,i)=>s+i.total_price,0);
+  const disc = parseFloat(document.getElementById('m-disc-input').value)||0;
+  const sc   = parseFloat(document.getElementById('m-sc-input').value)||0;
+  return Math.round(subtotal * (1 + sc/100 - disc/100));
+}
+
+async function submitPayment() {
+  if (!currentSession) return;
+  const grand = getGrand();
+  let amount = grand;
+  let body = {method: payMethod, amount, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID};
+  if (payMethod === 'split') {
+    const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
+    const card = parseFloat(document.getElementById('pay-card')?.value)||0;
+    if (cash+card < grand) { showToast('Jami summa yetarli emas', 'error'); return; }
+    body.cash_amount = cash; body.card_amount = card; body.amount = cash + card;
+  } else if (payMethod === 'card') {
+    body.amount = grand;
+  } else {
+    const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
+    if (cash < grand) { showToast('Naqd miqdor yetarli emas', 'error'); return; }
+    body.amount = grand;
+  }
+  try {
+    // payments massivi sifatida yuborish (close_session formatiga mos)
+    const payments = payMethod === 'split'
+      ? [{method:'cash', amount: body.cash_amount}, {method:'card', amount: body.card_amount}]
+      : [{method: payMethod, amount: body.amount}];
+    const closeBody = {payments, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID, pin: PIN};
+    const r = await fetch(`${API}/api/session/${currentSession.id}/close`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(closeBody)
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error||'To\'lov xatosi', 'error'); return; }
+    showToast('To\'lov qabul qilindi! ✅', 'success');
+    closeModal('session-modal');
+    loadTables();
+  } catch(e) { showToast('Server xatosi', 'error'); }
+}
+
+// ===== VOID =====
+function openVoid(itemId, itemName) {
+  voidItemId = itemId;
+  voidItemName = itemName;
+  document.getElementById('void-item-name').textContent = itemName;
+  document.getElementById('void-reason').value = '';
+  document.getElementById('void-modal').classList.remove('hidden');
+}
+async function confirmVoid() {
+  if (!currentSession || !voidItemId) return;
+  const reason = document.getElementById('void-reason').value.trim() || 'Kassir tomonidan bekor qilindi';
+  try {
+    const r = await fetch(`${API}/api/session/${currentSession.id}/item/${voidItemId}/void`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pin: PIN, reason})
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error||'Xato', 'error'); return; }
+    closeModal('void-modal');
+    showToast('Item bekor qilindi', 'success');
+    // Itemni lokal yangilash
+    const idx = currentItems.findIndex(i=>i.id===voidItemId);
+    if (idx>=0) currentItems[idx].status = 'cancelled';
+    renderSessionModal({session: currentSession, items: currentItems});
+  } catch(e) { showToast('Xato', 'error'); }
+}
+
+// ===== RECEIPT =====
+async function openReceipt() {
+  if (!currentSession) return;
+  try {
+    const r = await fetch(`${API}/api/receipt/${currentSession.id}?pin=${encodeURIComponent(PIN)}`);
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error||'Xato', 'error'); return; }
+    renderReceipt(data);
+    document.getElementById('receipt-modal').classList.remove('hidden');
+  } catch(e) { showToast('Chek yuklanmadi', 'error'); }
+}
+function renderReceipt(data) {
+  const rest = data.restaurant || {};
+  const s = data.session;
+  const rows = (data.items||[]).map(i=>
+    `<div class="receipt-row"><span>${esc(i.item_emoji||'')} ${esc(i.item_name)} x${i.quantity}</span><span>${fmt(i.total_price)}</span></div>`
+  ).join('');
+  const pays = (data.payments||[]).map(p=>
+    `<div class="receipt-row" style="font-size:12px"><span>${p.method}</span><span>${fmt(p.amount)}</span></div>`
+  ).join('');
+  document.getElementById('receipt-content').innerHTML = `
+  <div class="receipt-box">
+    <div class="receipt-center"><b>${esc(rest.restaurant_name||'Rayyon Restoran')}</b></div>
+    <div class="receipt-center" style="font-size:12px">${esc(rest.phone||'')} ${esc(rest.address||'')}</div>
+    <hr class="receipt-hr">
+    <div class="receipt-row"><span>Stol ${s.table_number}</span><span>${new Date(s.opened_at).toLocaleString('uz')}</span></div>
+    <div class="receipt-row" style="font-size:12px"><span>Kassir:</span><span>${esc(CASHIER)}</span></div>
+    <hr class="receipt-hr">
+    ${rows}
+    <hr class="receipt-hr">
+    <div class="receipt-row"><span>Oraliq:</span><span>${fmt(data.subtotal)}</span></div>
+    ${data.disc_amount?`<div class="receipt-row"><span>Chegirma:</span><span>−${fmt(data.disc_amount)}</span></div>`:''}
+    ${data.sc_amount?`<div class="receipt-row"><span>Xizmat haqi:</span><span>+${fmt(data.sc_amount)}</span></div>`:''}
+    <div class="receipt-row"><b>JAMI:</b><b>${fmt(data.grand_total)} so'm</b></div>
+    <hr class="receipt-hr">
+    ${pays}
+    <hr class="receipt-hr">
+    <div class="receipt-center" style="font-size:12px">Rahmat! Yana keling 🙏</div>
+  </div>`;
+}
+function printReceipt() {
+  const w = window.open('','_blank');
+  w.document.write('<html><head><title>Chek</title><style>body{font-family:monospace;font-size:13px}.receipt-row{display:flex;justify-content:space-between}</style></head><body>');
+  w.document.write(document.getElementById('receipt-content').innerHTML);
+  w.document.write('</body></html>');
+  w.document.close();
+  w.print();
+}
+
+// ===== SHIFT REPORT =====
+async function openShiftReport() {
+  if (!SHIFT_ID) return;
+  try {
+    const r = await fetch(`${API}/api/shift/${SHIFT_ID}/report`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pin: PIN})
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error||'Xato','error'); return; }
+    renderReport(data);
+    document.getElementById('report-modal').classList.remove('hidden');
+  } catch(e) { showToast('Hisobot yuklanmadi','error'); }
+}
+function renderReport(data) {
+  const byM = (data.by_method||[]);
+  const methodRows = byM.map(m=>`<div class="method-row"><span>${esc(m.method||m[0])}</span><span><b>${fmt(m.total||m[1])} so'm</b> (${m.cnt||m[2]} ta)</span></div>`).join('');
+  document.getElementById('report-content').innerHTML = `
+    <div class="report-stats">
+      <div class="stat-card"><div class="stat-label">Jami yig'ilgan</div><div class="stat-val">${fmt(data.total_collected||0)} so'm</div></div>
+      <div class="stat-card"><div class="stat-label">Sessiyalar</div><div class="stat-val">${data.sessions_count||0} ta</div></div>
+      <div class="stat-card"><div class="stat-label">Holat</div><div class="stat-val" style="font-size:14px">${data.status==='open'?'🟢 Ochiq':'🔴 Yopiq'}</div></div>
+      <div class="stat-card"><div class="stat-label">Ochildi</div><div class="stat-val" style="font-size:14px">${data.opened_at ? new Date(data.opened_at).toLocaleTimeString('uz') : '—'}</div></div>
+    </div>
+    <div style="margin-bottom:8px;font-weight:700">To'lov usullari:</div>
+    ${methodRows || '<div style="color:#64748b;font-size:13px">To\'lovlar yo\'q</div>'}`;
+}
+
+// ===== CLOSE SHIFT =====
+function closeShiftConfirm() {
+  document.getElementById('close-notes').value = '';
+  document.getElementById('close-shift-modal').classList.remove('hidden');
+}
+async function doCloseShift() {
+  const notes = document.getElementById('close-notes').value.trim();
+  try {
+    const r = await fetch(`${API}/api/shift/${SHIFT_ID}/close`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pin: PIN, notes})
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error||'Xato','error'); return; }
+    closeModal('close-shift-modal');
+    showToast(`Smena yopildi. Jami: ${fmt(data.total_collected)} so'm`, 'success');
+    setTimeout(logout, 2000);
+  } catch(e) { showToast('Xato','error'); }
+}
+
+// ===== UTILS =====
+function esc(s) {
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function fmt(n) {
+  return Number(n||0).toLocaleString('uz');
+}
+function timeAgo(dt) {
+  const diff = (Date.now() - new Date(dt+'Z').getTime()) / 60000;
+  if (diff < 60) return Math.round(diff)+' daqiqa oldin';
+  return Math.round(diff/60)+' soat oldin';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' '+type : '');
+  setTimeout(()=>t.className='', 3000);
+}
+</script>
+</body>
+</html>

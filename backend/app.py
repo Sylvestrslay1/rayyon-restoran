@@ -828,8 +828,10 @@ def _calc_session_total(sid, conn) -> int:
 @app.route("/api/session/<int:sid>/close", methods=["POST"])
 def close_session(sid):
     """Sessiyani yopish va to'lovni qayd etish (server-da summa tekshiriladi)."""
-    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d    = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     cur  = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     rows = rows_to_list(cur)
@@ -850,18 +852,20 @@ def close_session(sid):
             "client_total": client_total,
         }), 400
 
-    # To'lovlarni qayd etish
-    cashier_name = d.get("cashier_name", "")
+    cashier_name = d.get("cashier_name") or (staff["name"] if staff else "")
+    cashier_id   = d.get("cashier_id")   or (staff["id"]   if staff else None)
+    shift_id     = d.get("shift_id")
+
     for p in payments:
         db_exec(conn,
-            "INSERT INTO payments (session_id, table_number, amount, method, notes, cashier_name, verified) VALUES (?,?,?,?,?,?,1)",
-            (sid, s["table_number"], p.get("amount",0),
-             p.get("method","cash"), p.get("notes",""), cashier_name))
+            "INSERT INTO payments (session_id, table_number, amount, method, notes, cashier_name, cashier_id, shift_id, verified) VALUES (?,?,?,?,?,?,?,?,1)",
+            (sid, s["table_number"], p.get("amount", 0),
+             p.get("method", "cash"), p.get("notes", ""),
+             cashier_name, cashier_id, shift_id))
 
-    # Sessiyani yopish
     db_exec(conn,
-        "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP, total_amount=? WHERE id=?",
-        (server_total, sid))
+        "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP, total_amount=?, cashier_name=?, cashier_id=? WHERE id=?",
+        (server_total, cashier_name, cashier_id, sid))
     db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
     conn.commit(); conn.close()
     return jsonify({"ok": True, "total": server_total})
@@ -876,6 +880,197 @@ def set_discount(sid):
         (d.get("discount",0), d.get("service_charge",0), sid))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
+
+
+# ===== KASSIR SMENALARI =====
+
+@app.route("/api/shift/open", methods=["POST"])
+@limiter.limit("10 per minute")
+def shift_open():
+    """Kassir smena ochish — PIN bilan."""
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin"))
+    if not staff:
+        time.sleep(0.3)
+        return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
+    if staff["role"] not in ("cashier", "manager", "admin"):
+        return jsonify({"ok": False, "error": "Faqat kassir yoki menejer smena ocha oladi"}), 403
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM shifts WHERE cashier_id=? AND status='open'", (staff["id"],))
+    existing = rows_to_list(cur)
+    if existing:
+        conn.close()
+        return jsonify({"ok": True, "shift_id": existing[0]["id"],
+                        "already_open": True, "cashier": staff["name"]})
+    db_exec(conn, "INSERT INTO shifts (cashier_id, cashier_name, status) VALUES (?,?,?)",
+            (staff["id"], staff["name"], "open"))
+    cur2 = db_exec(conn, "SELECT id FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
+    row = cur2.fetchone()
+    shift_id = row[0] if USE_PG else row["id"]
+    conn.commit(); conn.close()
+    tg_send(f"💼 <b>Smena ochildi</b>\n👤 Kassir: {staff['name']}\n🆔 Smena #{shift_id}")
+    return jsonify({"ok": True, "shift_id": shift_id, "cashier": staff["name"]})
+
+
+@app.route("/api/shift/current", methods=["POST"])
+@limiter.limit("30 per minute")
+def shift_current():
+    """Joriy ochiq smena — PIN bilan tekshirish."""
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin"))
+    if not staff:
+        time.sleep(0.3)
+        return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
+    shifts = rows_to_list(cur)
+    conn.close()
+    if not shifts:
+        return jsonify({"ok": False, "cashier": staff["name"], "role": staff["role"]})
+    return jsonify({"ok": True, "shift": shifts[0], "cashier": staff["name"], "role": staff["role"],
+                    "cashier_id": staff["id"]})
+
+
+@app.route("/api/shift/<int:shift_id>/close", methods=["POST"])
+def shift_close(shift_id):
+    """Smena yopish."""
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"ok": False, "error": "PIN yoki admin token kerak"}), 401
+    cashier_id = staff["id"] if staff else None
+    conn = get_conn()
+    if cashier_id:
+        cur = db_exec(conn, "SELECT * FROM shifts WHERE id=? AND cashier_id=? AND status='open'",
+                      (shift_id, cashier_id))
+    else:
+        cur = db_exec(conn, "SELECT * FROM shifts WHERE id=? AND status='open'", (shift_id,))
+    shift_rows = rows_to_list(cur)
+    if not shift_rows:
+        conn.close()
+        return jsonify({"ok": False, "error": "Smena topilmadi yoki allaqachon yopilgan"}), 404
+    # Smena davrida qilingan to'lovlar summasi
+    cur2 = db_exec(conn, "SELECT COALESCE(SUM(amount),0) AS total, COUNT(DISTINCT session_id) AS sess FROM payments WHERE shift_id=?", (shift_id,))
+    row2 = cur2.fetchone()
+    total = int(row2[0] if USE_PG else (row2["total"] or 0))
+    sess_cnt = int(row2[1] if USE_PG else (row2["sess"] or 0))
+    notes = d.get("notes", "")
+    db_exec(conn, "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=? WHERE id=?",
+            (total, sess_cnt, notes, shift_id))
+    conn.commit(); conn.close()
+    cashier_name = staff["name"] if staff else shift_rows[0].get("cashier_name", "")
+    tg_send(f"🔒 <b>Smena yopildi</b>\n👤 Kassir: {cashier_name}\n💰 Jami: {total:,} so'm\n🧾 Sessiya: {sess_cnt} ta")
+    return jsonify({"ok": True, "total_collected": total, "sessions_count": sess_cnt})
+
+
+@app.route("/api/shift/<int:shift_id>/report", methods=["POST"])
+def shift_report(shift_id):
+    """Smena hisoboti — to'lov usullari va sessiyalar bo'yicha."""
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM shifts WHERE id=?", (shift_id,))
+    shifts = rows_to_list(cur)
+    if not shifts:
+        conn.close()
+        return jsonify({"error": "Smena topilmadi"}), 404
+    shift = shifts[0]
+    # To'lov usullari bo'yicha taqsimlash
+    cur2 = db_exec(conn, "SELECT method, COALESCE(SUM(amount),0) AS total, COUNT(*) AS cnt FROM payments WHERE shift_id=? GROUP BY method", (shift_id,))
+    by_method = rows_to_list(cur2)
+    # Smena sessiyalari
+    cur3 = db_exec(conn, """SELECT s.id, s.table_number, s.total_amount, s.opened_at, s.closed_at
+        FROM sessions s
+        JOIN payments p ON p.session_id = s.id
+        WHERE p.shift_id=?
+        GROUP BY s.id, s.table_number, s.total_amount, s.opened_at, s.closed_at
+        ORDER BY s.closed_at""", (shift_id,))
+    sessions_list = rows_to_list(cur3)
+    conn.close()
+    return jsonify({**shift, "by_method": by_method, "sessions": sessions_list})
+
+
+# ===== KASSIR: VOID ITEM =====
+
+@app.route("/api/session/<int:sid>/item/<int:iid>/void", methods=["POST"])
+@limiter.limit("20 per minute")
+def void_item(sid, iid):
+    """Buyurtma itemini void qilish — kassir PIN yoki admin."""
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Kassir PIN yoki admin token kerak"}), 403
+    reason = d.get("reason", "Kassir tomonidan bekor qilindi")
+    try:
+        _validate_str(reason, 200, "Sabab")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    voider = staff["name"] if staff else "Admin"
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM order_items WHERE id=? AND session_id=?", (iid, sid))
+    rows = rows_to_list(cur)
+    if not rows:
+        conn.close()
+        return jsonify({"error": "Item topilmadi"}), 404
+    item = rows[0]
+    if item["status"] == "cancelled":
+        conn.close()
+        return jsonify({"error": "Item allaqachon bekor qilingan"}), 400
+    db_exec(conn, """UPDATE order_items SET status='cancelled', void_by=?, void_reason=?,
+        voided_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?""",
+        (voider, reason, iid, sid))
+    # Sessiya summasini qayta hisoblash
+    cur2 = db_exec(conn, "SELECT COALESCE(SUM(total_price),0) FROM order_items WHERE session_id=? AND status!='cancelled'", (sid,))
+    row2 = cur2.fetchone()
+    new_total = int(row2[0] if USE_PG else (row2[0] or 0))
+    db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (new_total, sid))
+    conn.commit(); conn.close()
+    tg_send(f"🚫 <b>VOID</b> — Stol #{item.get('table_number')}\n"
+            f"❌ {item.get('item_name')} x{item.get('quantity')}\n"
+            f"📝 Sabab: {reason}\n👤 {voider}")
+    return jsonify({"ok": True, "new_total": new_total})
+
+
+# ===== CHEK (RECEIPT) =====
+
+@app.route("/api/receipt/<int:sid>", methods=["GET"])
+def get_receipt(sid):
+    """Sessiya cheki — kassir PIN yoki session token yoki admin."""
+    token = request.headers.get("X-Session-Token", "")
+    pin   = request.args.get("pin", "")
+    conn  = get_conn()
+    cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
+    sessions = rows_to_list(cur)
+    if not sessions:
+        conn.close()
+        return jsonify({"error": "Sessiya topilmadi"}), 404
+    s = sessions[0]
+    staff = check_staff_pin(pin, conn) if pin else None
+    if s["token"] != token and not check_auth() and not staff:
+        conn.close()
+        return jsonify({"error": "Ruxsat yo'q"}), 403
+    cur2 = db_exec(conn, "SELECT * FROM order_items WHERE session_id=? AND status!='cancelled' ORDER BY created_at", (sid,))
+    items = rows_to_list(cur2)
+    cur3 = db_exec(conn, "SELECT * FROM payments WHERE session_id=? ORDER BY created_at", (sid,))
+    payments_list = rows_to_list(cur3)
+    cur4 = db_exec(conn, "SELECT key, value FROM settings WHERE key IN ('restaurant_name','phone','address','working_hours')")
+    raw4 = cur4.fetchall()
+    rest_info = {}
+    for r in raw4:
+        rest_info[r[0] if USE_PG else r["key"]] = r[1] if USE_PG else r["value"]
+    conn.close()
+    subtotal   = sum(i["total_price"] for i in items)
+    sc_amount  = int(subtotal * float(s.get("service_charge") or 0) / 100)
+    disc_amount = int(subtotal * float(s.get("discount") or 0) / 100)
+    grand_total = subtotal + sc_amount - disc_amount
+    return jsonify({
+        "session": s, "items": items, "payments": payments_list,
+        "subtotal": subtotal, "sc_amount": sc_amount,
+        "disc_amount": disc_amount, "grand_total": grand_total,
+        "restaurant": rest_info,
+    })
 
 
 # ===== OSHXONA (KDS) =====

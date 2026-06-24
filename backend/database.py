@@ -578,13 +578,50 @@ def init_db():
                     item
                 )
 
+    # ===== KASSIR SMENALARI =====
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS shifts (
+                id SERIAL PRIMARY KEY,
+                cashier_id INTEGER NOT NULL,
+                cashier_name TEXT NOT NULL,
+                status TEXT DEFAULT 'open',
+                total_collected INTEGER DEFAULT 0,
+                sessions_count INTEGER DEFAULT 0,
+                notes TEXT,
+                opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS shifts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cashier_id INTEGER NOT NULL,
+                cashier_name TEXT NOT NULL,
+                status TEXT DEFAULT 'open',
+                total_collected INTEGER DEFAULT 0,
+                sessions_count INTEGER DEFAULT 0,
+                notes TEXT,
+                opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            )
+        """)
+
     # ===== MIGRATION: mavjud jadvalga yangi ustunlar qo'shish =====
     migrations = [
         "ALTER TABLE staff ADD COLUMN pin_salt TEXT",
         "ALTER TABLE order_items ADD COLUMN void_by TEXT",
         "ALTER TABLE order_items ADD COLUMN void_reason TEXT",
+        "ALTER TABLE order_items ADD COLUMN voided_at TIMESTAMP",
         "ALTER TABLE payments ADD COLUMN cashier_name TEXT",
+        "ALTER TABLE payments ADD COLUMN cashier_id INTEGER",
         "ALTER TABLE payments ADD COLUMN verified INTEGER DEFAULT 0",
+        "ALTER TABLE payments ADD COLUMN shift_id INTEGER",
+        "ALTER TABLE payments ADD COLUMN refunded INTEGER DEFAULT 0",
+        "ALTER TABLE payments ADD COLUMN refund_amount INTEGER DEFAULT 0",
+        "ALTER TABLE sessions ADD COLUMN cashier_name TEXT",
+        "ALTER TABLE sessions ADD COLUMN cashier_id INTEGER",
     ]
     for migration_sql in migrations:
         try:
