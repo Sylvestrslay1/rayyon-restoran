@@ -157,6 +157,62 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 loadMenuFromAPI();
 
+// ===== GALLERY FROM API =====
+async function loadGallery() {
+  const grid = document.querySelector('.gallery-grid');
+  if (!grid) return;
+  try {
+    const res   = await fetch(`${API_BASE}/api/gallery?active=1`);
+    const items = await res.json();
+    if (!Array.isArray(items) || !items.length) return;
+    const colors = ['#0a1628,#1a3a6e','#0d1f3c,#0a2463','#050d20,#0a1628','#0a2463,#0d1f3c','#030810,#0a1628','#0d1629,#1a3a6e'];
+    const spans  = ['gallery-large','','','','gallery-wide',''];
+    grid.innerHTML = items.map((item, i) => {
+      const bg   = colors[i % colors.length];
+      const span = spans[i] || '';
+      const img  = item.image
+        ? `<img src="${item.image}" alt="${item.title}" style="width:100%;height:100%;object-fit:cover;" />`
+        : `<div class="gallery-placeholder" style="background:linear-gradient(135deg,${bg});width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+             <span style="font-size:3.5rem;">${item.emoji || '🖼'}</span>
+             <span class="g-label">${item.title}</span>
+           </div>`;
+      return `<div class="gallery-item ${span} reveal">
+        <div class="gallery-inner">
+          ${img}
+          <div class="gallery-overlay"><span>${item.title}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+  } catch(e) {}
+}
+
+// ===== PROMOTIONS FROM API =====
+async function loadPromos() {
+  const grid = document.getElementById('promoGrid');
+  if (!grid) return;
+  try {
+    const res   = await fetch(`${API_BASE}/api/promotions?active=1`);
+    const items = await res.json();
+    if (!Array.isArray(items) || !items.length) return;
+    grid.innerHTML = items.map(p => `
+      <div class="promo-card glass-card reveal">
+        ${p.badge ? `<div class="promo-badge">${p.badge}</div>` : ''}
+        <div class="promo-icon">${p.emoji || '🎁'}</div>
+        <h3>${p.title}</h3>
+        <p>${p.description || ''}</p>
+        <div class="promo-time">
+          <span style="color:var(--cyan);font-size:0.8rem;">⏰</span>
+          <span style="color:rgba(255,255,255,0.45);font-size:0.8rem;">${p.time_info || ''}</span>
+        </div>
+      </div>`).join('');
+    grid.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+  } catch(e) {}
+}
+
+loadGallery();
+loadPromos();
+
 // ===== NAVBAR SCROLL =====
 const navbar = document.getElementById('navbar');
 window.addEventListener('scroll', () => {

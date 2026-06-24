@@ -433,6 +433,12 @@
     <button class="nav-item" data-page="news">
       <span class="n-icon">◉</span> <span data-i18n="adm.news">Yangiliklar</span>
     </button>
+    <button class="nav-item" data-page="gallery">
+      <span class="n-icon">🖼</span> <span>Galereya</span>
+    </button>
+    <button class="nav-item" data-page="promos">
+      <span class="n-icon">🎁</span> <span>Aksiyalar</span>
+    </button>
     <button class="nav-item" data-page="accounting">
       <span class="n-icon">₿</span> <span data-i18n="adm.accounting">Buxgalteriya</span>
     </button>
@@ -558,6 +564,80 @@
   </div>
 
   <!-- SETTINGS -->
+  <!-- GALEREYA PAGE -->
+  <div class="page" id="page-gallery">
+    <div class="page-header">
+      <h2>Galereya boshqaruvi</h2>
+      <p>Saytdagi galereya rasmlarini qo'shish, tahrirlash, o'chirish</p>
+    </div>
+    <div style="margin-bottom:16px;">
+      <button class="btn-primary" onclick="showGalleryModal()">+ Rasm qo'shish</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Emoji</th><th>Sarlavha</th><th>Rasm</th><th>Tartib</th><th>Holat</th><th>Amal</th></tr></thead>
+        <tbody id="gallery-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Galereya modal -->
+  <div class="modal-overlay" id="galleryModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="gallery-modal-title">Rasm qo'shish</h3><button onclick="closeGalleryModal()">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="gallery-id" />
+        <div class="form-group"><label>Sarlavha</label><input type="text" id="gallery-title" placeholder="Masalan: Asosiy zal" /></div>
+        <div class="form-group"><label>Emoji</label><input type="text" id="gallery-emoji" placeholder="🖼" maxlength="4" /></div>
+        <div class="form-group"><label>Rasm URL (ixtiyoriy)</label><input type="text" id="gallery-image" placeholder="https://... yoki /uploads/..." /></div>
+        <div class="form-group"><label>Tartib raqami</label><input type="number" id="gallery-order" placeholder="0" /></div>
+        <div class="form-group"><label><input type="checkbox" id="gallery-active" checked /> Saytda ko'rsatish</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeGalleryModal()">Bekor</button>
+        <button class="btn-primary" onclick="saveGallery()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AKSIYALAR PAGE -->
+  <div class="page" id="page-promos">
+    <div class="page-header">
+      <h2>Aksiyalar boshqaruvi</h2>
+      <p>Saytdagi aksiya va takliflarni boshqarish</p>
+    </div>
+    <div style="margin-bottom:16px;">
+      <button class="btn-primary" onclick="showPromoModal()">+ Aksiya qo'shish</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Emoji</th><th>Sarlavha</th><th>Tavsif</th><th>Badge</th><th>Vaqt</th><th>Holat</th><th>Amal</th></tr></thead>
+        <tbody id="promos-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Aksiya modal -->
+  <div class="modal-overlay" id="promoModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="promo-modal-title">Aksiya qo'shish</h3><button onclick="closePromoModal()">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="promo-id" />
+        <div class="form-group"><label>Sarlavha</label><input type="text" id="promo-title" placeholder="Masalan: Ertalabki chegirma" /></div>
+        <div class="form-group"><label>Tavsif</label><textarea id="promo-desc" rows="3" placeholder="Aksiya haqida qisqa ma'lumot..." style="width:100%;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.15);border-radius:6px;color:#fff;padding:10px;font-family:inherit;resize:vertical;"></textarea></div>
+        <div class="form-group"><label>Badge (masalan: -20%, SET, 🎂)</label><input type="text" id="promo-badge" placeholder="-20%" /></div>
+        <div class="form-group"><label>Emoji</label><input type="text" id="promo-emoji" placeholder="🎁" maxlength="4" /></div>
+        <div class="form-group"><label>Vaqt ma'lumoti</label><input type="text" id="promo-time" placeholder="Har kuni · 10:00–13:00" /></div>
+        <div class="form-group"><label>Tartib raqami</label><input type="number" id="promo-order" placeholder="0" /></div>
+        <div class="form-group"><label><input type="checkbox" id="promo-active" checked /> Saytda ko'rsatish</label></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closePromoModal()">Bekor</button>
+        <button class="btn-primary" onclick="savePromo()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
   <!-- BUXGALTERIYA PAGE -->
   <div class="page" id="page-accounting">
     <div class="page-header">
@@ -781,6 +861,8 @@ function loadPage(p) {
   else if (p==='menu')   { if (allMenuItems.length) renderMenuGrid(); loadMenu(); }
   else if (p==='news')   loadNews();
   else if (p==='settings') loadSettings();
+  else if (p==='gallery')    loadGalleryAdmin();
+  else if (p==='promos')     loadPromosAdmin();
   else if (p==='accounting') loadAccounting();
 }
 
@@ -1046,6 +1128,150 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
   if ((await r.json()).ok) toast(t('toast.saved'));
   else toast(t('toast.error'), false);
 });
+
+// ===== GALEREYA ADMIN =====
+async function loadGalleryAdmin() {
+  const res   = await fetch(`${API}/api/gallery`, { headers: H() });
+  const items = await res.json();
+  const tbody = document.getElementById('gallery-body');
+  if (!Array.isArray(items) || !items.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Galereya bo\'sh</td></tr>'; return;
+  }
+  tbody.innerHTML = items.map(g => `<tr>
+    <td style="color:var(--cyan)">#${g.id}</td>
+    <td style="font-size:1.5rem">${g.emoji || '🖼'}</td>
+    <td style="font-weight:600">${g.title}</td>
+    <td>${g.image ? '<span style="color:var(--cyan);font-size:0.75rem;">✓ Rasm bor</span>' : '<span style="color:#666;font-size:0.75rem;">Yo\'q</span>'}</td>
+    <td style="color:#aaa">${g.sort_order}</td>
+    <td>${g.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
+    <td>
+      <button class="act-btn" onclick='editGallery(${JSON.stringify(g).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" onclick="deleteGallery(${g.id})">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+let editingGalleryId = null;
+function showGalleryModal() {
+  editingGalleryId = null;
+  document.getElementById('gallery-modal-title').textContent = 'Rasm qo\'shish';
+  document.getElementById('gallery-id').value = '';
+  document.getElementById('gallery-title').value = '';
+  document.getElementById('gallery-emoji').value = '🖼';
+  document.getElementById('gallery-image').value = '';
+  document.getElementById('gallery-order').value = '0';
+  document.getElementById('gallery-active').checked = true;
+  document.getElementById('galleryModal').style.display = 'flex';
+}
+function editGallery(item) {
+  editingGalleryId = item.id;
+  document.getElementById('gallery-modal-title').textContent = 'Rasmni tahrirlash';
+  document.getElementById('gallery-id').value = item.id;
+  document.getElementById('gallery-title').value = item.title;
+  document.getElementById('gallery-emoji').value = item.emoji || '🖼';
+  document.getElementById('gallery-image').value = item.image || '';
+  document.getElementById('gallery-order').value = item.sort_order || 0;
+  document.getElementById('gallery-active').checked = !!item.active;
+  document.getElementById('galleryModal').style.display = 'flex';
+}
+function closeGalleryModal() { document.getElementById('galleryModal').style.display = 'none'; }
+async function saveGallery() {
+  const data = {
+    title:      document.getElementById('gallery-title').value.trim(),
+    emoji:      document.getElementById('gallery-emoji').value || '🖼',
+    image:      document.getElementById('gallery-image').value.trim() || null,
+    sort_order: parseInt(document.getElementById('gallery-order').value) || 0,
+    active:     document.getElementById('gallery-active').checked ? 1 : 0,
+  };
+  if (!data.title) { showToast('Sarlavha kiriting!', true); return; }
+  if (editingGalleryId) {
+    await fetch(`${API}/api/gallery/${editingGalleryId}`, { method:'PUT', headers:H(), body:JSON.stringify(data) });
+  } else {
+    await fetch(`${API}/api/gallery`, { method:'POST', headers:H(), body:JSON.stringify(data) });
+  }
+  closeGalleryModal();
+  showToast('Saqlandi');
+  loadGalleryAdmin();
+}
+async function deleteGallery(id) {
+  if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
+  await fetch(`${API}/api/gallery/${id}`, { method:'DELETE', headers:H() });
+  showToast('O\'chirildi');
+  loadGalleryAdmin();
+}
+
+// ===== AKSIYALAR ADMIN =====
+async function loadPromosAdmin() {
+  const res   = await fetch(`${API}/api/promotions`, { headers: H() });
+  const items = await res.json();
+  const tbody = document.getElementById('promos-body');
+  if (!Array.isArray(items) || !items.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Aksiyalar yo\'q</td></tr>'; return;
+  }
+  tbody.innerHTML = items.map(p => `<tr>
+    <td style="color:var(--cyan)">#${p.id}</td>
+    <td style="font-size:1.5rem">${p.emoji || '🎁'}</td>
+    <td style="font-weight:600">${p.title}</td>
+    <td style="color:#aaa;font-size:0.82rem;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description || '—'}</td>
+    <td><span style="background:linear-gradient(135deg,var(--cyan),var(--gold));color:#000;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700">${p.badge || '—'}</span></td>
+    <td style="color:#aaa;font-size:0.8rem">${p.time_info || '—'}</td>
+    <td>${p.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
+    <td>
+      <button class="act-btn" onclick='editPromo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" onclick="deletePromo(${p.id})">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+let editingPromoId = null;
+function showPromoModal() {
+  editingPromoId = null;
+  document.getElementById('promo-modal-title').textContent = 'Aksiya qo\'shish';
+  ['promo-id','promo-title','promo-desc','promo-badge','promo-time','promo-order'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('promo-emoji').value = '🎁';
+  document.getElementById('promo-active').checked = true;
+  document.getElementById('promoModal').style.display = 'flex';
+}
+function editPromo(item) {
+  editingPromoId = item.id;
+  document.getElementById('promo-modal-title').textContent = 'Aksiyani tahrirlash';
+  document.getElementById('promo-id').value = item.id;
+  document.getElementById('promo-title').value = item.title;
+  document.getElementById('promo-desc').value = item.description || '';
+  document.getElementById('promo-badge').value = item.badge || '';
+  document.getElementById('promo-emoji').value = item.emoji || '🎁';
+  document.getElementById('promo-time').value = item.time_info || '';
+  document.getElementById('promo-order').value = item.sort_order || 0;
+  document.getElementById('promo-active').checked = !!item.active;
+  document.getElementById('promoModal').style.display = 'flex';
+}
+function closePromoModal() { document.getElementById('promoModal').style.display = 'none'; }
+async function savePromo() {
+  const data = {
+    title:       document.getElementById('promo-title').value.trim(),
+    description: document.getElementById('promo-desc').value.trim(),
+    badge:       document.getElementById('promo-badge').value.trim(),
+    emoji:       document.getElementById('promo-emoji').value || '🎁',
+    time_info:   document.getElementById('promo-time').value.trim(),
+    sort_order:  parseInt(document.getElementById('promo-order').value) || 0,
+    active:      document.getElementById('promo-active').checked ? 1 : 0,
+  };
+  if (!data.title) { showToast('Sarlavha kiriting!', true); return; }
+  if (editingPromoId) {
+    await fetch(`${API}/api/promotions/${editingPromoId}`, { method:'PUT', headers:H(), body:JSON.stringify(data) });
+  } else {
+    await fetch(`${API}/api/promotions`, { method:'POST', headers:H(), body:JSON.stringify(data) });
+  }
+  closePromoModal();
+  showToast('Saqlandi');
+  loadPromosAdmin();
+}
+async function deletePromo(id) {
+  if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
+  await fetch(`${API}/api/promotions/${id}`, { method:'DELETE', headers:H() });
+  showToast('O\'chirildi');
+  loadPromosAdmin();
+}
 
 // ===== BUXGALTERIYA =====
 let accPeriod = 'daily';

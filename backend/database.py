@@ -172,6 +172,86 @@ def init_db():
             )
         """)
 
+    # Galereya va aksiyalar jadvallari
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gallery (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                emoji TEXT DEFAULT '🖼',
+                image TEXT,
+                sort_order INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS promotions (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                badge TEXT,
+                emoji TEXT DEFAULT '🎁',
+                time_info TEXT,
+                active INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gallery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                emoji TEXT DEFAULT '🖼',
+                image TEXT,
+                sort_order INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS promotions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                badge TEXT,
+                emoji TEXT DEFAULT '🎁',
+                time_info TEXT,
+                active INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+    # Default galereya
+    cur.execute("SELECT COUNT(*) FROM gallery")
+    if (cur.fetchone()[0]) == 0:
+        gallery_defaults = [
+            ("Asosiy zal", "🏛", 1), ("Milliy taomlar", "🍚", 2),
+            ("Grill bo'limi", "🔥", 3), ("VIP xona", "👑", 4),
+            ("Tashqi makon", "🌙", 5), ("Shirinliklar", "🍰", 6),
+        ]
+        for title, emoji, order in gallery_defaults:
+            if USE_PG:
+                cur.execute("INSERT INTO gallery (title, emoji, sort_order) VALUES (%s,%s,%s)", (title, emoji, order))
+            else:
+                cur.execute("INSERT INTO gallery (title, emoji, sort_order) VALUES (?,?,?)", (title, emoji, order))
+
+    # Default aksiyalar
+    cur.execute("SELECT COUNT(*) FROM promotions")
+    if (cur.fetchone()[0]) == 0:
+        promo_defaults = [
+            ("Ertalabki chegirma", "Har kuni 10:00–13:00 oralig'ida barcha taomlardan 20% chegirma", "-20%", "🌅", "Har kuni · 10:00–13:00", 1),
+            ("Oilaviy set", "4 kishilik to'plam: 2 palov + 1 sho'rva + 4 somsa", "SET", "👨‍👩‍👧‍👦", "Juma – Yakshanba", 2),
+            ("Tug'ilgan kun", "Tug'ilgan kuningizda keling — tort va sovg'a biz tarafdan", "🎂", "🎉", "Oldindan bron qiling", 3),
+        ]
+        for title, desc, badge, emoji, time_info, order in promo_defaults:
+            if USE_PG:
+                cur.execute("INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order) VALUES (%s,%s,%s,%s,%s,%s)", (title, desc, badge, emoji, time_info, order))
+            else:
+                cur.execute("INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order) VALUES (?,?,?,?,?,?)", (title, desc, badge, emoji, time_info, order))
+
     # Buxgalteriya jadvallari
     if USE_PG:
         cur.execute("""

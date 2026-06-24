@@ -335,6 +335,90 @@ def get_stats():
     return jsonify(result)
 
 
+# ===== GALEREYA =====
+@app.route("/api/gallery", methods=["GET"])
+def get_gallery():
+    conn = get_conn()
+    active = request.args.get("active")
+    if active == "1":
+        cur = db_exec(conn, "SELECT * FROM gallery WHERE active=1 ORDER BY sort_order, id")
+    else:
+        cur = db_exec(conn, "SELECT * FROM gallery ORDER BY sort_order, id")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+@app.route("/api/gallery", methods=["POST"])
+def add_gallery():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "INSERT INTO gallery (title, emoji, image, sort_order, active) VALUES (?,?,?,?,?)",
+        (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/gallery/<int:gid>", methods=["PUT"])
+def update_gallery(gid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE gallery SET title=?, emoji=?, image=?, sort_order=?, active=? WHERE id=?",
+        (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1), gid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/gallery/<int:gid>", methods=["DELETE"])
+def delete_gallery(gid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM gallery WHERE id=?", (gid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+# ===== AKSIYALAR =====
+@app.route("/api/promotions", methods=["GET"])
+def get_promotions():
+    conn = get_conn()
+    active = request.args.get("active")
+    if active == "1":
+        cur = db_exec(conn, "SELECT * FROM promotions WHERE active=1 ORDER BY sort_order, id")
+    else:
+        cur = db_exec(conn, "SELECT * FROM promotions ORDER BY sort_order, id")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+@app.route("/api/promotions", methods=["POST"])
+def add_promotion():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order, active) VALUES (?,?,?,?,?,?,?)",
+        (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/promotions/<int:pid>", methods=["PUT"])
+def update_promotion(pid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE promotions SET title=?, description=?, badge=?, emoji=?, time_info=?, sort_order=?, active=? WHERE id=?",
+        (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1), pid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/promotions/<int:pid>", methods=["DELETE"])
+def delete_promotion(pid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM promotions WHERE id=?", (pid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
 # ===== BUXGALTERIYA: HISOBOTLAR =====
 @app.route("/api/accounting/report", methods=["GET"])
 def accounting_report():
