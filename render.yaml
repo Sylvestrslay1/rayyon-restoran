@@ -4,6 +4,7 @@ services:
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
     startCommand: gunicorn --chdir backend app:app
+    autoDeploy: true
     envVars:
       - key: FLASK_ENV
         value: production
