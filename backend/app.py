@@ -568,7 +568,7 @@ def get_stats():
         row = cur.fetchone()
         return row[0] if row else 0
 
-    today_sql = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE" if USE_PG else \
+    today_sql = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE::text" if USE_PG else \
                 "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
 
     result = {
