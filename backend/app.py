@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
-import threading, datetime, imghdr
+import threading, datetime
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -116,10 +116,17 @@ def allowed_file(filename):
 def check_image_mime(file_stream) -> bool:
     """Fayl MIME turini bytes darajasida tekshirish (kengaytmani aldab bo'lmaydi)."""
     try:
-        header = file_stream.read(512)
+        header = file_stream.read(12)
         file_stream.seek(0)
-        detected = imghdr.what(None, h=header)
-        return detected in ("png", "jpeg", "gif", "webp")
+        if header[:8] == b'\x89PNG\r\n\x1a\n':
+            return True
+        if header[:3] == b'\xff\xd8\xff':
+            return True
+        if header[:6] in (b'GIF87a', b'GIF89a'):
+            return True
+        if header[:4] == b'RIFF' and header[8:12] == b'WEBP':
+            return True
+        return False
     except Exception:
         return False
 
