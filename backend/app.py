@@ -18,7 +18,7 @@ CORS(app, supports_credentials=True,
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["500/day", "100/hour"],
+    default_limits=["5000/day", "1000/hour"],
     storage_uri="memory://",
     headers_enabled=True,
 )
