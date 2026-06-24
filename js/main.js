@@ -213,6 +213,242 @@ async function loadPromos() {
 loadGallery();
 loadPromos();
 
+// ===== QR STOL TIZIMI =====
+let tableSession = null; // { table_number, session_id, token }
+let cart = [];           // [{ item, qty, comment }]
+
+async function initTableSession() {
+  const params = new URLSearchParams(window.location.search);
+  const tableNum = params.get('table');
+  const token    = params.get('token');
+  if (!tableNum) return;
+
+  // Token tekshirish
+  if (token) {
+    try {
+      const res  = await fetch(`${API_BASE}/api/session/validate?token=${token}`);
+      const data = await res.json();
+      if (data.valid) {
+        tableSession = { table_number: data.table_number, session_id: data.session_id, token };
+        showTableBanner(data.table_number);
+        return;
+      }
+    } catch(e) {}
+  }
+  // Token yo'q yoki eskirgan — faqat stol raqamini ko'rsatamiz
+  showTableBanner(tableNum);
+  tableSession = { table_number: tableNum, session_id: null, token: null };
+}
+
+function showTableBanner(num) {
+  const existing = document.getElementById('tableBanner');
+  if (existing) existing.remove();
+  const banner = document.createElement('div');
+  banner.id = 'tableBanner';
+  banner.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+    background:linear-gradient(135deg,rgba(0,100,170,0.95),rgba(0,180,220,0.9));
+    border:1px solid rgba(0,212,255,0.5);border-radius:50px;
+    padding:10px 24px;font-family:'Rajdhani',sans-serif;font-weight:700;
+    letter-spacing:2px;font-size:0.85rem;color:#fff;z-index:900;
+    display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,212,255,0.3);`;
+  banner.innerHTML = `<span style="color:var(--cyan,#00d4ff);">⊞ STOL #${num}</span>
+    <span style="opacity:0.6">|</span>
+    <span id="cartCount" style="color:#fff;">Savatcha bo'sh</span>
+    <button onclick="openCart()" style="background:rgba(255,255,255,0.15);border:none;
+      color:#fff;padding:4px 14px;border-radius:20px;cursor:pointer;font-family:inherit;
+      font-size:0.8rem;font-weight:700;">Savatcha ▲</button>`;
+  document.body.appendChild(banner);
+}
+
+function updateCartCount() {
+  const el = document.getElementById('cartCount');
+  if (!el) return;
+  const total = cart.reduce((s,c) => s + c.item.price * c.qty, 0);
+  const count = cart.reduce((s,c) => s + c.qty, 0);
+  el.textContent = count ? `${count} ta · ${Number(total).toLocaleString()} so'm` : 'Savatcha bo\'sh';
+}
+
+function addToCart(item) {
+  if (!tableSession) return;
+  const existing = cart.find(c => c.item.id === item.id);
+  if (existing) { existing.qty++; }
+  else { cart.push({ item, qty: 1, comment: '' }); }
+  updateCartCount();
+  showCartToast(item.name);
+}
+
+function showCartToast(name) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:140px;right:20px;
+    background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);
+    color:#00d4ff;padding:10px 18px;border-radius:8px;font-family:'Rajdhani',sans-serif;
+    font-weight:700;font-size:0.85rem;z-index:999;letter-spacing:1px;
+    animation:slideIn 0.3s ease;`;
+  t.textContent = '✓ Savatchaga qo\'shildi: ' + name;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+
+function openCart() {
+  const modal = document.getElementById('cartModal');
+  if (!modal) { createCartModal(); return; }
+  renderCart();
+  modal.style.display = 'flex';
+}
+
+function createCartModal() {
+  const div = document.createElement('div');
+  div.id = 'cartModal';
+  div.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);
+    z-index:9999;display:flex;align-items:flex-end;justify-content:center;`;
+  div.innerHTML = `<div style="background:#0d1420;border-radius:20px 20px 0 0;width:100%;max-width:600px;
+      padding:28px 24px;border-top:1px solid rgba(0,212,255,0.2);max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-family:'Cinzel',serif;color:#00d4ff;font-size:1.1rem;letter-spacing:2px;">SAVATCHA</h2>
+      <button onclick="document.getElementById('cartModal').style.display='none'"
+        style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.4rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="cartItems"></div>
+    <div id="cartTotal" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);"></div>
+    <div style="margin-top:8px;">
+      <input id="cartNote" type="text" placeholder="Umumiy izoh (masalan: piyozsiz)"
+        style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);
+        border-radius:8px;color:#fff;padding:10px 14px;font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
+      <button onclick="submitCart()" style="width:100%;background:linear-gradient(135deg,#005577,#0099cc);
+        border:none;color:#fff;padding:16px;border-radius:10px;font-family:'Rajdhani',sans-serif;
+        font-size:1rem;font-weight:700;letter-spacing:2px;cursor:pointer;">
+        BUYURTMA BERISH ✓
+      </button>
+      ${tableSession && tableSession.session_id ? `
+      <button onclick="requestBill()" style="width:100%;background:rgba(255,152,0,0.1);
+        border:1px solid rgba(255,152,0,0.3);color:#ff9800;padding:12px;border-radius:10px;
+        font-family:'Rajdhani',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:8px;">
+        🧾 Hisob so'rash
+      </button>` : ''}
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+  renderCart();
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  const tot = document.getElementById('cartTotal');
+  if (!el) return;
+  if (!cart.length) {
+    el.innerHTML = '<p style="color:rgba(255,255,255,0.3);text-align:center;padding:24px;">Savatcha bo\'sh</p>';
+    if (tot) tot.innerHTML = '';
+    return;
+  }
+  el.innerHTML = cart.map((c,i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
+        border-bottom:1px solid rgba(255,255,255,0.06);">
+      <span style="font-size:1.8rem;">${c.item.emoji||'🍽'}</span>
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:0.95rem;">${c.item.name}</div>
+        <div style="color:#c8a96e;font-size:0.85rem;">${Number(c.item.price).toLocaleString()} so'm</div>
+        <input type="text" placeholder="Izoh (piyozsiz...)" value="${c.comment}"
+          onchange="cart[${i}].comment=this.value"
+          style="margin-top:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+          border-radius:6px;color:#fff;padding:4px 10px;font-size:0.78rem;width:100%;font-family:inherit;"/>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button onclick="changeQty(${i},-1)" style="background:rgba(255,255,255,0.08);border:none;
+          color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1rem;">−</button>
+        <span style="font-weight:700;min-width:20px;text-align:center;">${c.qty}</span>
+        <button onclick="changeQty(${i},1)" style="background:rgba(0,212,255,0.1);border:none;
+          color:#00d4ff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1rem;">+</button>
+        <button onclick="removeFromCart(${i})" style="background:none;border:none;
+          color:rgba(255,68,68,0.7);cursor:pointer;font-size:1rem;margin-left:4px;">✕</button>
+      </div>
+    </div>`).join('');
+  const total = cart.reduce((s,c) => s + c.item.price * c.qty, 0);
+  if (tot) tot.innerHTML = `<div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem;">
+    <span>Jami:</span><span style="color:#c8a96e;">${Number(total).toLocaleString()} so'm</span></div>`;
+}
+
+function changeQty(i, d) {
+  cart[i].qty += d;
+  if (cart[i].qty <= 0) cart.splice(i, 1);
+  renderCart(); updateCartCount();
+}
+function removeFromCart(i) { cart.splice(i, 1); renderCart(); updateCartCount(); }
+
+async function submitCart() {
+  if (!cart.length) return;
+  if (!tableSession || !tableSession.session_id) {
+    alert('Stol sessiyasi topilmadi. Iltimos, QR kodni qayta skaner qiling.');
+    return;
+  }
+  const items = cart.map(c => ({
+    menu_item_id: c.item.id, name: c.item.name,
+    emoji: c.item.emoji, price: c.item.price,
+    quantity: c.qty, comment: c.comment,
+    category: c.item.category
+  }));
+  const note = document.getElementById('cartNote')?.value || '';
+  const res = await fetch(`${API_BASE}/api/session/${tableSession.session_id}/order`, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'X-Session-Token': tableSession.token },
+    body: JSON.stringify({ items, note })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    cart = [];
+    updateCartCount();
+    document.getElementById('cartModal').style.display = 'none';
+    showSuccessModal();
+  } else {
+    alert('Xatolik: ' + (data.error || 'Qayta urinib ko\'ring'));
+  }
+}
+
+function showSuccessModal() {
+  const div = document.createElement('div');
+  div.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;
+    display:flex;align-items:center;justify-content:center;`;
+  div.innerHTML = `<div style="text-align:center;padding:40px;">
+    <div style="font-size:4rem;margin-bottom:16px;">✅</div>
+    <h2 style="font-family:'Cinzel',serif;color:#00d4ff;letter-spacing:3px;margin-bottom:8px;">BUYURTMA QABUL QILINDI!</h2>
+    <p style="color:rgba(255,255,255,0.5);margin-bottom:24px;">Stol #${tableSession.table_number} · Oshxona tayyorlab beradi</p>
+    <button onclick="this.parentElement.parentElement.remove()"
+      style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.3);
+      color:#00d4ff;padding:12px 32px;border-radius:8px;font-family:'Rajdhani',sans-serif;
+      font-size:1rem;font-weight:700;cursor:pointer;letter-spacing:2px;">YOPISH</button>
+  </div>`;
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 5000);
+}
+
+async function requestBill() {
+  if (!tableSession?.session_id) return;
+  await fetch(`${API_BASE}/api/session/${tableSession.session_id}/bill`, {
+    method: 'POST', headers: { 'X-Session-Token': tableSession.token }
+  });
+  document.getElementById('cartModal').style.display = 'none';
+  const div = document.createElement('div');
+  div.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;
+    display:flex;align-items:center;justify-content:center;`;
+  div.innerHTML = `<div style="text-align:center;padding:40px;">
+    <div style="font-size:4rem;margin-bottom:16px;">🧾</div>
+    <h2 style="font-family:'Cinzel',serif;color:#ff9800;letter-spacing:2px;margin-bottom:8px;">HISOB SO'RALDI</h2>
+    <p style="color:rgba(255,255,255,0.5);">Ofitsiant yaqinda keladi</p>
+    <button onclick="this.parentElement.parentElement.remove()"
+      style="margin-top:20px;background:rgba(255,152,0,0.15);border:1px solid rgba(255,152,0,0.3);
+      color:#ff9800;padding:12px 32px;border-radius:8px;font-family:'Rajdhani',sans-serif;
+      font-size:1rem;font-weight:700;cursor:pointer;">YOPISH</button>
+  </div>`;
+  document.body.appendChild(div);
+}
+
+// Menu kartasida "Savatchaga" tugmasi — tableSession mavjud bo'lsa ko'rinadi
+function menuCardAction(item) {
+  if (tableSession) { addToCart(item); }
+  else { openOrderModal(item.id); }
+}
+
+initTableSession();
+
 // ===== NAVBAR SCROLL =====
 const navbar = document.getElementById('navbar');
 window.addEventListener('scroll', () => {

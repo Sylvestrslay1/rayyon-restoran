@@ -433,6 +433,12 @@
     <button class="nav-item" data-page="news">
       <span class="n-icon">◉</span> <span data-i18n="adm.news">Yangiliklar</span>
     </button>
+    <button class="nav-item" data-page="tables">
+      <span class="n-icon">⊞</span> <span>Stollar</span>
+    </button>
+    <button class="nav-item" data-page="staff">
+      <span class="n-icon">👤</span> <span>Xodimlar</span>
+    </button>
     <button class="nav-item" data-page="gallery">
       <span class="n-icon">🖼</span> <span>Galereya</span>
     </button>
@@ -564,6 +570,120 @@
   </div>
 
   <!-- SETTINGS -->
+  <!-- STOLLAR PAGE -->
+  <div class="page" id="page-tables">
+    <div class="page-header">
+      <h2>Stollar xaritasi</h2>
+      <p>Stol holatlari, QR kodlar va sessiyalar boshqaruvi</p>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+      <button class="btn-primary" onclick="showTableModal()">+ Stol qo'shish</button>
+      <div style="display:flex;gap:16px;margin-left:auto;">
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#00e676;display:inline-block;"></span>Bo'sh</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff9800;display:inline-block;"></span>Band</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff4444;display:inline-block;"></span>Hisob so'radi</span>
+      </div>
+    </div>
+    <div id="tablesMap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;"></div>
+  </div>
+
+  <!-- Stol sessiya modal -->
+  <div class="modal-overlay" id="tableSessionModal" style="display:none;">
+    <div class="modal-box" style="max-width:480px;">
+      <div class="modal-header"><h3 id="tsm-title">Stol #1</h3><button onclick="closeTSM()">✕</button></div>
+      <div class="modal-body" id="tsm-body"></div>
+      <div class="modal-footer" id="tsm-footer"></div>
+    </div>
+  </div>
+
+  <!-- Stol qo'shish/tahrirlash modal -->
+  <div class="modal-overlay" id="tableEditModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="tem-title">Stol qo'shish</h3><button onclick="closeTEM()">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="tem-id"/>
+        <div class="form-group"><label>Stol raqami</label><input type="number" id="tem-num" placeholder="1"/></div>
+        <div class="form-group"><label>Nomi (ixtiyoriy)</label><input type="text" id="tem-name" placeholder="VIP, Terasa..."/></div>
+        <div class="form-group"><label>Sig'imi (kishi)</label><input type="number" id="tem-cap" placeholder="4"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTEM()">Bekor</button>
+        <button class="btn-primary" onclick="saveTable()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR modal -->
+  <div class="modal-overlay" id="qrModal" style="display:none;">
+    <div class="modal-box" style="max-width:360px;text-align:center;">
+      <div class="modal-header"><h3 id="qr-title">QR Kod</h3><button onclick="document.getElementById('qrModal').style.display='none'">✕</button></div>
+      <div class="modal-body" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <div id="qr-canvas" style="background:#fff;padding:16px;border-radius:8px;"></div>
+        <div id="qr-url" style="font-size:0.75rem;color:rgba(255,255,255,0.4);word-break:break-all;"></div>
+        <button class="btn-primary" onclick="downloadQR()" style="width:100%;">⬇ Yuklab olish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- XODIMLAR PAGE -->
+  <div class="page" id="page-staff">
+    <div class="page-header">
+      <h2>Xodimlar boshqaruvi</h2>
+      <p>Xodimlar, lavozimlar, PIN va davomot</p>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;">
+      <button class="btn-primary" onclick="showStaffModal()">+ Xodim qo'shish</button>
+      <button class="btn-secondary" onclick="loadAttendance()" style="margin-left:auto;">📋 Bugungi davomot</button>
+    </div>
+    <div class="table-wrap" style="margin-bottom:20px;">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Ism</th><th>Lavozim</th><th>Telefon</th><th>Maosh</th><th>Holat</th><th>Amal</th></tr></thead>
+        <tbody id="staff-body"></tbody>
+      </table>
+    </div>
+    <div class="table-wrap" id="attendance-wrap" style="display:none;">
+      <div style="padding:14px 20px 0;"><h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;">BUGUNGI DAVOMOT</h3></div>
+      <table class="data-table">
+        <thead><tr><th>Xodim</th><th>Kirish</th><th>Chiqish</th><th>Soat</th></tr></thead>
+        <tbody id="att-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Xodim modal -->
+  <div class="modal-overlay" id="staffModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="staff-modal-title">Xodim qo'shish</h3><button onclick="closeStaffModal()">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="staff-id"/>
+        <div class="form-group"><label>Ism Familiya</label><input type="text" id="staff-name" placeholder="Abdullayev Jasur"/></div>
+        <div class="form-group"><label>Lavozim</label>
+          <select id="staff-role">
+            <option value="waiter">Ofitsiant</option>
+            <option value="cook">Oshpaz</option>
+            <option value="cashier">Kassir</option>
+            <option value="manager">Menejer</option>
+            <option value="cleaner">Tozalovchi</option>
+          </select>
+        </div>
+        <div class="form-group"><label>PIN kod (4 raqam)</label><input type="password" id="staff-pin" placeholder="****" maxlength="4"/></div>
+        <div class="form-group"><label>Telefon</label><input type="text" id="staff-phone" placeholder="+998 90 000 00 00"/></div>
+        <div class="form-group"><label>Maosh turi</label>
+          <select id="staff-salary-type">
+            <option value="monthly">Oylik (so'm)</option>
+            <option value="hourly">Soatlik (so'm/soat)</option>
+            <option value="percent">Foizli (%)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Maosh miqdori</label><input type="number" id="staff-salary" placeholder="0"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeStaffModal()">Bekor</button>
+        <button class="btn-primary" onclick="saveStaff()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
   <!-- GALEREYA PAGE -->
   <div class="page" id="page-gallery">
     <div class="page-header">
@@ -861,6 +981,8 @@ function loadPage(p) {
   else if (p==='menu')   { if (allMenuItems.length) renderMenuGrid(); loadMenu(); }
   else if (p==='news')   loadNews();
   else if (p==='settings') loadSettings();
+  else if (p==='tables')     loadTables();
+  else if (p==='staff')      loadStaff();
   else if (p==='gallery')    loadGalleryAdmin();
   else if (p==='promos')     loadPromosAdmin();
   else if (p==='accounting') loadAccounting();
@@ -1128,6 +1250,297 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
   if ((await r.json()).ok) toast(t('toast.saved'));
   else toast(t('toast.error'), false);
 });
+
+// ===== STOLLAR =====
+const SITE_URL = window.location.origin;
+let tablesData = [];
+let editingTableId = null;
+let currentQRTable = null;
+
+async function loadTables() {
+  const res = await fetch(`${API}/api/tables`, { headers: H() });
+  tablesData = await res.json();
+  const map = document.getElementById('tablesMap');
+  if (!tablesData.length) {
+    map.innerHTML = '<p style="color:rgba(255,255,255,0.3);grid-column:1/-1;text-align:center;padding:40px;">Stollar yo\'q. + Stol qo\'shish tugmasini bosing.</p>';
+    return;
+  }
+  map.innerHTML = tablesData.map(t => {
+    const statusColor = t.status === 'free' ? '#00e676' : t.status === 'bill_requested' ? '#ff4444' : '#ff9800';
+    const statusText  = t.status === 'free' ? 'Bo\'sh' : t.status === 'bill_requested' ? 'Hisob so\'radi' : 'Band';
+    const mins = t.minutes_open ? `${t.minutes_open} daq` : '';
+    const sum  = t.total_amount ? priceFmt(t.total_amount) : '';
+    return `<div style="background:rgba(255,255,255,0.03);border:1px solid ${statusColor}33;
+        border-radius:12px;padding:18px;cursor:pointer;transition:all 0.2s;position:relative;"
+        onclick="openTableSession(${t.id})"
+        onmouseover="this.style.borderColor='${statusColor}88'"
+        onmouseout="this.style.borderColor='${statusColor}33'">
+      <div style="position:absolute;top:12px;right:12px;width:10px;height:10px;
+          border-radius:50%;background:${statusColor};box-shadow:0 0 8px ${statusColor};"></div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:1.6rem;font-weight:700;
+          color:${statusColor};letter-spacing:2px;">STOL ${t.number}</div>
+      <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${t.name || ''} · ${t.capacity} kishi</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;font-weight:600;">${statusText}</div>
+      ${mins ? `<div style="color:rgba(255,255,255,0.35);font-size:0.72rem;">⏱ ${mins}</div>` : ''}
+      ${sum  ? `<div style="color:var(--gold);font-weight:700;font-size:0.88rem;margin-top:4px;">${sum}</div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:12px;" onclick="event.stopPropagation()">
+        <button class="act-btn" title="QR" onclick="showQR(${t.id})">QR</button>
+        <button class="act-btn" title="Tahrirlash" onclick="editTable(${JSON.stringify(t).replace(/"/g,'&quot;')})">✎</button>
+        <button class="act-btn" style="color:#ff4466" title="O'chirish" onclick="deleteTable(${t.id})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function openTableSession(tableId) {
+  const t = tablesData.find(x => x.id === tableId);
+  if (!t) return;
+  const modal = document.getElementById('tableSessionModal');
+  const title = document.getElementById('tsm-title');
+  const body  = document.getElementById('tsm-body');
+  const footer= document.getElementById('tsm-footer');
+  title.textContent = `Stol #${t.number} — ${t.name || ''}`;
+
+  if (t.status === 'free') {
+    body.innerHTML = `<p style="color:rgba(255,255,255,0.5);margin-bottom:16px;">Stolni ochish uchun ma'lumot kiriting:</p>
+      <div class="form-group"><label>Xizmat haqi (%)</label>
+        <input type="number" id="tsm-sc" value="0" min="0" max="30"/></div>`;
+    footer.innerHTML = `<button class="btn-secondary" onclick="closeTSM()">Bekor</button>
+      <button class="btn-primary" onclick="openTable(${t.id})">Ochish ▶</button>`;
+  } else {
+    // Sessiya ma'lumotlari
+    const sid = t.current_session_id;
+    const res = await fetch(`${API}/api/session/${sid}`, { headers: H() });
+    const s   = await res.json();
+    const items = s.items || [];
+    const statusLabel = {'pending':'Kutmoqda','cooking':'Pishmoqda','ready':'Tayyor','served':'Berildi','cancelled':'Bekor'};
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <div style="background:rgba(0,212,255,0.05);padding:12px;border-radius:8px;border:1px solid rgba(0,212,255,0.1);">
+          <div style="color:rgba(255,255,255,0.4);font-size:0.72rem;">Jami summa</div>
+          <div style="color:var(--gold);font-weight:700;font-size:1.1rem;">${priceFmt(s.grand_total||0)}</div>
+        </div>
+        <div style="background:rgba(0,212,255,0.05);padding:12px;border-radius:8px;border:1px solid rgba(0,212,255,0.1);">
+          <div style="color:rgba(255,255,255,0.4);font-size:0.72rem;">Buyurtmalar</div>
+          <div style="color:var(--cyan);font-weight:700;font-size:1.1rem;">${items.length} ta</div>
+        </div>
+      </div>
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:16px;">
+        ${items.length ? items.filter(i=>i.status!=='cancelled').map(i=>
+          `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span>${i.item_emoji||'🍽'} ${i.item_name} ×${i.quantity}</span>
+            <span style="display:flex;align-items:center;gap:8px;">
+              <span style="color:rgba(255,255,255,0.4);font-size:0.75rem;">${statusLabel[i.status]||i.status}</span>
+              <span style="color:var(--gold);">${priceFmt(i.total_price)}</span>
+            </span>
+          </div>`).join('') : '<p style="color:rgba(255,255,255,0.3);text-align:center;padding:16px;">Buyurtma yo\'q</p>'}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+        <div class="form-group"><label>Chegirma (%)</label>
+          <input type="number" id="tsm-disc" value="${s.discount||0}" min="0" max="100"/></div>
+        <div class="form-group"><label>Xizmat haqi (%)</label>
+          <input type="number" id="tsm-sc2" value="${s.service_charge||0}" min="0" max="30"/></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>To'lov usuli</label>
+          <select id="tsm-method"><option value="cash">💵 Naqd</option>
+            <option value="card">💳 Plastik</option><option value="mixed">🔀 Aralash</option></select>
+        </div>
+        <div class="form-group"><label>Summa</label>
+          <input type="number" id="tsm-amount" value="${s.grand_total||0}"/></div>
+      </div>`;
+    footer.innerHTML = `
+      <button class="btn-secondary" onclick="applyDiscount(${sid})">Chegirma</button>
+      <button class="btn-secondary" onclick="closeTSM()">Yopish</button>
+      <button class="btn-primary" onclick="closeSession(${sid},${t.id})" style="background:linear-gradient(135deg,#004400,#006600);border-color:#00aa00;">
+        ✓ To'lovni qabul qilish
+      </button>`;
+  }
+  modal.style.display = 'flex';
+}
+
+async function openTable(tableId) {
+  const sc = parseFloat(document.getElementById('tsm-sc').value) || 0;
+  await fetch(`${API}/api/session/open`, {
+    method:'POST', headers:H(),
+    body: JSON.stringify({table_id: tableId, service_charge: sc})
+  });
+  closeTSM(); showToast('Stol ochildi'); loadTables();
+}
+
+async function applyDiscount(sid) {
+  const disc = parseFloat(document.getElementById('tsm-disc').value)||0;
+  const sc   = parseFloat(document.getElementById('tsm-sc2').value)||0;
+  await fetch(`${API}/api/session/${sid}/discount`, {
+    method:'PUT', headers:H(), body:JSON.stringify({discount:disc, service_charge:sc})
+  });
+  showToast('Yangilandi'); openTableSession(tablesData.find(t=>t.current_session_id===sid)?.id);
+}
+
+async function closeSession(sid, tableId) {
+  const amount = parseInt(document.getElementById('tsm-amount').value)||0;
+  const method = document.getElementById('tsm-method').value;
+  await fetch(`${API}/api/session/${sid}/close`, {
+    method:'POST', headers:H(),
+    body:JSON.stringify({payments:[{amount, method}]})
+  });
+  closeTSM(); showToast('Sessiya yopildi ✓'); loadTables();
+}
+
+function closeTSM() { document.getElementById('tableSessionModal').style.display='none'; }
+
+function showTableModal() {
+  editingTableId = null;
+  document.getElementById('tem-title').textContent = 'Stol qo\'shish';
+  document.getElementById('tem-id').value='';
+  document.getElementById('tem-num').value='';
+  document.getElementById('tem-name').value='';
+  document.getElementById('tem-cap').value='4';
+  document.getElementById('tableEditModal').style.display='flex';
+}
+function editTable(t) {
+  editingTableId = t.id;
+  document.getElementById('tem-title').textContent = 'Stolni tahrirlash';
+  document.getElementById('tem-id').value=t.id;
+  document.getElementById('tem-num').value=t.number;
+  document.getElementById('tem-name').value=t.name||'';
+  document.getElementById('tem-cap').value=t.capacity||4;
+  document.getElementById('tableEditModal').style.display='flex';
+}
+function closeTEM() { document.getElementById('tableEditModal').style.display='none'; }
+async function saveTable() {
+  const data = {
+    number:   parseInt(document.getElementById('tem-num').value),
+    name:     document.getElementById('tem-name').value,
+    capacity: parseInt(document.getElementById('tem-cap').value)||4,
+  };
+  if (!data.number) { showToast('Stol raqamini kiriting!',true); return; }
+  if (editingTableId) {
+    await fetch(`${API}/api/tables/${editingTableId}`,{method:'PUT',headers:H(),body:JSON.stringify(data)});
+  } else {
+    await fetch(`${API}/api/tables`,{method:'POST',headers:H(),body:JSON.stringify(data)});
+  }
+  closeTEM(); showToast('Saqlandi'); loadTables();
+}
+async function deleteTable(id) {
+  if (!confirm('Stolni o\'chirishni tasdiqlaysizmi?')) return;
+  await fetch(`${API}/api/tables/${id}`,{method:'DELETE',headers:H()});
+  showToast('O\'chirildi'); loadTables();
+}
+
+// QR KOD
+function showQR(tableId) {
+  const t = tablesData.find(x=>x.id===tableId);
+  if (!t) return;
+  currentQRTable = t;
+  const token = t.token || '';
+  const url   = token
+    ? `${SITE_URL}/?table=${t.number}&token=${token}`
+    : `${SITE_URL}/?table=${t.number}`;
+  document.getElementById('qr-title').textContent = `Stol #${t.number} QR`;
+  document.getElementById('qr-url').textContent   = url;
+  const canvas = document.getElementById('qr-canvas');
+  canvas.innerHTML = '';
+  // QR kutubxonasiz — oddiy SVG QR ko'rsatish (URL link sifatida)
+  canvas.innerHTML = `<div style="background:#fff;padding:8px;display:inline-block;">
+    <a href="${url}" target="_blank" style="display:block;">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}"
+           width="200" height="200" alt="QR" style="display:block;" id="qr-img"/>
+    </a>
+  </div>`;
+  document.getElementById('qrModal').style.display='flex';
+}
+function downloadQR() {
+  const img = document.getElementById('qr-img');
+  if (!img) return;
+  const a = document.createElement('a');
+  a.href     = img.src;
+  a.download = `stol-${currentQRTable?.number||'qr'}.png`;
+  a.click();
+}
+
+// ===== XODIMLAR =====
+let editingStaffId = null;
+
+async function loadStaff() {
+  const res = await fetch(`${API}/api/staff`, { headers: H() });
+  const list = await res.json();
+  const roleNames = {waiter:'Ofitsiant',cook:'Oshpaz',cashier:'Kassir',manager:'Menejer',cleaner:'Tozalovchi'};
+  const tbody = document.getElementById('staff-body');
+  tbody.innerHTML = list.length ? list.map(s=>`<tr>
+    <td style="color:var(--cyan)">#${s.id}</td>
+    <td style="font-weight:600">${s.name}</td>
+    <td><span style="background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:3px;font-size:0.75rem;">${roleNames[s.role]||s.role}</span></td>
+    <td style="color:#aaa">${s.phone||'—'}</td>
+    <td style="color:var(--gold)">${s.salary_amount ? priceFmt(s.salary_amount) + (s.salary_type==='hourly'?'/soat':s.salary_type==='percent'?'%':'') : '—'}</td>
+    <td>${s.active?'<span style="color:var(--cyan)">Aktiv</span>':'<span style="color:#666">Nofaol</span>'}</td>
+    <td>
+      <button class="act-btn" onclick='editStaff(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" onclick="deleteStaffMember(${s.id})">✕</button>
+    </td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="7">Xodimlar yo\'q</td></tr>';
+}
+
+async function loadAttendance() {
+  const wrap = document.getElementById('attendance-wrap');
+  const res  = await fetch(`${API}/api/attendance?date=${new Date().toISOString().slice(0,10)}`, {headers:H()});
+  const list = await res.json();
+  const tbody = document.getElementById('att-body');
+  const fmt   = dt => dt ? new Date(dt).toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'}) : '—';
+  tbody.innerHTML = list.length ? list.map(a=>`<tr>
+    <td style="font-weight:600">${a.staff_name||'—'}</td>
+    <td style="color:var(--cyan)">${fmt(a.check_in)}</td>
+    <td style="color:${a.check_out?'#ff9800':'rgba(255,255,255,0.3)'}">${fmt(a.check_out)}</td>
+    <td style="color:var(--gold)">${a.hours_worked ? a.hours_worked + ' soat' : '—'}</td>
+  </tr>`).join('') : '<tr class="empty-row"><td colspan="4">Bugun hech kim kelmagan</td></tr>';
+  wrap.style.display = 'block';
+}
+
+function showStaffModal() {
+  editingStaffId = null;
+  document.getElementById('staff-modal-title').textContent = 'Xodim qo\'shish';
+  ['staff-id','staff-name','staff-pin','staff-phone','staff-salary'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('staff-role').value='waiter';
+  document.getElementById('staff-salary-type').value='monthly';
+  document.getElementById('staffModal').style.display='flex';
+}
+function editStaff(s) {
+  editingStaffId = s.id;
+  document.getElementById('staff-modal-title').textContent = 'Xodimni tahrirlash';
+  document.getElementById('staff-id').value=s.id;
+  document.getElementById('staff-name').value=s.name;
+  document.getElementById('staff-role').value=s.role;
+  document.getElementById('staff-phone').value=s.phone||'';
+  document.getElementById('staff-salary-type').value=s.salary_type||'monthly';
+  document.getElementById('staff-salary').value=s.salary_amount||'';
+  document.getElementById('staff-pin').value='';
+  document.getElementById('staffModal').style.display='flex';
+}
+function closeStaffModal() { document.getElementById('staffModal').style.display='none'; }
+async function saveStaff() {
+  const data = {
+    name:        document.getElementById('staff-name').value.trim(),
+    role:        document.getElementById('staff-role').value,
+    pin:         document.getElementById('staff-pin').value,
+    phone:       document.getElementById('staff-phone').value,
+    salary_type: document.getElementById('staff-salary-type').value,
+    salary_amount: parseInt(document.getElementById('staff-salary').value)||0,
+    active: 1,
+  };
+  if (!data.name) { showToast('Ism kiriting!',true); return; }
+  if (!editingStaffId && !data.pin) { showToast('PIN kiriting!',true); return; }
+  if (editingStaffId) {
+    await fetch(`${API}/api/staff/${editingStaffId}`,{method:'PUT',headers:H(),body:JSON.stringify(data)});
+  } else {
+    await fetch(`${API}/api/staff`,{method:'POST',headers:H(),body:JSON.stringify(data)});
+  }
+  closeStaffModal(); showToast('Saqlandi'); loadStaff();
+}
+async function deleteStaffMember(id) {
+  if (!confirm('Xodimni o\'chirishni tasdiqlaysizmi?')) return;
+  await fetch(`${API}/api/staff/${id}`,{method:'DELETE',headers:H()});
+  showToast('O\'chirildi'); loadStaff();
+}
 
 // ===== GALEREYA ADMIN =====
 async function loadGalleryAdmin() {

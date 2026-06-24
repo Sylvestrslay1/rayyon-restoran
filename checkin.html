@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Xodimlar — Rayyon</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#030810;--cyan:#00d4ff;--gold:#c8a96e;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:#fff;font-family:'Rajdhani',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.logo{font-family:'Cinzel',serif;font-size:2rem;font-weight:700;letter-spacing:6px;margin-bottom:8px;text-align:center;}
+.logo .ray{color:var(--cyan);}.logo .yon{color:var(--gold);}
+.sub{color:rgba(255,255,255,0.3);letter-spacing:4px;font-size:0.75rem;margin-bottom:32px;text-align:center;}
+.clock{color:var(--gold);font-size:2rem;font-weight:700;letter-spacing:3px;margin-bottom:4px;font-family:'Cinzel',serif;text-align:center;}
+.date-str{color:rgba(255,255,255,0.3);font-size:0.75rem;letter-spacing:2px;margin-bottom:32px;text-align:center;}
+.card{background:rgba(255,255,255,0.03);border:1px solid rgba(0,212,255,0.15);
+  border-radius:16px;padding:40px 48px;width:360px;text-align:center;
+  box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+.card h2{font-size:0.85rem;letter-spacing:4px;color:rgba(255,255,255,0.4);margin-bottom:28px;}
+.pin-display{display:flex;justify-content:center;gap:14px;margin-bottom:32px;}
+.pin-dot{width:14px;height:14px;border-radius:50%;
+  border:2px solid rgba(0,212,255,0.25);background:transparent;transition:all 0.2s;}
+.pin-dot.filled{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px rgba(0,212,255,0.5);}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.key{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px;color:#fff;font-size:1.5rem;font-weight:600;
+  padding:18px;cursor:pointer;transition:all 0.15s;font-family:'Rajdhani',sans-serif;}
+.key:hover{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);}
+.key:active{transform:scale(0.94);}
+.key.del{color:rgba(255,255,255,0.45);font-size:1.1rem;}
+.key.enter{background:linear-gradient(135deg,rgba(0,100,170,0.5),rgba(0,180,220,0.3));
+  color:var(--cyan);border-color:rgba(0,212,255,0.35);}
+.result{margin-top:24px;padding:16px;border-radius:10px;font-size:0.95rem;
+  font-weight:700;letter-spacing:1px;display:none;text-align:center;line-height:1.6;}
+.result.checkin{background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);color:#00e676;}
+.result.checkout{background:rgba(255,152,0,0.1);border:1px solid rgba(255,152,0,0.3);color:#ff9800;}
+.result.error{background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);color:#ff4444;}
+</style>
+</head>
+<body>
+<div class="logo"><span class="ray">RAY</span><span class="yon">YON</span></div>
+<div class="sub">XODIMLAR TIZIMI</div>
+<div class="clock" id="clock">00:00</div>
+<div class="date-str" id="dateStr"></div>
+<div class="card">
+  <h2>PIN KIRITING</h2>
+  <div class="pin-display">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="keypad">
+    <button class="key" onclick="addPin('1')">1</button>
+    <button class="key" onclick="addPin('2')">2</button>
+    <button class="key" onclick="addPin('3')">3</button>
+    <button class="key" onclick="addPin('4')">4</button>
+    <button class="key" onclick="addPin('5')">5</button>
+    <button class="key" onclick="addPin('6')">6</button>
+    <button class="key" onclick="addPin('7')">7</button>
+    <button class="key" onclick="addPin('8')">8</button>
+    <button class="key" onclick="addPin('9')">9</button>
+    <button class="key del" onclick="delPin()">&#9003;</button>
+    <button class="key" onclick="addPin('0')">0</button>
+    <button class="key enter" onclick="submitPin()">&#10003;</button>
+  </div>
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+let pin = '';
+function updateDots() {
+  for (let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled', i<pin.length);
+}
+function addPin(d) {
+  if (pin.length >= 4) return;
+  pin += d; updateDots();
+  if (pin.length === 4) setTimeout(submitPin, 300);
+}
+function delPin() { pin = pin.slice(0,-1); updateDots(); }
+async function submitPin() {
+  if (pin.length < 4) return;
+  const res  = await fetch('/api/staff/checkin', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin})
+  });
+  const data = await res.json();
+  const el   = document.getElementById('result');
+  el.style.display = 'block';
+  if (data.ok) {
+    el.className = data.action === 'checkin' ? 'result checkin' : 'result checkout';
+    el.innerHTML = data.action === 'checkin'
+      ? 'Xush kelibsiz!<br><strong>' + data.name + '</strong><br><small>' + data.role + '</small>'
+      : 'Xayr!<br><strong>' + data.name + '</strong><br><small>' + data.hours + ' soat ishladi</small>';
+  } else {
+    el.className = 'result error';
+    el.innerHTML = "PIN noto'g'ri!";
+  }
+  pin = ''; updateDots();
+  setTimeout(() => { el.style.display='none'; }, 3000);
+}
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    [now.getHours(),now.getMinutes()].map(n=>String(n).padStart(2,'0')).join(':');
+  document.getElementById('dateStr').textContent =
+    now.toLocaleDateString('uz-UZ',{weekday:'long',year:'numeric',month:'long',day:'numeric'}).toUpperCase();
+}
+setInterval(tick, 1000); tick();
+</script>
+</body>
+</html>

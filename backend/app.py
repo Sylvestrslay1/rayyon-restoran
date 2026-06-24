@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
-import os, time, urllib.request, urllib.parse, json
+import os, time, urllib.request, urllib.parse, json, secrets, hashlib
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -331,6 +331,361 @@ def get_stats():
         "reservations_today": val(today_sql),
         "menu_count": val("SELECT COUNT(*) FROM menu WHERE available=1"),
     }
+    conn.close()
+    return jsonify(result)
+
+
+# ===== STOLLAR =====
+@app.route("/api/tables", methods=["GET"])
+def get_tables():
+    conn = get_conn()
+    cur  = db_exec(conn, """
+        SELECT t.*, s.opened_at, s.total_amount, s.token, s.waiter_name
+        FROM tables t
+        LEFT JOIN sessions s ON t.current_session_id = s.id
+        ORDER BY t.number
+    """)
+    tables = rows_to_list(cur)
+    conn.close()
+    # Har bir stol uchun ochiq vaqtni hisoblash
+    for tbl in tables:
+        if tbl.get("opened_at"):
+            import datetime
+            opened = tbl["opened_at"]
+            if isinstance(opened, str):
+                try: opened = datetime.datetime.fromisoformat(opened.replace("Z",""))
+                except: opened = None
+            if opened:
+                diff = datetime.datetime.utcnow() - opened.replace(tzinfo=None)
+                tbl["minutes_open"] = int(diff.total_seconds() // 60)
+    return jsonify(tables)
+
+@app.route("/api/tables", methods=["POST"])
+def add_table():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "INSERT INTO tables (number, name, capacity) VALUES (?,?,?)",
+        (d.get("number"), d.get("name", f"Stol {d.get('number')}"), d.get("capacity", 4)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/tables/<int:tid>", methods=["PUT"])
+def update_table(tid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE tables SET number=?, name=?, capacity=? WHERE id=?",
+        (d.get("number"), d.get("name"), d.get("capacity", 4), tid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/tables/<int:tid>", methods=["DELETE"])
+def delete_table(tid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM tables WHERE id=?", (tid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+# ===== SESSIYALAR =====
+@app.route("/api/session/open", methods=["POST"])
+def open_session():
+    """Stol ochish — kassir yoki ofitsiant tomonidan"""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    table_id = d.get("table_id")
+    conn = get_conn()
+    # Stol mavjudligini tekshirish
+    cur = db_exec(conn, "SELECT * FROM tables WHERE id=?", (table_id,))
+    tbl = rows_to_list(cur)
+    if not tbl: conn.close(); return jsonify({"error": "Stol topilmadi"}), 404
+    tbl = tbl[0]
+    if tbl["status"] != "free" and tbl.get("current_session_id"):
+        conn.close()
+        return jsonify({"error": "Stol band", "session_id": tbl["current_session_id"]}), 409
+    # Noyob token yaratish
+    token = secrets.token_urlsafe(12)
+    db_exec(conn, """INSERT INTO sessions (table_id, table_number, token, waiter_id, waiter_name, service_charge)
+        VALUES (?,?,?,?,?,?)""",
+        (table_id, tbl["number"], token, d.get("waiter_id"), d.get("waiter_name",""), d.get("service_charge", 0)))
+    # session id olish
+    cur2 = db_exec(conn, "SELECT id FROM sessions WHERE token=?", (token,))
+    row  = cur2.fetchone()
+    sid  = row[0] if USE_PG else row["id"]
+    db_exec(conn, "UPDATE tables SET status='occupied', current_session_id=? WHERE id=?", (sid, table_id))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "token": token, "session_id": sid, "table_number": tbl["number"]})
+
+@app.route("/api/session/validate", methods=["GET"])
+def validate_session():
+    """QR token tekshirish"""
+    token = request.args.get("token")
+    if not token: return jsonify({"valid": False}), 400
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM sessions WHERE token=? AND status='active'", (token,))
+    rows = rows_to_list(cur)
+    conn.close()
+    if not rows: return jsonify({"valid": False, "error": "Token eskirgan yoki noto'g'ri"}), 404
+    s = rows[0]
+    return jsonify({"valid": True, "table_number": s["table_number"], "session_id": s["id"]})
+
+@app.route("/api/session/<int:sid>", methods=["GET"])
+def get_session(sid):
+    """Sessiya ma'lumotlari va barcha buyurtmalar"""
+    token = request.headers.get("X-Session-Token","")
+    conn  = get_conn()
+    cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
+    rows  = rows_to_list(cur)
+    if not rows: conn.close(); return jsonify({"error": "Topilmadi"}), 404
+    s = rows[0]
+    # Token yoki admin tekshirish
+    if s["token"] != token and not check_auth():
+        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+    cur2 = db_exec(conn, "SELECT * FROM order_items WHERE session_id=? ORDER BY created_at", (sid,))
+    items = rows_to_list(cur2)
+    cur3  = db_exec(conn, "SELECT * FROM payments WHERE session_id=?", (sid,))
+    payments = rows_to_list(cur3)
+    conn.close()
+    total = sum(i["total_price"] for i in items if i["status"] != "cancelled")
+    sc    = total * s.get("service_charge", 0) / 100
+    disc  = total * s.get("discount", 0) / 100
+    return jsonify({**s, "items": items, "payments": payments,
+                    "subtotal": total, "service_charge_amount": int(sc),
+                    "discount_amount": int(disc), "grand_total": int(total + sc - disc)})
+
+@app.route("/api/session/<int:sid>/order", methods=["POST"])
+def add_order_item(sid):
+    """Sessiyaga buyurtma qo'shish"""
+    token = request.headers.get("X-Session-Token","")
+    conn  = get_conn()
+    cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
+    rows  = rows_to_list(cur)
+    if not rows: conn.close(); return jsonify({"error": "Sessiya topilmadi yoki yopilgan"}), 404
+    s = rows[0]
+    if s["token"] != token and not check_auth():
+        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+    items = request.json.get("items", [])
+    if not items: conn.close(); return jsonify({"error": "Buyurtma bo'sh"}), 400
+    for item in items:
+        total = item.get("price",0) * item.get("quantity",1)
+        db_exec(conn, """INSERT INTO order_items
+            (session_id, table_number, menu_item_id, item_name, item_emoji, item_price, quantity,
+             total_price, comment, course, category, waiter_id, waiter_name)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (sid, s["table_number"], item.get("menu_item_id"), item.get("name"),
+             item.get("emoji","🍽"), item.get("price",0), item.get("quantity",1),
+             total, item.get("comment",""), item.get("course",1),
+             item.get("category",""), item.get("waiter_id"), item.get("waiter_name","")))
+    conn.commit()
+    # Umumiy summani yangilash
+    cur2 = db_exec(conn, "SELECT SUM(total_price) FROM order_items WHERE session_id=? AND status!='cancelled'", (sid,))
+    row  = cur2.fetchone()
+    total_sum = (row[0] or 0)
+    db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (total_sum, sid))
+    conn.commit(); conn.close()
+    # Telegram xabarnomasi
+    names = ", ".join(f"{i.get('name')} x{i.get('quantity',1)}" for i in items)
+    tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
+    return jsonify({"ok": True})
+
+@app.route("/api/session/<int:sid>/item/<int:iid>/status", methods=["PUT"])
+def update_item_status(sid, iid):
+    """Buyurtma item statusini o'zgartirish (oshxona/ofitsiant)"""
+    d    = request.json or {}
+    status = d.get("status")
+    valid  = ["pending","cooking","ready","served","cancelled"]
+    if status not in valid: return jsonify({"error": "Noto'g'ri status"}), 400
+    # Cancel uchun admin token kerak
+    if status == "cancelled" and not check_auth():
+        return jsonify({"error": "Bekor qilish uchun admin ruxsati kerak"}), 403
+    conn = get_conn()
+    db_exec(conn, "UPDATE order_items SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?",
+        (status, iid, sid))
+    # Agar tayyor bo'lsa → Telegram ga xabar
+    if status == "ready":
+        cur = db_exec(conn, "SELECT item_name, table_number FROM order_items WHERE id=?", (iid,))
+        row = rows_to_list(cur)
+        if row:
+            tg_send(f"✅ <b>Stol #{row[0]['table_number']} — Tayyor!</b>\n🍽 {row[0]['item_name']}\nOfitsiant olib keling!")
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/session/<int:sid>/bill", methods=["POST"])
+def request_bill(sid):
+    """Mijoz hisob so'radi"""
+    token = request.headers.get("X-Session-Token","")
+    conn  = get_conn()
+    cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
+    rows  = rows_to_list(cur)
+    if not rows: conn.close(); return jsonify({"error": "Sessiya topilmadi"}), 404
+    s = rows[0]
+    if s["token"] != token and not check_auth():
+        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+    db_exec(conn, "UPDATE tables SET status='bill_requested' WHERE number=?", (s["table_number"],))
+    conn.commit(); conn.close()
+    tg_send(f"🧾 <b>Stol #{s['table_number']} — Hisob so'radi!</b>\nJami: {s.get('total_amount',0):,} so'm")
+    return jsonify({"ok": True})
+
+@app.route("/api/session/<int:sid>/close", methods=["POST"])
+def close_session(sid):
+    """Sessiyani yopish va to'lovni qayd etish"""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d    = request.json or {}
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
+    rows = rows_to_list(cur)
+    if not rows: conn.close(); return jsonify({"error": "Topilmadi"}), 404
+    s = rows[0]
+    # To'lovlarni qayd etish
+    payments = d.get("payments", [])
+    for p in payments:
+        db_exec(conn, "INSERT INTO payments (session_id, table_number, amount, method, notes) VALUES (?,?,?,?,?)",
+            (sid, s["table_number"], p.get("amount",0), p.get("method","cash"), p.get("notes","")))
+    # Sessiyani yopish
+    db_exec(conn, "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP WHERE id=?", (sid,))
+    db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/session/<int:sid>/discount", methods=["PUT"])
+def set_discount(sid):
+    """Chegirma yoki xizmat haqi o'rnatish"""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
+        (d.get("discount",0), d.get("service_charge",0), sid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+# ===== OSHXONA (KDS) =====
+@app.route("/api/kitchen", methods=["GET"])
+def kitchen_orders():
+    """Oshxona ekrani uchun — faqat pending va cooking itemlar"""
+    conn = get_conn()
+    category = request.args.get("category")
+    if category:
+        cur = db_exec(conn, """SELECT oi.*, s.table_number
+            FROM order_items oi JOIN sessions s ON oi.session_id=s.id
+            WHERE oi.status IN ('pending','cooking') AND oi.category=?
+            ORDER BY oi.course, oi.created_at""", (category,))
+    else:
+        cur = db_exec(conn, """SELECT oi.*, s.table_number as tnum
+            FROM order_items oi JOIN sessions s ON oi.session_id=s.id
+            WHERE oi.status IN ('pending','cooking')
+            ORDER BY oi.course, oi.created_at""")
+    items = rows_to_list(cur)
+    conn.close()
+    # Stol bo'yicha guruhlash
+    grouped = {}
+    for item in items:
+        tbl = str(item.get("table_number") or item.get("tnum") or "?")
+        if tbl not in grouped:
+            grouped[tbl] = {"table": tbl, "session_id": item["session_id"], "items": []}
+        grouped[tbl]["items"].append(item)
+    return jsonify(list(grouped.values()))
+
+@app.route("/api/kitchen/ready", methods=["GET"])
+def kitchen_ready():
+    """Tayyor bo'lgan buyurtmalar — ofitsiant olishi kerak"""
+    conn = get_conn()
+    cur  = db_exec(conn, """SELECT oi.* FROM order_items oi
+        WHERE oi.status='ready' ORDER BY oi.updated_at""")
+    items = rows_to_list(cur)
+    conn.close()
+    return jsonify(items)
+
+
+# ===== XODIMLAR =====
+@app.route("/api/staff", methods=["GET"])
+def get_staff():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT id,name,role,phone,salary_type,salary_amount,active FROM staff ORDER BY name")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+@app.route("/api/staff", methods=["POST"])
+def add_staff():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    pin_hash = hashlib.sha256(str(d.get("pin","0000")).encode()).hexdigest()[:8] if d.get("pin") else None
+    conn = get_conn()
+    db_exec(conn, "INSERT INTO staff (name,role,pin,phone,salary_type,salary_amount) VALUES (?,?,?,?,?,?)",
+        (d.get("name"), d.get("role"), pin_hash, d.get("phone"), d.get("salary_type","monthly"), d.get("salary_amount",0)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/staff/<int:sid>", methods=["PUT"])
+def update_staff(sid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    if d.get("pin"):
+        pin_hash = hashlib.sha256(str(d["pin"]).encode()).hexdigest()[:8]
+        db_exec(conn, "UPDATE staff SET name=?,role=?,pin=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
+            (d.get("name"),d.get("role"),pin_hash,d.get("phone"),d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
+    else:
+        db_exec(conn, "UPDATE staff SET name=?,role=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
+            (d.get("name"),d.get("role"),d.get("phone"),d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/staff/<int:sid>", methods=["DELETE"])
+def delete_staff(sid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "UPDATE staff SET active=0 WHERE id=?", (sid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/staff/checkin", methods=["POST"])
+def staff_checkin():
+    """PIN bilan kirish"""
+    d = request.json or {}
+    pin_hash = hashlib.sha256(str(d.get("pin","")).encode()).hexdigest()[:8]
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM staff WHERE pin=? AND active=1", (pin_hash,))
+    rows = rows_to_list(cur)
+    if not rows: conn.close(); return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
+    staff = rows[0]
+    import datetime
+    today = datetime.date.today().isoformat()
+    # Bugun allaqachon kirganmi?
+    cur2 = db_exec(conn, "SELECT * FROM attendance WHERE staff_id=? AND date=? AND check_out IS NULL", (staff["id"], today))
+    existing = rows_to_list(cur2)
+    if existing:
+        # Check-out
+        att = existing[0]
+        check_in = att["check_in"]
+        if isinstance(check_in, str):
+            check_in = datetime.datetime.fromisoformat(check_in)
+        hours = (datetime.datetime.utcnow() - check_in.replace(tzinfo=None)).total_seconds() / 3600
+        db_exec(conn, "UPDATE attendance SET check_out=CURRENT_TIMESTAMP, hours_worked=? WHERE id=?",
+            (round(hours,2), att["id"]))
+        conn.commit(); conn.close()
+        return jsonify({"ok": True, "action": "checkout", "name": staff["name"], "hours": round(hours,2)})
+    else:
+        # Check-in
+        db_exec(conn, "INSERT INTO attendance (staff_id, staff_name, check_in, date) VALUES (?,?,CURRENT_TIMESTAMP,?)",
+            (staff["id"], staff["name"], today))
+        conn.commit(); conn.close()
+        return jsonify({"ok": True, "action": "checkin", "name": staff["name"], "role": staff["role"]})
+
+@app.route("/api/attendance", methods=["GET"])
+def get_attendance():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    date = request.args.get("date")
+    conn = get_conn()
+    if date:
+        cur = db_exec(conn, "SELECT * FROM attendance WHERE date=? ORDER BY check_in DESC", (date,))
+    else:
+        cur = db_exec(conn, "SELECT * FROM attendance ORDER BY check_in DESC")
+    result = rows_to_list(cur)
     conn.close()
     return jsonify(result)
 

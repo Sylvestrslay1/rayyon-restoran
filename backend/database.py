@@ -172,6 +172,209 @@ def init_db():
             )
         """)
 
+    # ===== RMS CORE JADVALLAR =====
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tables (
+                id SERIAL PRIMARY KEY,
+                number INTEGER NOT NULL UNIQUE,
+                name TEXT,
+                capacity INTEGER DEFAULT 4,
+                status TEXT DEFAULT 'free',
+                current_session_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id SERIAL PRIMARY KEY,
+                table_id INTEGER NOT NULL,
+                table_number INTEGER,
+                token TEXT UNIQUE NOT NULL,
+                waiter_id INTEGER,
+                waiter_name TEXT,
+                status TEXT DEFAULT 'active',
+                service_charge REAL DEFAULT 0,
+                discount REAL DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                session_id INTEGER NOT NULL,
+                table_number INTEGER,
+                menu_item_id INTEGER,
+                item_name TEXT NOT NULL,
+                item_emoji TEXT DEFAULT '🍽',
+                item_price INTEGER NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                total_price INTEGER NOT NULL,
+                status TEXT DEFAULT 'pending',
+                comment TEXT,
+                course INTEGER DEFAULT 1,
+                category TEXT,
+                waiter_id INTEGER,
+                waiter_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                id SERIAL PRIMARY KEY,
+                session_id INTEGER NOT NULL,
+                table_number INTEGER,
+                amount INTEGER NOT NULL,
+                method TEXT DEFAULT 'cash',
+                notes TEXT,
+                cashier_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS staff (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                pin TEXT,
+                phone TEXT,
+                salary_type TEXT DEFAULT 'monthly',
+                salary_amount INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                staff_id INTEGER NOT NULL,
+                staff_name TEXT,
+                check_in TIMESTAMP,
+                check_out TIMESTAMP,
+                date TEXT,
+                hours_worked REAL,
+                notes TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS recipes (
+                id SERIAL PRIMARY KEY,
+                menu_item_id INTEGER NOT NULL,
+                inventory_id INTEGER NOT NULL,
+                quantity REAL NOT NULL,
+                unit TEXT DEFAULT 'g'
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                number INTEGER NOT NULL UNIQUE,
+                name TEXT,
+                capacity INTEGER DEFAULT 4,
+                status TEXT DEFAULT 'free',
+                current_session_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_id INTEGER NOT NULL,
+                table_number INTEGER,
+                token TEXT UNIQUE NOT NULL,
+                waiter_id INTEGER,
+                waiter_name TEXT,
+                status TEXT DEFAULT 'active',
+                service_charge REAL DEFAULT 0,
+                discount REAL DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                table_number INTEGER,
+                menu_item_id INTEGER,
+                item_name TEXT NOT NULL,
+                item_emoji TEXT DEFAULT '🍽',
+                item_price INTEGER NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                total_price INTEGER NOT NULL,
+                status TEXT DEFAULT 'pending',
+                comment TEXT,
+                course INTEGER DEFAULT 1,
+                category TEXT,
+                waiter_id INTEGER,
+                waiter_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                table_number INTEGER,
+                amount INTEGER NOT NULL,
+                method TEXT DEFAULT 'cash',
+                notes TEXT,
+                cashier_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS staff (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                pin TEXT,
+                phone TEXT,
+                salary_type TEXT DEFAULT 'monthly',
+                salary_amount INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                staff_id INTEGER NOT NULL,
+                staff_name TEXT,
+                check_in TIMESTAMP,
+                check_out TIMESTAMP,
+                date TEXT,
+                hours_worked REAL,
+                notes TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS recipes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                menu_item_id INTEGER NOT NULL,
+                inventory_id INTEGER NOT NULL,
+                quantity REAL NOT NULL,
+                unit TEXT DEFAULT 'g'
+            )
+        """)
+
+    # Default stollar
+    cur.execute("SELECT COUNT(*) FROM tables")
+    if (cur.fetchone()[0]) == 0:
+        for i in range(1, 11):
+            if USE_PG:
+                cur.execute("INSERT INTO tables (number, name, capacity) VALUES (%s,%s,%s)", (i, f"Stol {i}", 4))
+            else:
+                cur.execute("INSERT INTO tables (number, name, capacity) VALUES (?,?,?)", (i, f"Stol {i}", 4))
+
     # Galereya va aksiyalar jadvallari
     if USE_PG:
         cur.execute("""

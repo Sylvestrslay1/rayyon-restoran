@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Oshxona Ekrani — Rayyon KDS</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root { --bg:#0a0f1a; --card:#111827; --cyan:#00d4ff; --gold:#c8a96e; --green:#00e676; --orange:#ff9800; --red:#ff4444; --muted:rgba(255,255,255,0.45); }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:#fff;font-family:'Inter',sans-serif;min-height:100vh;}
+header{background:#060d1a;border-bottom:1px solid rgba(0,212,255,0.2);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.kds-logo{font-family:'Rajdhani',sans-serif;font-size:1.3rem;font-weight:700;letter-spacing:3px;color:var(--cyan);}
+.kds-logo span{color:var(--gold);}
+.kds-time{font-size:1.5rem;font-weight:600;color:var(--gold);letter-spacing:2px;font-family:'Rajdhani',sans-serif;}
+.filters{display:flex;gap:8px;}
+.filter-btn{background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.2);color:var(--muted);
+  font-family:'Rajdhani',sans-serif;font-size:0.8rem;font-weight:700;letter-spacing:2px;
+  padding:6px 16px;border-radius:3px;cursor:pointer;transition:all 0.2s;}
+.filter-btn.active,.filter-btn:hover{background:rgba(0,212,255,0.15);color:var(--cyan);border-color:var(--cyan);}
+.stats-bar{display:flex;gap:20px;padding:12px 24px;background:rgba(0,0,0,0.3);border-bottom:1px solid rgba(255,255,255,0.05);}
+.stat-pill{display:flex;align-items:center;gap:8px;font-size:0.82rem;}
+.stat-pill .dot{width:10px;height:10px;border-radius:50%;}
+.dot-pending{background:var(--orange);}
+.dot-cooking{background:var(--cyan);}
+.dot-ready{background:var(--green);}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;padding:20px;}
+.table-card{background:var(--card);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);}
+.table-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(200,169,110,0.05));
+  border-bottom:1px solid rgba(0,212,255,0.15);}
+.table-num{font-family:'Rajdhani',sans-serif;font-size:1.3rem;font-weight:700;color:var(--cyan);letter-spacing:2px;}
+.table-timer{font-size:0.75rem;color:var(--muted);}
+.order-list{padding:12px 0;}
+.order-item{padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:12px;}
+.order-item:last-child{border-bottom:none;}
+.item-emoji{font-size:1.6rem;flex-shrink:0;}
+.item-info{flex:1;}
+.item-name{font-weight:600;font-size:0.95rem;}
+.item-qty{font-size:0.8rem;color:var(--gold);font-weight:700;}
+.item-comment{font-size:0.75rem;color:var(--orange);margin-top:2px;font-style:italic;}
+.item-timer{font-size:0.72rem;color:var(--muted);margin-top:2px;}
+.status-badge{font-size:0.7rem;font-weight:700;letter-spacing:1px;padding:3px 10px;border-radius:20px;flex-shrink:0;}
+.badge-pending{background:rgba(255,152,0,0.2);color:var(--orange);}
+.badge-cooking{background:rgba(0,212,255,0.15);color:var(--cyan);}
+.item-actions{display:flex;gap:6px;flex-shrink:0;}
+.action-btn{border:none;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:700;padding:5px 12px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;transition:all 0.2s;}
+.btn-cook{background:rgba(0,212,255,0.15);color:var(--cyan);border:1px solid rgba(0,212,255,0.3);}
+.btn-cook:hover{background:rgba(0,212,255,0.25);}
+.btn-ready{background:rgba(0,230,118,0.15);color:var(--green);border:1px solid rgba(0,230,118,0.3);}
+.btn-ready:hover{background:rgba(0,230,118,0.25);}
+.empty{text-align:center;padding:80px 20px;color:var(--muted);}
+.empty-icon{font-size:4rem;margin-bottom:16px;}
+.ready-section{background:rgba(0,230,118,0.05);border-top:2px solid var(--green);margin-top:0;}
+.ready-card{background:rgba(0,230,118,0.08);border-color:rgba(0,230,118,0.3);}
+.ready-header{background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border-bottom-color:rgba(0,230,118,0.2);}
+.ready-num{color:var(--green);}
+.btn-served{background:rgba(0,230,118,0.2);color:var(--green);border:1px solid rgba(0,230,118,0.4);}
+.btn-served:hover{background:rgba(0,230,118,0.35);}
+.new-order-toast{position:fixed;top:80px;right:20px;background:var(--cyan);color:#000;
+  font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:2px;
+  padding:14px 24px;border-radius:8px;font-size:1rem;
+  transform:translateX(120%);transition:transform 0.3s;z-index:999;}
+.new-order-toast.show{transform:translateX(0);}
+audio{display:none;}
+</style>
+</head>
+<body>
+<audio id="orderSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" type="audio/wav"/>
+</audio>
+
+<div class="new-order-toast" id="newOrderToast">🔔 YANGI BUYURTMA!</div>
+
+<header>
+  <div class="kds-logo">RAYYON <span>OSHXONA</span></div>
+  <div class="filters">
+    <button class="filter-btn active" data-cat="">Hammasi</button>
+    <button class="filter-btn" data-cat="milliy">Milliy</button>
+    <button class="filter-btn" data-cat="grill">Grill</button>
+    <button class="filter-btn" data-cat="salad">Salat</button>
+    <button class="filter-btn" data-cat="drink">Ichimlik</button>
+  </div>
+  <div class="kds-time" id="clock">00:00:00</div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat-pill"><div class="dot dot-pending"></div><span id="cnt-pending">0 kutmoqda</span></div>
+  <div class="stat-pill"><div class="dot dot-cooking"></div><span id="cnt-cooking">0 tayyorlanmoqda</span></div>
+  <div class="stat-pill"><div class="dot dot-ready"></div><span id="cnt-ready">0 tayyor</span></div>
+  <div style="margin-left:auto;color:var(--muted);font-size:0.8rem;" id="lastUpdate"></div>
+</div>
+
+<div id="mainGrid" class="grid"></div>
+
+<script>
+const API = '';
+let currentCat = '';
+let prevIds = new Set();
+let firstLoad = true;
+
+// Soat
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    [now.getHours(),now.getMinutes(),now.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Filtrlar
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    currentCat = this.dataset.cat;
+    load();
+  });
+});
+
+function timeSince(dateStr) {
+  if (!dateStr) return '';
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diff < 60) return diff + ' soniya';
+  if (diff < 3600) return Math.floor(diff/60) + ' daqiqa';
+  return Math.floor(diff/3600) + ' soat';
+}
+
+function timerColor(dateStr) {
+  if (!dateStr) return '';
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (diff > 20) return 'color:var(--red)';
+  if (diff > 10) return 'color:var(--orange)';
+  return 'color:var(--muted)';
+}
+
+async function updateItemStatus(sessionId, itemId, status) {
+  await fetch(`${API}/api/session/${sessionId}/item/${itemId}/status`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+  load();
+}
+
+async function load() {
+  const url = currentCat ? `${API}/api/kitchen?category=${currentCat}` : `${API}/api/kitchen`;
+  const [kitchenRes, readyRes] = await Promise.all([
+    fetch(url), fetch(`${API}/api/kitchen/ready`)
+  ]);
+  const groups = await kitchenRes.json();
+  const ready  = await readyRes.json();
+
+  // Yangi buyurtma signali
+  const allIds = new Set();
+  groups.forEach(g => g.items.forEach(i => allIds.add(i.id)));
+  if (!firstLoad) {
+    for (const id of allIds) {
+      if (!prevIds.has(id)) { showNewOrderToast(); break; }
+    }
+  }
+  prevIds = allIds;
+  firstLoad = false;
+
+  // Statistika
+  let pending=0, cooking=0;
+  groups.forEach(g => g.items.forEach(i => {
+    if (i.status==='pending') pending++;
+    else if (i.status==='cooking') cooking++;
+  }));
+  document.getElementById('cnt-pending').textContent = pending + ' kutmoqda';
+  document.getElementById('cnt-cooking').textContent = cooking + ' tayyorlanmoqda';
+  document.getElementById('cnt-ready').textContent   = ready.length + ' tayyor';
+  document.getElementById('lastUpdate').textContent  = 'Yangilandi: ' + new Date().toLocaleTimeString('uz-UZ');
+
+  const grid = document.getElementById('mainGrid');
+  if (!groups.length && !ready.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">✅</div><p>Barcha buyurtmalar bajarildi!</p></div>';
+    return;
+  }
+
+  let html = '';
+
+  // Aktiv buyurtmalar
+  groups.forEach(g => {
+    html += `<div class="table-card">
+      <div class="table-header">
+        <div class="table-num">STOL #${g.table}</div>
+        <div class="table-timer">Sessiya: ${g.items.length} taom</div>
+      </div>
+      <div class="order-list">`;
+    g.items.forEach(item => {
+      const isCooking = item.status === 'cooking';
+      html += `<div class="order-item">
+        <div class="item-emoji">${item.item_emoji||'🍽'}</div>
+        <div class="item-info">
+          <div class="item-name">${item.item_name}</div>
+          <div class="item-qty">× ${item.quantity}</div>
+          ${item.comment ? `<div class="item-comment">💬 ${item.comment}</div>` : ''}
+          <div class="item-timer" style="${timerColor(item.created_at)}">⏱ ${timeSince(item.created_at)}</div>
+        </div>
+        <span class="status-badge ${isCooking?'badge-cooking':'badge-pending'}">${isCooking?'PISHMOQDA':'KUTMOQDA'}</span>
+        <div class="item-actions">
+          ${!isCooking ? `<button class="action-btn btn-cook" onclick="updateItemStatus(${g.session_id},${item.id},'cooking')">▶ Boshlash</button>` : ''}
+          <button class="action-btn btn-ready" onclick="updateItemStatus(${g.session_id},${item.id},'ready')">✓ Tayyor</button>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+
+  // Tayyor buyurtmalar
+  if (ready.length) {
+    const readyByTable = {};
+    ready.forEach(i => {
+      const t = i.table_number || '?';
+      if (!readyByTable[t]) readyByTable[t] = {items:[], sid: i.session_id};
+      readyByTable[t].items.push(i);
+    });
+    Object.entries(readyByTable).forEach(([tbl, data]) => {
+      html += `<div class="table-card ready-card">
+        <div class="table-header ready-header">
+          <div class="table-num ready-num">✅ STOL #${tbl} — TAYYOR</div>
+          <div class="table-timer" style="color:var(--green)">Ofitsiant olib ketsin!</div>
+        </div>
+        <div class="order-list">`;
+      data.items.forEach(item => {
+        html += `<div class="order-item">
+          <div class="item-emoji">${item.item_emoji||'🍽'}</div>
+          <div class="item-info">
+            <div class="item-name">${item.item_name}</div>
+            <div class="item-qty">× ${item.quantity}</div>
+          </div>
+          <button class="action-btn btn-served" onclick="updateItemStatus(${data.sid},${item.id},'served')">Berildi ✓</button>
+        </div>`;
+      });
+      html += '</div></div>';
+    });
+  }
+
+  grid.innerHTML = html;
+}
+
+function showNewOrderToast() {
+  const t = document.getElementById('newOrderToast');
+  t.classList.add('show');
+  // Ovoz
+  try { new Audio('data:audio/wav;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGDgYtAgAyN+QWaAAihwMWm4G8QQRDiMcCBcH3Cc+CDv/7xA4Tvh9Rz/y8QADBwMWgQAZG/ILNAARQ4GLTcDeIIIhxGOBAuD7hOfBB3/94gcJ3w+o5/5eIAIAAAVwWgQAVQ2ORaIQwEMAJiDg95G4nQL7mQVWI6GwRcfsZAcsKkJvxgxEjzFUgfHoSQ9Qq7KNwqHwuB13MA4a1q/DmBrHgPcmjiGoh//EwC5nGPEmS4RcfkVKOhJf+WOgoxJclFz3kgn//dBA+ya1GhurNn8zb//9NNutNuhz31f////9vt///z+IdAEAAAK4LQIAKobHItEIYCGAExBwe8jcToF9zIKrEdDYIuP2MgOWFSE34wYiR5iqQPj0JIeoVdlG4VD4XA67mAcNa1fhzA1jwHuTRxDUQ//iYBczjHiTJcIuPyKlHQkv/LHQUYkuSi57yQT//uggfZNajQ3Vmz+Zt//+mm3Wm3Q576v////+32///5/EOgAAADVghQAAAAA//uQZAUAB1WI0PZugAAAAAoQwAAAEk3nRd2qAAAAACiDgAAAAAAAWaaaHAAAAANisgAAAAAElZAmAAAAAAXNsc2MAAAAAOkMSxgAAAAAAAnhY//8= AAA==').play(); } catch(e) {}
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// 5 soniyada bir yangilash
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>
