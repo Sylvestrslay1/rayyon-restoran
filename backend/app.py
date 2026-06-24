@@ -520,14 +520,24 @@ def update_item_status(sid, iid):
     if status == "cancelled" and not check_auth():
         return jsonify({"error": "Bekor qilish uchun admin ruxsati kerak"}), 403
     conn = get_conn()
+    # Oldingi item ma'lumotlarini olib qo'yish (deduct uchun)
+    pre_cur = db_exec(conn, "SELECT * FROM order_items WHERE id=? AND session_id=?", (iid, sid))
+    pre_rows = rows_to_list(pre_cur)
     db_exec(conn, "UPDATE order_items SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?",
         (status, iid, sid))
+    # Agar tayyorlash boshlansa → ombordan chiqarish
+    if status == "cooking" and pre_rows:
+        item = pre_rows[0]
+        if item["status"] == "pending":  # faqat bir marta chiqarish
+            try:
+                deduct_inventory(item["menu_item_id"], item["quantity"], conn,
+                    f"Stol #{item['table_number']} — {item['item_name']}")
+            except Exception:
+                pass  # ombor moduli bo'lmasa ham ishlaydi
     # Agar tayyor bo'lsa → Telegram ga xabar
-    if status == "ready":
-        cur = db_exec(conn, "SELECT item_name, table_number FROM order_items WHERE id=?", (iid,))
-        row = rows_to_list(cur)
-        if row:
-            tg_send(f"✅ <b>Stol #{row[0]['table_number']} — Tayyor!</b>\n🍽 {row[0]['item_name']}\nOfitsiant olib keling!")
+    if status == "ready" and pre_rows:
+        item = pre_rows[0]
+        tg_send(f"✅ <b>Stol #{item['table_number']} — Tayyor!</b>\n🍽 {item['item_name']}\nOfitsiant olib keling!")
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -974,6 +984,207 @@ def get_inventory_log():
     result = rows_to_list(cur)
     conn.close()
     return jsonify(result)
+
+
+# ===== RETSEPTLAR =====
+@app.route("/api/recipes", methods=["GET"])
+def get_recipes():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    menu_item_id = request.args.get("menu_item_id")
+    conn = get_conn()
+    if menu_item_id:
+        cur = db_exec(conn, """
+            SELECT r.*, i.name AS inv_name, i.unit AS inv_unit, i.quantity AS inv_qty
+            FROM recipes r
+            JOIN inventory i ON r.inventory_id = i.id
+            WHERE r.menu_item_id=?
+        """, (menu_item_id,))
+    else:
+        cur = db_exec(conn, """
+            SELECT r.*, i.name AS inv_name, i.unit AS inv_unit, i.quantity AS inv_qty,
+                   m.name AS menu_name
+            FROM recipes r
+            JOIN inventory i ON r.inventory_id = i.id
+            JOIN menu m ON r.menu_item_id = m.id
+            ORDER BY m.name
+        """)
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/recipes", methods=["POST"])
+def add_recipe():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    # Eski o'chirib yangi kiritish (upsert)
+    db_exec(conn, "DELETE FROM recipes WHERE menu_item_id=? AND inventory_id=?",
+            (d.get("menu_item_id"), d.get("inventory_id")))
+    db_exec(conn,
+        "INSERT INTO recipes (menu_item_id, inventory_id, quantity, unit) VALUES (?,?,?,?)",
+        (d.get("menu_item_id"), d.get("inventory_id"), d.get("quantity", 0), d.get("unit", "g"))
+    )
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/recipes/<int:rid>", methods=["DELETE"])
+def delete_recipe(rid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM recipes WHERE id=?", (rid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+def deduct_inventory(menu_item_id, quantity, conn, note=""):
+    """Retsept bo'yicha ombordan avtomatik hisobdan chiqarish"""
+    cur = db_exec(conn, "SELECT * FROM recipes WHERE menu_item_id=?", (menu_item_id,))
+    recipes = rows_to_list(cur)
+    for r in recipes:
+        needed = r["quantity"] * quantity
+        # Unit konvertatsiya: g→kg, ml→l
+        if r["unit"] == "g":
+            needed_kg = needed / 1000.0
+            db_exec(conn,
+                "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='kg'",
+                (needed_kg, r["inventory_id"]))
+            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='g'",
+                (needed, r["inventory_id"]))
+        elif r["unit"] == "ml":
+            needed_l = needed / 1000.0
+            db_exec(conn,
+                "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='l'",
+                (needed_l, r["inventory_id"]))
+            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='ml'",
+                (needed, r["inventory_id"]))
+        else:
+            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=?",
+                (needed, r["inventory_id"]))
+        # Log
+        inv_cur = db_exec(conn, "SELECT name FROM inventory WHERE id=?", (r["inventory_id"],))
+        inv_row = inv_cur.fetchone()
+        inv_name = inv_row[0] if USE_PG else (inv_row["name"] if inv_row else "?")
+        db_exec(conn,
+            "INSERT INTO inventory_log (item_id, item_name, type, quantity, note) VALUES (?,?,?,?,?)",
+            (r["inventory_id"], inv_name, "expense", needed, note or "Auto chiqim"))
+
+
+# ===== STOP-LIST =====
+@app.route("/api/menu/<int:item_id>/stoplist", methods=["PUT"])
+def toggle_stoplist(item_id):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE menu SET available=? WHERE id=?",
+            (0 if d.get("stop") else 1, item_id))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+
+# ===== KENGAYTIRILGAN HISOBOTLAR =====
+@app.route("/api/analytics/summary", methods=["GET"])
+def analytics_summary():
+    """Sessiyalar asosida to'liq hisobot"""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    period = request.args.get("period", "daily")
+    conn   = get_conn()
+
+    if USE_PG:
+        if period == "daily":
+            df = "date_trunc('day', closed_at) = CURRENT_DATE"
+            df2 = "date_trunc('day', created_at) = CURRENT_DATE"
+            df3 = "date = CURRENT_DATE::text"
+        elif period == "weekly":
+            df = "closed_at >= date_trunc('week', CURRENT_DATE)"
+            df2 = "created_at >= date_trunc('week', CURRENT_DATE)"
+            df3 = "date >= date_trunc('week', CURRENT_DATE)::text"
+        else:
+            df = "date_trunc('month', closed_at) = date_trunc('month', CURRENT_DATE)"
+            df2 = "date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)"
+            df3 = "to_char(date::date,'YYYY-MM') = to_char(CURRENT_DATE,'YYYY-MM')"
+        chart_sql = f"""
+            SELECT date_trunc('day', closed_at)::date::text AS day, COALESCE(SUM(total_amount),0) AS rev
+            FROM sessions WHERE status='closed' AND {df}
+            GROUP BY 1 ORDER BY 1
+        """
+        top_sql = f"""
+            SELECT item_name, item_emoji, SUM(quantity) AS cnt, SUM(total_price) AS rev
+            FROM order_items WHERE status!='cancelled' AND {df2}
+            GROUP BY item_name, item_emoji ORDER BY cnt DESC LIMIT 10
+        """
+        staff_sql = f"""
+            SELECT waiter_name, COUNT(DISTINCT session_id) AS sessions, SUM(total_price) AS rev
+            FROM order_items WHERE waiter_name IS NOT NULL AND waiter_name!='' AND {df2}
+            GROUP BY waiter_name ORDER BY rev DESC
+        """
+    else:
+        if period == "daily":
+            df = "date(closed_at,'localtime') = date('now','localtime')"
+            df2 = "date(created_at,'localtime') = date('now','localtime')"
+            df3 = "date = date('now','localtime')"
+        elif period == "weekly":
+            df = "date(closed_at,'localtime') >= date('now','localtime','-6 days')"
+            df2 = "date(created_at,'localtime') >= date('now','localtime','-6 days')"
+            df3 = "date >= date('now','localtime','-6 days')"
+        else:
+            df = "strftime('%Y-%m',closed_at) = strftime('%Y-%m','now','localtime')"
+            df2 = "strftime('%Y-%m',created_at) = strftime('%Y-%m','now','localtime')"
+            df3 = "strftime('%Y-%m',date) = strftime('%Y-%m','now','localtime')"
+        chart_sql = f"""
+            SELECT date(closed_at,'localtime') AS day, COALESCE(SUM(total_amount),0) AS rev
+            FROM sessions WHERE status='closed' AND {df}
+            GROUP BY 1 ORDER BY 1
+        """
+        top_sql = f"""
+            SELECT item_name, item_emoji, SUM(quantity) AS cnt, SUM(total_price) AS rev
+            FROM order_items WHERE status!='cancelled' AND {df2}
+            GROUP BY item_name, item_emoji ORDER BY cnt DESC LIMIT 10
+        """
+        staff_sql = f"""
+            SELECT waiter_name, COUNT(DISTINCT session_id) AS sessions, SUM(total_price) AS rev
+            FROM order_items WHERE waiter_name IS NOT NULL AND waiter_name!='' AND {df2}
+            GROUP BY waiter_name ORDER BY rev DESC
+        """
+
+    def val(sql):
+        c = conn.cursor(); c.execute(sql); r = c.fetchone(); return r[0] if r and r[0] else 0
+
+    revenue     = val(f"SELECT COALESCE(SUM(total_amount),0) FROM sessions WHERE status='closed' AND {df}")
+    sessions_ct = val(f"SELECT COUNT(*) FROM sessions WHERE status='closed' AND {df}")
+    items_ct    = val(f"SELECT COALESCE(SUM(quantity),0) FROM order_items WHERE status!='cancelled' AND {df2}")
+    expenses    = val(f"SELECT COALESCE(SUM(amount),0) FROM expenses WHERE {df3}")
+    avg_bill    = (revenue / sessions_ct) if sessions_ct else 0
+
+    # Payment usullari
+    pay_cur = conn.cursor()
+    pay_cur.execute(f"SELECT method, COALESCE(SUM(amount),0) FROM payments WHERE {df2.replace('created_at','created_at')} GROUP BY method")
+    pay_by_method = [{"method": r[0], "total": r[1]} for r in pay_cur.fetchall()]
+
+    # Grafik
+    c2 = conn.cursor(); c2.execute(chart_sql)
+    chart = [{"day": r[0], "rev": r[1]} for r in c2.fetchall()]
+
+    # Top taomlar
+    c3 = conn.cursor(); c3.execute(top_sql)
+    top_items = [{"name": r[0], "emoji": r[1], "count": r[2], "revenue": r[3]} for r in c3.fetchall()]
+
+    # Ofitsiantlar samaradorligi
+    c4 = conn.cursor(); c4.execute(staff_sql)
+    staff_perf = [{"name": r[0], "sessions": r[1], "revenue": r[2]} for r in c4.fetchall()]
+
+    # Ombor kam qolganlar
+    c5 = conn.cursor(); c5.execute("SELECT name, quantity, min_quantity, unit FROM inventory WHERE quantity <= min_quantity ORDER BY quantity")
+    low_stock = [{"name": r[0], "quantity": r[1], "min_quantity": r[2], "unit": r[3]} for r in c5.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "revenue": revenue, "expenses": expenses, "profit": revenue - expenses,
+        "sessions": sessions_ct, "items_sold": items_ct, "avg_bill": round(avg_bill),
+        "chart": chart, "top_items": top_items, "staff_perf": staff_perf,
+        "low_stock": low_stock, "pay_by_method": pay_by_method
+    })
 
 
 # ===== STATIC FILES =====

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Panel — Rayyon</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     .lang-switcher {
       display: flex; gap: 2px; padding: 8px 10px 6px;
@@ -446,7 +447,13 @@
       <span class="n-icon">🎁</span> <span>Aksiyalar</span>
     </button>
     <button class="nav-item" data-page="accounting">
-      <span class="n-icon">₿</span> <span data-i18n="adm.accounting">Buxgalteriya</span>
+      <span class="n-icon">₿</span> <span>Buxgalteriya</span>
+    </button>
+    <button class="nav-item" data-page="recipes">
+      <span class="n-icon">📋</span> <span>Retseptlar</span>
+    </button>
+    <button class="nav-item" data-page="analytics">
+      <span class="n-icon">📊</span> <span>Tahlil</span>
     </button>
     <button class="nav-item" data-page="settings">
       <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
@@ -849,6 +856,103 @@
     </div>
   </div>
 
+  <!-- RETSEPTLAR PAGE -->
+  <div class="page" id="page-recipes">
+    <div class="page-header">
+      <h2>Retseptlar & Ombor hisobdan chiqarish</h2>
+      <p>Har bir menyu elementiga mahsulot sarfini belgilang — buyurtma "tayyorlanmoqda" bo'lganda avtomatik chiqariladi</p>
+    </div>
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;">
+      <!-- Chap: menyu tanlash -->
+      <div class="table-wrap" style="padding:18px;">
+        <h3 style="color:var(--cyan);font-size:0.82rem;letter-spacing:2px;margin-bottom:12px;">MENYU ELEMENTI</h3>
+        <input type="text" id="rec-search" placeholder="Qidirish..." oninput="filterRecipeMenu()" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-family:inherit;margin-bottom:10px;" />
+        <div id="recMenuList" style="max-height:480px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+      <!-- O'ng: retsept -->
+      <div>
+        <div class="table-wrap" style="padding:18px;margin-bottom:16px;" id="recipeEditBox">
+          <div style="color:var(--muted);text-align:center;padding:40px;">Chap tarafdan menyu elementini tanlang</div>
+        </div>
+        <div class="table-wrap">
+          <div style="padding:14px 18px 0;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="color:var(--gold);font-size:0.82rem;letter-spacing:2px;">BARCHA RETSEPTLAR</h3>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>Menyu</th><th>Mahsulot</th><th>Miqdor</th><th>Birlik</th><th>Amal</th></tr></thead>
+            <tbody id="allRecipeBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAHLIL PAGE -->
+  <div class="page" id="page-analytics">
+    <div class="page-header">
+      <h2>Tahlil & Hisobotlar</h2>
+      <p>Sessiyalar asosida real daromad, top taomlar, xodimlar samaradorligi</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+      <button class="acc-period-btn active" data-period="daily" onclick="setAnalyticsPeriod('daily',this)">Bugun</button>
+      <button class="acc-period-btn" data-period="weekly" onclick="setAnalyticsPeriod('weekly',this)">Hafta</button>
+      <button class="acc-period-btn" data-period="monthly" onclick="setAnalyticsPeriod('monthly',this)">Oy</button>
+    </div>
+
+    <!-- KPI kartalar -->
+    <div class="stats-grid" style="margin-bottom:20px;">
+      <div class="stat-card"><div class="stat-value" id="an-revenue">—</div><div class="stat-label">💰 Daromad</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-profit">—</div><div class="stat-label">📈 Foyda</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-sessions">—</div><div class="stat-label">🪑 Stol soni</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-avg">—</div><div class="stat-label">🧾 O'rtacha hisob</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-items">—</div><div class="stat-label">🍽 Sotilgan taom</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <!-- Kunlik grafik -->
+      <div class="table-wrap" style="padding:18px;">
+        <h3 style="color:var(--cyan);font-size:0.82rem;letter-spacing:2px;margin-bottom:14px;">KUNLIK DAROMAD</h3>
+        <canvas id="revenueChart" height="180"></canvas>
+      </div>
+      <!-- To'lov usullari -->
+      <div class="table-wrap" style="padding:18px;">
+        <h3 style="color:var(--gold);font-size:0.82rem;letter-spacing:2px;margin-bottom:14px;">TO'LOV USULLARI</h3>
+        <canvas id="payChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <!-- Top taomlar -->
+      <div class="table-wrap">
+        <div style="padding:14px 18px 0;"><h3 style="color:var(--cyan);font-size:0.82rem;letter-spacing:2px;">TOP 10 TAOM</h3></div>
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Taom</th><th>Soni</th><th>Daromad</th></tr></thead>
+          <tbody id="an-top-items"></tbody>
+        </table>
+      </div>
+      <!-- Ofitsiantlar -->
+      <div class="table-wrap">
+        <div style="padding:14px 18px 0;"><h3 style="color:var(--gold);font-size:0.82rem;letter-spacing:2px;">OFITSIANTLAR SAMARADORLIGI</h3></div>
+        <table class="data-table">
+          <thead><tr><th>Ism</th><th>Sessiyalar</th><th>Daromad</th></tr></thead>
+          <tbody id="an-staff-perf"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Kam qolgan ombor -->
+    <div class="table-wrap" id="an-low-stock-wrap" style="display:none;">
+      <div style="padding:14px 18px 0;display:flex;align-items:center;gap:8px;">
+        <span style="color:var(--red);font-size:1rem;">⚠️</span>
+        <h3 style="color:var(--red);font-size:0.82rem;letter-spacing:2px;">KAM QOLGAN MAHSULOTLAR</h3>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Mahsulot</th><th>Qolgan</th><th>Minimal</th><th>Birlik</th></tr></thead>
+        <tbody id="an-low-stock"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="page" id="page-settings">
     <div class="page-header"><h2 data-i18n="adm.set.title">Sozlamalar</h2><p data-i18n="adm.set.sub">Restoran ma'lumotlari va xavfsizlik</p></div>
     <div class="table-wrap" style="padding:28px;">
@@ -986,6 +1090,8 @@ function loadPage(p) {
   else if (p==='gallery')    loadGalleryAdmin();
   else if (p==='promos')     loadPromosAdmin();
   else if (p==='accounting') loadAccounting();
+  else if (p==='recipes')   loadRecipesPage();
+  else if (p==='analytics') loadAnalytics();
 }
 
 // DASHBOARD
@@ -1843,6 +1949,203 @@ async function deleteInv(id) {
   await fetch(`${API}/api/inventory/${id}`, { method:'DELETE', headers:H() });
   showToast('O\'chirildi');
   loadAccounting();
+}
+
+// ===== RETSEPTLAR =====
+let recipeMenuItems = [];
+let selectedRecipeMenuItem = null;
+let allInventoryItems = [];
+
+async function loadRecipesPage() {
+  const [menuRes, invRes, recRes] = await Promise.all([
+    fetch(`${API}/api/menu`, { headers: H() }),
+    fetch(`${API}/api/inventory`, { headers: H() }),
+    fetch(`${API}/api/recipes`, { headers: H() })
+  ]);
+  recipeMenuItems = await menuRes.json();
+  allInventoryItems = await invRes.json();
+  const allRecipes = await recRes.json();
+  renderRecipeMenuList();
+  renderAllRecipes(allRecipes);
+}
+
+function filterRecipeMenu() {
+  const q = document.getElementById('rec-search').value.toLowerCase();
+  renderRecipeMenuList(q);
+}
+
+function renderRecipeMenuList(filter = '') {
+  const list = document.getElementById('recMenuList');
+  const items = filter ? recipeMenuItems.filter(m => m.name.toLowerCase().includes(filter)) : recipeMenuItems;
+  list.innerHTML = items.map(m => `
+    <div onclick="selectRecipeItem(${m.id})" style="padding:10px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:10px;
+      background:${selectedRecipeMenuItem===m.id?'rgba(0,212,255,0.12)':'rgba(255,255,255,0.03)'};
+      border:1px solid ${selectedRecipeMenuItem===m.id?'rgba(0,212,255,0.3)':'rgba(255,255,255,0.07)'};
+      transition:all 0.15s;">
+      <span style="font-size:1.4rem;">${m.emoji||'🍽'}</span>
+      <div><div style="font-weight:600;font-size:0.9rem;">${m.name}</div>
+        <div style="font-size:0.75rem;color:var(--muted);">${(m.price||0).toLocaleString()} so'm</div></div>
+    </div>`).join('');
+}
+
+async function selectRecipeItem(menuItemId) {
+  selectedRecipeMenuItem = menuItemId;
+  renderRecipeMenuList(document.getElementById('rec-search').value.toLowerCase());
+  const menuItem = recipeMenuItems.find(m => m.id === menuItemId);
+  const res = await fetch(`${API}/api/recipes?menu_item_id=${menuItemId}`, { headers: H() });
+  const recipes = await res.json();
+  const box = document.getElementById('recipeEditBox');
+  box.innerHTML = `
+    <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;margin-bottom:14px;">
+      ${menuItem.emoji||'🍽'} ${menuItem.name} — RETSEPT
+    </h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 100px 80px auto;gap:8px;align-items:end;margin-bottom:12px;">
+      <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Mahsulot</label>
+        <select id="rec-inv" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-family:inherit;">
+          ${allInventoryItems.map(i=>`<option value="${i.id}">${i.name} (${i.unit})</option>`).join('')}
+        </select>
+      </div>
+      <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Miqdor</label>
+        <input type="number" id="rec-qty" step="0.1" placeholder="100" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-family:inherit;" />
+      </div>
+      <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Birlik</label>
+        <select id="rec-unit" style="padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-family:inherit;width:100%;">
+          <option value="g">g</option><option value="kg">kg</option>
+          <option value="ml">ml</option><option value="l">l</option><option value="dona">dona</option>
+        </select>
+      </div>
+      <div style="padding-bottom:0;">
+        <button class="btn-primary" onclick="addRecipeRow(${menuItemId})" style="width:100%;height:38px;">+ Qo'sh</button>
+      </div>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Mahsulot</th><th>Miqdor</th><th>Birlik</th><th>Omborda</th><th>Amal</th></tr></thead>
+      <tbody>${recipes.map(r=>`
+        <tr>
+          <td>${r.inv_name}</td>
+          <td>${r.quantity}</td>
+          <td>${r.unit}</td>
+          <td style="color:${r.inv_qty<=0?'var(--red)':r.inv_qty<5?'var(--orange)':'var(--green)'};">${r.inv_qty} ${r.inv_unit}</td>
+          <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${menuItemId})">✕</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function addRecipeRow(menuItemId) {
+  const inv_id = document.getElementById('rec-inv').value;
+  const qty    = parseFloat(document.getElementById('rec-qty').value);
+  const unit   = document.getElementById('rec-unit').value;
+  if (!qty || qty <= 0) { toast('Miqdor kiriting'); return; }
+  await fetch(`${API}/api/recipes`, { method:'POST', headers:H(),
+    body: JSON.stringify({ menu_item_id: menuItemId, inventory_id: inv_id, quantity: qty, unit }) });
+  selectRecipeItem(menuItemId);
+  loadRecipesPage();
+}
+
+async function deleteRecipe(rid, menuItemId) {
+  await fetch(`${API}/api/recipes/${rid}`, { method:'DELETE', headers:H() });
+  selectRecipeItem(menuItemId);
+  loadRecipesPage();
+}
+
+function renderAllRecipes(recipes) {
+  const body = document.getElementById('allRecipeBody');
+  if (!recipes.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">Retseptlar yo\'q</td></tr>'; return; }
+  body.innerHTML = recipes.map(r=>`
+    <tr>
+      <td>${r.menu_name||'—'}</td>
+      <td>${r.inv_name}</td>
+      <td>${r.quantity}</td>
+      <td>${r.unit}</td>
+      <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${r.menu_item_id})">✕</button></td>
+    </tr>`).join('');
+}
+
+// ===== TAHLIL =====
+let analyticsPeriod = 'daily';
+let revenueChartInst = null;
+let payChartInst = null;
+
+function setAnalyticsPeriod(p, btn) {
+  analyticsPeriod = p;
+  document.querySelectorAll('#page-analytics .acc-period-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  loadAnalytics();
+}
+
+async function loadAnalytics() {
+  const res  = await fetch(`${API}/api/analytics/summary?period=${analyticsPeriod}`, { headers: H() });
+  const data = await res.json();
+  const fmt  = n => (n||0).toLocaleString() + ' so\'m';
+
+  document.getElementById('an-revenue').textContent  = fmt(data.revenue);
+  document.getElementById('an-profit').textContent   = fmt(data.profit);
+  document.getElementById('an-sessions').textContent = data.sessions || 0;
+  document.getElementById('an-avg').textContent      = fmt(data.avg_bill);
+  document.getElementById('an-items').textContent    = data.items_sold || 0;
+
+  // Kunlik grafik (Chart.js CDN kerak)
+  if (window.Chart) {
+    const ctx1 = document.getElementById('revenueChart').getContext('2d');
+    if (revenueChartInst) revenueChartInst.destroy();
+    revenueChartInst = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: (data.chart||[]).map(d => d.day ? d.day.slice(5) : ''),
+        datasets: [{ label: 'Daromad', data: (data.chart||[]).map(d => d.rev),
+          backgroundColor: 'rgba(0,212,255,0.35)', borderColor: '#00d4ff', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { ticks: { color:'#888' }, grid: { color:'rgba(255,255,255,0.05)' } },
+                  y: { ticks: { color:'#888' }, grid: { color:'rgba(255,255,255,0.05)' } } } }
+    });
+
+    const ctx2 = document.getElementById('payChart').getContext('2d');
+    if (payChartInst) payChartInst.destroy();
+    const payData = data.pay_by_method || [];
+    payChartInst = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: payData.map(p => p.method || 'Naqd'),
+        datasets: [{ data: payData.map(p => p.total),
+          backgroundColor: ['rgba(0,212,255,0.6)','rgba(200,169,110,0.6)','rgba(74,222,128,0.6)','rgba(251,191,36,0.6)'],
+          borderColor: ['#00d4ff','#c8a96e','#4ade80','#fbbf24'], borderWidth: 1 }]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { family:'Rajdhani' } } } } }
+    });
+  }
+
+  // Top taomlar
+  const topBody = document.getElementById('an-top-items');
+  topBody.innerHTML = (data.top_items||[]).map((it,i) => `
+    <tr>
+      <td style="color:var(--gold);font-weight:700;">${i+1}</td>
+      <td>${it.emoji||'🍽'} ${it.name}</td>
+      <td style="color:var(--cyan);">${it.count}</td>
+      <td>${(it.revenue||0).toLocaleString()} so'm</td>
+    </tr>`).join('') || '<tr class="empty-row"><td colspan="4">Ma\'lumot yo\'q</td></tr>';
+
+  // Ofitsiantlar
+  const staffBody = document.getElementById('an-staff-perf');
+  staffBody.innerHTML = (data.staff_perf||[]).map(s => `
+    <tr>
+      <td>${s.name}</td>
+      <td style="color:var(--cyan);">${s.sessions}</td>
+      <td>${(s.revenue||0).toLocaleString()} so'm</td>
+    </tr>`).join('') || '<tr class="empty-row"><td colspan="3">Ma\'lumot yo\'q</td></tr>';
+
+  // Kam ombor
+  const lowStock = data.low_stock || [];
+  const lowWrap  = document.getElementById('an-low-stock-wrap');
+  lowWrap.style.display = lowStock.length ? 'block' : 'none';
+  document.getElementById('an-low-stock').innerHTML = lowStock.map(it => `
+    <tr>
+      <td style="color:var(--red);">⚠ ${it.name}</td>
+      <td style="color:var(--orange);">${it.quantity}</td>
+      <td>${it.min_quantity}</td>
+      <td>${it.unit}</td>
+    </tr>`).join('');
 }
 
 // LOGOUT
