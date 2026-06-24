@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Ofitsiant — Rayyon</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#030810;--card:#0d1420;--cyan:#00d4ff;--gold:#c8a96e;--green:#00e676;--orange:#ff9800;--red:#ff4444;--muted:rgba(255,255,255,0.45);}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:#fff;font-family:'Inter',sans-serif;min-height:100vh;max-width:480px;margin:0 auto;}
+
+/* LOGIN */
+#loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.w-logo{font-family:'Cinzel',serif;font-size:1.8rem;font-weight:700;letter-spacing:5px;margin-bottom:6px;}
+.w-logo .r{color:var(--cyan);}.w-logo .y{color:var(--gold);}
+.w-sub{color:var(--muted);letter-spacing:4px;font-size:0.72rem;margin-bottom:40px;font-family:'Rajdhani',sans-serif;}
+.pin-card{background:rgba(255,255,255,0.03);border:1px solid rgba(0,212,255,0.15);border-radius:16px;padding:32px 28px;width:100%;}
+.pin-card h2{font-family:'Rajdhani',sans-serif;font-size:0.82rem;letter-spacing:4px;color:var(--muted);text-align:center;margin-bottom:24px;}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin-bottom:28px;}
+.pd{width:13px;height:13px;border-radius:50%;border:2px solid rgba(0,212,255,0.25);transition:all 0.2s;}
+.pd.on{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 8px rgba(0,212,255,0.5);}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.key{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;
+  color:#fff;font-size:1.4rem;font-weight:600;padding:16px;cursor:pointer;transition:all 0.15s;
+  font-family:'Rajdhani',sans-serif;}
+.key:active{transform:scale(0.93);background:rgba(0,212,255,0.15);}
+.key.del{color:var(--muted);font-size:1rem;}
+.key.ok{background:linear-gradient(135deg,rgba(0,100,170,0.6),rgba(0,180,220,0.4));color:var(--cyan);border-color:rgba(0,212,255,0.35);}
+.pin-err{color:var(--red);text-align:center;font-size:0.82rem;margin-top:16px;height:20px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;}
+
+/* MAIN APP */
+#app{display:none;flex-direction:column;min-height:100vh;}
+.w-header{background:#060d1a;border-bottom:1px solid rgba(0,212,255,0.15);
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.w-name{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:2px;font-size:0.9rem;}
+.w-name span{color:var(--cyan);}
+.w-logout{background:none;border:1px solid rgba(255,255,255,0.1);color:var(--muted);
+  padding:5px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:'Rajdhani',sans-serif;}
+
+/* TABS */
+.tabs{display:flex;background:#060d1a;border-bottom:1px solid rgba(255,255,255,0.06);}
+.tab{flex:1;padding:12px;text-align:center;cursor:pointer;font-family:'Rajdhani',sans-serif;
+  font-size:0.8rem;font-weight:700;letter-spacing:2px;color:var(--muted);transition:all 0.2s;position:relative;}
+.tab.active{color:var(--cyan);}
+.tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--cyan);}
+.tab-badge{background:var(--red);color:#fff;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+  margin-left:4px;font-weight:700;}
+
+/* VIEWS */
+.view{display:none;padding:16px;}
+.view.active{display:block;}
+
+/* STOLLAR */
+.table-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.t-card{border-radius:10px;padding:14px 10px;text-align:center;cursor:pointer;transition:all 0.2s;border:1px solid;}
+.t-card:active{transform:scale(0.96);}
+.t-free{background:rgba(0,230,118,0.07);border-color:rgba(0,230,118,0.25);}
+.t-occupied{background:rgba(255,152,0,0.07);border-color:rgba(255,152,0,0.25);}
+.t-bill{background:rgba(255,68,68,0.07);border-color:rgba(255,68,68,0.25);}
+.t-num{font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:1px;}
+.t-free .t-num{color:var(--green);}
+.t-occupied .t-num{color:var(--orange);}
+.t-bill .t-num{color:var(--red);}
+.t-info{font-size:0.7rem;color:var(--muted);margin-top:4px;}
+.t-sum{font-size:0.75rem;color:var(--gold);font-weight:600;margin-top:2px;}
+
+/* BUYURTMA OYNASI */
+.order-panel{position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:999;display:none;flex-direction:column;}
+.op-header{background:#060d1a;padding:14px 16px;border-bottom:1px solid rgba(0,212,255,0.15);
+  display:flex;align-items:center;justify-content:space-between;}
+.op-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1rem;letter-spacing:2px;color:var(--cyan);}
+.op-close{background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;}
+.op-body{flex:1;overflow-y:auto;padding:12px;}
+.menu-cats{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;}
+.mcat{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+  color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:0.75rem;font-weight:700;
+  letter-spacing:1px;padding:6px 14px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:all 0.2s;}
+.mcat.active{background:rgba(0,212,255,0.12);color:var(--cyan);border-color:rgba(0,212,255,0.3);}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.m-item{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+  border-radius:8px;padding:12px;cursor:pointer;transition:all 0.15s;}
+.m-item:active{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);}
+.m-emoji{font-size:1.8rem;margin-bottom:4px;}
+.m-name{font-size:0.82rem;font-weight:600;line-height:1.3;}
+.m-price{color:var(--gold);font-size:0.78rem;font-weight:700;margin-top:4px;}
+.m-unavail{opacity:0.35;pointer-events:none;}
+.cart-bar{background:#0d1a2a;border-top:1px solid rgba(0,212,255,0.2);padding:12px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.cart-info{font-family:'Rajdhani',sans-serif;font-size:0.85rem;color:var(--cyan);}
+.btn-submit{background:linear-gradient(135deg,#005577,#0099cc);border:none;color:#fff;
+  padding:12px 24px;border-radius:8px;font-family:'Rajdhani',sans-serif;font-size:0.9rem;
+  font-weight:700;letter-spacing:1px;cursor:pointer;flex-shrink:0;}
+
+/* CART DETAIL */
+.cart-item-row{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,0.05);}
+.ci-emoji{font-size:1.5rem;flex-shrink:0;}
+.ci-name{flex:1;font-size:0.88rem;font-weight:600;}
+.ci-price{color:var(--gold);font-size:0.82rem;}
+.ci-qty-ctrl{display:flex;align-items:center;gap:8px;}
+.qty-btn{background:rgba(255,255,255,0.08);border:none;color:#fff;width:26px;height:26px;
+  border-radius:50%;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;}
+
+/* TAYYOR BUYURTMALAR */
+.ready-item{background:rgba(0,230,118,0.07);border:1px solid rgba(0,230,118,0.2);
+  border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.ri-info{flex:1;}
+.ri-name{font-weight:600;}
+.ri-table{color:var(--green);font-size:0.82rem;margin-top:2px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;}
+.btn-served{background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.3);
+  color:var(--green);padding:8px 16px;border-radius:8px;cursor:pointer;font-family:'Rajdhani',sans-serif;
+  font-size:0.8rem;font-weight:700;}
+
+/* SESSIYA */
+.session-items{margin-bottom:12px;}
+.si-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+  border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.88rem;}
+.si-status{font-size:0.72rem;padding:2px 8px;border-radius:10px;}
+.ss-pending{background:rgba(255,152,0,0.15);color:var(--orange);}
+.ss-cooking{background:rgba(0,212,255,0.12);color:var(--cyan);}
+.ss-ready{background:rgba(0,230,118,0.12);color:var(--green);}
+.ss-served{background:rgba(255,255,255,0.06);color:var(--muted);}
+.total-row{display:flex;justify-content:space-between;font-weight:700;font-size:1rem;padding:12px 0;}
+.btn-bill{width:100%;background:rgba(255,152,0,0.12);border:1px solid rgba(255,152,0,0.3);
+  color:var(--orange);padding:14px;border-radius:10px;font-family:'Rajdhani',sans-serif;
+  font-size:0.95rem;font-weight:700;letter-spacing:2px;cursor:pointer;margin-top:8px;}
+.btn-add-more{width:100%;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);
+  color:var(--cyan);padding:12px;border-radius:10px;font-family:'Rajdhani',sans-serif;
+  font-size:0.88rem;font-weight:700;cursor:pointer;margin-top:8px;}
+
+/* TOAST */
+.w-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.4);color:var(--cyan);
+  padding:10px 24px;border-radius:8px;font-family:'Rajdhani',sans-serif;font-weight:700;
+  font-size:0.85rem;letter-spacing:1px;z-index:9999;transition:transform 0.3s;}
+.w-toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="w-logo"><span class="r">RAY</span><span class="y">YON</span></div>
+  <div class="w-sub">OFITSIANT PANELI</div>
+  <div class="pin-card">
+    <h2>PIN KIRITING</h2>
+    <div class="pin-dots">
+      <div class="pd" id="pd0"></div><div class="pd" id="pd1"></div>
+      <div class="pd" id="pd2"></div><div class="pd" id="pd3"></div>
+    </div>
+    <div class="keypad">
+      <button class="key" onclick="kp('1')">1</button><button class="key" onclick="kp('2')">2</button><button class="key" onclick="kp('3')">3</button>
+      <button class="key" onclick="kp('4')">4</button><button class="key" onclick="kp('5')">5</button><button class="key" onclick="kp('6')">6</button>
+      <button class="key" onclick="kp('7')">7</button><button class="key" onclick="kp('8')">8</button><button class="key" onclick="kp('9')">9</button>
+      <button class="key del" onclick="kpDel()">&#9003;</button><button class="key" onclick="kp('0')">0</button>
+      <button class="key ok" onclick="kpOk()">&#10003;</button>
+    </div>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="w-header">
+    <div class="w-name">OFITSIANT: <span id="wName">—</span></div>
+    <button class="w-logout" onclick="logout()">Chiqish ⊗</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="tables" onclick="switchTab('tables')">⊞ STOLLAR</div>
+    <div class="tab" data-tab="ready" onclick="switchTab('ready')">✅ TAYYOR <span class="tab-badge" id="readyBadge" style="display:none">0</span></div>
+    <div class="tab" data-tab="my" onclick="switchTab('my')">📋 MENING</div>
+  </div>
+
+  <!-- STOLLAR TAB -->
+  <div class="view active" id="view-tables">
+    <div id="tablesGrid" class="table-grid" style="margin-top:4px;"></div>
+  </div>
+
+  <!-- TAYYOR TAB -->
+  <div class="view" id="view-ready">
+    <div id="readyList" style="margin-top:4px;"></div>
+  </div>
+
+  <!-- MENING TAB -->
+  <div class="view" id="view-my">
+    <div id="myOrders" style="margin-top:4px;"></div>
+  </div>
+</div>
+
+<!-- BUYURTMA OYNASI -->
+<div class="order-panel" id="orderPanel">
+  <div class="op-header">
+    <div class="op-title" id="opTitle">STOL #1</div>
+    <button class="op-close" onclick="closeOrderPanel()">✕</button>
+  </div>
+  <!-- SESSION VIEW yoki MENU VIEW -->
+  <div id="opContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;"></div>
+  <div class="cart-bar" id="cartBar" style="display:none;">
+    <div class="cart-info" id="cartInfo">0 ta</div>
+    <button class="btn-submit" onclick="showCartReview()">Ko'rish ▶</button>
+  </div>
+</div>
+
+<div class="w-toast" id="wToast"></div>
+
+<script>
+const API = '';
+let waiter = null;
+let pin    = '';
+let waiterPin = '';
+let allMenuItems = [];
+let wCart  = [];
+let currentTable = null;
+let currentSession = null;
+let activeMenuCat  = 'all';
+
+// ===== PIN LOGIN =====
+function kp(d) {
+  if (pin.length>=4) return;
+  pin+=d; updDots();
+  if (pin.length===4) setTimeout(kpOk,300);
+}
+function kpDel() { pin=pin.slice(0,-1); updDots(); }
+function updDots() {
+  for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('on',i<pin.length);
+}
+async function kpOk() {
+  if (pin.length<4) return;
+  const res  = await fetch(API+'/api/staff/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  const data = await res.json();
+  if (data.ok) {
+    waiter = {name: data.name, role: data.role, action: data.action, hours: data.hours};
+    if (data.action==='checkin') waiterPin = pin;
+    document.getElementById('pinErr').textContent='';
+    if (data.action==='checkout') {
+      document.getElementById('pinErr').style.color='var(--orange)';
+      document.getElementById('pinErr').textContent = 'Xayr, '+data.name+'! '+data.hours+' soat.';
+      pin=''; updDots();
+      setTimeout(()=>document.getElementById('pinErr').textContent='',3000);
+    } else {
+      startApp();
+    }
+  } else {
+    document.getElementById('pinErr').textContent="PIN noto'g'ri!";
+    pin=''; updDots();
+  }
+}
+function startApp() {
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('wName').textContent=waiter.name;
+  loadMenu();
+  loadTables();
+  setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+}
+function logout() {
+  waiter=null; pin=''; waiterPin=''; updDots();
+  document.getElementById('app').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+// ===== TABS =====
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));
+  document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id==='view-'+t));
+  if (t==='ready') loadReady();
+  if (t==='my')    loadMyOrders();
+}
+
+// ===== STOLLAR =====
+let tablesData = [];
+async function loadTables() {
+  const res = await fetch(API+'/api/tables');
+  tablesData = await res.json();
+  const grid = document.getElementById('tablesGrid');
+  grid.innerHTML = tablesData.map(t=>{
+    const cls = t.status==='free'?'t-free':t.status==='bill_requested'?'t-bill':'t-occupied';
+    const statusTxt = t.status==='free'?"Bo'sh":t.status==='bill_requested'?'Hisob!':'Band';
+    return `<div class="t-card ${cls}" onclick="openTable(${t.id})">
+      <div class="t-num">#${t.number}</div>
+      <div class="t-info">${statusTxt}</div>
+      ${t.minutes_open?`<div class="t-info">⏱ ${t.minutes_open} daq</div>`:''}
+      ${t.total_amount?`<div class="t-sum">${Number(t.total_amount).toLocaleString()}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function openTable(tableId) {
+  currentTable = tablesData.find(t=>t.id===tableId);
+  if (!currentTable) return;
+  document.getElementById('opTitle').textContent = 'STOL #'+currentTable.number;
+  const panel = document.getElementById('orderPanel');
+  panel.style.display='flex';
+  wCart=[];
+  updateCartBar();
+
+  if (currentTable.status==='free') {
+    // Bo'sh stol — avval ochish kerak
+    showOpenTablePrompt();
+  } else {
+    // Band stol — sessiyani ko'rsat
+    await loadSessionView();
+  }
+}
+
+function showOpenTablePrompt() {
+  document.getElementById('cartBar').style.display='none';
+  document.getElementById('opContent').innerHTML = `
+    <div style="padding:32px 20px;text-align:center;">
+      <div style="font-size:3rem;margin-bottom:16px;">⊞</div>
+      <h3 style="font-family:'Rajdhani',sans-serif;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">STOL #${currentTable.number}</h3>
+      <p style="color:var(--muted);margin-bottom:24px;font-size:0.9rem;">Stol bo'sh. Buyurtma olish uchun ochish kerak.</p>
+      <button onclick="openTableSession()" style="background:linear-gradient(135deg,rgba(0,100,170,0.6),rgba(0,180,220,0.4));
+        border:1px solid rgba(0,212,255,0.35);color:var(--cyan);padding:14px 32px;border-radius:10px;
+        font-family:'Rajdhani',sans-serif;font-size:1rem;font-weight:700;letter-spacing:2px;cursor:pointer;display:block;width:100%;">
+        ▶ STOLNI OCHISH
+      </button>
+    </div>`;
+}
+
+async function openTableSession() {
+  const res  = await fetch(API+'/api/session/open',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})});
+  const data = await res.json();
+  if (data.ok) {
+    await loadTables();
+    currentTable = tablesData.find(t=>t.id===currentTable.id);
+    showMenuView();
+  } else if (data.token) {
+    // Allaqachon ochiq
+    await loadSessionView();
+  }
+}
+
+async function loadSessionView() {
+  document.getElementById('cartBar').style.display='none';
+  if (!currentTable.current_session_id) { showMenuView(); return; }
+  const sid = currentTable.current_session_id;
+  const res  = await fetch(API+'/api/session/'+sid, {headers:{'X-Admin-Token':localStorage.getItem('waiter_admin_token')||''}});
+  currentSession = await res.json();
+  const items = (currentSession.items||[]).filter(i=>i.status!=='cancelled');
+  const statusLabel = {pending:'Kutmoqda',cooking:'Pishmoqda',ready:'Tayyor✓',served:'Berildi',cancelled:'Bekor'};
+  const statusCls   = {pending:'ss-pending',cooking:'ss-cooking',ready:'ss-ready',served:'ss-served'};
+  document.getElementById('opContent').innerHTML = `
+    <div style="padding:16px;">
+      <div class="session-items">
+        ${items.length ? items.map(i=>`
+          <div class="si-row">
+            <span>${i.item_emoji||'🍽'} ${i.item_name} ×${i.quantity}</span>
+            <span style="display:flex;align-items:center;gap:8px;">
+              <span class="si-status ${statusCls[i.status]||''}">${statusLabel[i.status]||i.status}</span>
+              <span style="color:var(--gold);font-size:0.82rem;">${Number(i.total_price).toLocaleString()}</span>
+            </span>
+          </div>`).join('') : '<p style="color:var(--muted);text-align:center;padding:20px;">Hali buyurtma yo\'q</p>'}
+      </div>
+      <div class="total-row">
+        <span>Jami:</span><span style="color:var(--gold);">${Number(currentSession.grand_total||0).toLocaleString()} so'm</span>
+      </div>
+      <button class="btn-add-more" onclick="showMenuView()">+ Buyurtma qo'shish</button>
+      <button class="btn-bill" onclick="sendBillRequest()">🧾 Hisob so'rash</button>
+    </div>`;
+}
+
+async function sendBillRequest() {
+  if (!currentSession) return;
+  await fetch(API+'/api/session/'+currentSession.id+'/bill', {
+    method:'POST', headers:{'X-Session-Token':currentSession.token||'','X-Admin-Token':localStorage.getItem('waiter_admin_token')||''}
+  });
+  wToast('Kassirga signal yuborildi ✓');
+  closeOrderPanel(); loadTables();
+}
+
+// ===== MENYU =====
+async function loadMenu() {
+  const res = await fetch(API+'/api/menu');
+  allMenuItems = await res.json();
+}
+
+function showMenuView() {
+  wCart=[];
+  document.getElementById('cartBar').style.display='flex';
+  updateCartBar();
+  renderMenuView();
+}
+
+function renderMenuView(cat) {
+  activeMenuCat = cat || activeMenuCat;
+  const cats  = ['all','milliy','grill','salad','drink'];
+  const names = {all:'Hammasi',milliy:'Milliy',grill:'Grill',salad:'Salat',drink:'Ichimlik'};
+  const items = activeMenuCat==='all' ? allMenuItems : allMenuItems.filter(i=>i.category===activeMenuCat);
+  document.getElementById('opContent').innerHTML = `
+    <div style="padding:12px;">
+      <div class="menu-cats">
+        ${cats.map(c=>`<button class="mcat ${activeMenuCat===c?'active':''}" onclick="renderMenuView('${c}')">${names[c]}</button>`).join('')}
+      </div>
+      <div class="menu-grid">
+        ${items.map(item=>`
+          <div class="m-item ${item.available?'':'m-unavail'}" onclick="addToWCart(${item.id})">
+            <div class="m-emoji">${item.emoji||'🍽'}</div>
+            <div class="m-name">${item.name}</div>
+            <div class="m-price">${Number(item.price).toLocaleString()} so'm</div>
+            ${!item.available?'<div style="font-size:0.7rem;color:var(--red);margin-top:2px;">Mavjud emas</div>':''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function addToWCart(itemId) {
+  const item = allMenuItems.find(i=>i.id===itemId);
+  if (!item) return;
+  const ex = wCart.find(c=>c.item.id===itemId);
+  if (ex) ex.qty++;
+  else wCart.push({item, qty:1, comment:''});
+  updateCartBar();
+  wToast(item.name+' qo\'shildi ✓');
+}
+
+function updateCartBar() {
+  const count = wCart.reduce((s,c)=>s+c.qty,0);
+  const total = wCart.reduce((s,c)=>s+c.item.price*c.qty,0);
+  const bar   = document.getElementById('cartBar');
+  const info  = document.getElementById('cartInfo');
+  if (!bar) return;
+  if (count===0) {
+    info.textContent="Savatcha bo'sh";
+  } else {
+    info.innerHTML=`<b style="color:var(--cyan);">${count} ta</b> · ${Number(total).toLocaleString()} so'm`;
+  }
+}
+
+function showCartReview() {
+  if (!wCart.length) { wToast("Savatcha bo'sh!"); return; }
+  const total = wCart.reduce((s,c)=>s+c.item.price*c.qty,0);
+  document.getElementById('cartBar').style.display='none';
+  document.getElementById('opContent').innerHTML = `
+    <div style="padding:16px;">
+      <h3 style="font-family:'Rajdhani',sans-serif;color:var(--cyan);letter-spacing:2px;margin-bottom:16px;">SAVATCHA</h3>
+      ${wCart.map((c,i)=>`
+        <div class="cart-item-row">
+          <span class="ci-emoji">${c.item.emoji||'🍽'}</span>
+          <div style="flex:1;">
+            <div class="ci-name">${c.item.name}</div>
+            <div class="ci-price">${Number(c.item.price).toLocaleString()} × ${c.qty} = ${Number(c.item.price*c.qty).toLocaleString()}</div>
+            <input type="text" placeholder="Izoh..." value="${c.comment}"
+              onchange="wCart[${i}].comment=this.value"
+              style="margin-top:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+              border-radius:6px;color:#fff;padding:4px 10px;font-size:0.75rem;width:100%;font-family:inherit;"/>
+          </div>
+          <div class="ci-qty-ctrl">
+            <button class="qty-btn" onclick="wCartQty(${i},-1)">−</button>
+            <span style="font-weight:700;min-width:18px;text-align:center;">${c.qty}</span>
+            <button class="qty-btn" onclick="wCartQty(${i},1)" style="background:rgba(0,212,255,0.1);color:var(--cyan);">+</button>
+          </div>
+        </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;font-weight:700;padding:14px 0;border-top:1px solid rgba(255,255,255,0.1);margin-top:8px;">
+        <span>Jami:</span><span style="color:var(--gold);">${Number(total).toLocaleString()} so'm</span>
+      </div>
+      <button onclick="submitWCart()" style="width:100%;background:linear-gradient(135deg,#004455,#007799);
+        border:none;color:#fff;padding:14px;border-radius:10px;font-family:'Rajdhani',sans-serif;
+        font-size:1rem;font-weight:700;letter-spacing:2px;cursor:pointer;">
+        ✓ JO'NATISH (Oshxonaga)
+      </button>
+      <button onclick="showMenuView()" style="width:100%;background:none;border:1px solid rgba(255,255,255,0.1);
+        color:var(--muted);padding:10px;border-radius:8px;font-family:'Rajdhani',sans-serif;
+        font-size:0.85rem;cursor:pointer;margin-top:8px;">← Menyuga qaytish</button>
+    </div>`;
+}
+
+function wCartQty(i,d) {
+  wCart[i].qty+=d;
+  if (wCart[i].qty<=0) wCart.splice(i,1);
+  if (!wCart.length) { showMenuView(); return; }
+  showCartReview();
+}
+
+async function submitWCart() {
+  if (!currentTable || !currentTable.current_session_id) {
+    wToast("Stol sessiyasi topilmadi!"); return;
+  }
+  const sid   = currentTable.current_session_id;
+  const token = currentTable.token || '';
+  const items = wCart.map(c=>({
+    menu_item_id:c.item.id, name:c.item.name, emoji:c.item.emoji,
+    price:c.item.price, quantity:c.qty, comment:c.comment, category:c.item.category
+  }));
+  const res  = await fetch(API+'/api/session/'+sid+'/order',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Session-Token':token},
+    body:JSON.stringify({items, waiter_pin:waiterPin})
+  });
+  const data = await res.json();
+  if (data.ok) {
+    wCart=[];
+    wToast('Buyurtma oshxonaga yuborildi ✓');
+    closeOrderPanel();
+    loadTables();
+  } else {
+    wToast('Xatolik: '+(data.error||'Qayta urinib ko\'ring'));
+  }
+}
+
+function closeOrderPanel() {
+  document.getElementById('orderPanel').style.display='none';
+  wCart=[]; currentSession=null;
+}
+
+// ===== TAYYOR BUYURTMALAR =====
+async function loadReady() {
+  const res   = await fetch(API+'/api/kitchen/ready');
+  const items = await res.json();
+  const badge = document.getElementById('readyBadge');
+  badge.textContent  = items.length;
+  badge.style.display = items.length ? '' : 'none';
+  const list = document.getElementById('readyList');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Tayyor buyurtma yo\'q</div>'; return;
+  }
+  list.innerHTML = items.map(i=>`
+    <div class="ready-item">
+      <div class="ci-emoji" style="font-size:1.8rem;margin-right:12px;">${i.item_emoji||'🍽'}</div>
+      <div class="ri-info">
+        <div class="ri-name">${i.item_name} ×${i.quantity}</div>
+        <div class="ri-table">STOL #${i.table_number}</div>
+      </div>
+      <button class="btn-served" onclick="markServed(${i.session_id},${i.id})">Berildi ✓</button>
+    </div>`).join('');
+}
+
+async function markServed(sid, itemId) {
+  await fetch(API+'/api/session/'+sid+'/item/'+itemId+'/status',{
+    method:'PUT', headers:{'Content-Type':'application/json','X-Admin-Token':localStorage.getItem('waiter_admin_token')||''},
+    body:JSON.stringify({status:'served'})
+  });
+  wToast('Berildi deb belgilandi ✓');
+  loadReady();
+}
+
+// ===== MENING BUYURTMALARIM =====
+async function loadMyOrders() {
+  const res    = await fetch(API+'/api/tables');
+  const tables = await res.json();
+  const active = tables.filter(t=>t.status!=='free');
+  const el     = document.getElementById('myOrders');
+  if (!active.length) {
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Ochiq stol yo\'q</div>'; return;
+  }
+  el.innerHTML = active.map(t=>`
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
+        border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;" onclick="openTable(${t.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--cyan);">STOL #${t.number}</span>
+        <span style="color:var(--gold);font-weight:600;">${t.total_amount?Number(t.total_amount).toLocaleString()+' so\'m':'—'}</span>
+      </div>
+      <div style="color:var(--muted);font-size:0.78rem;margin-top:4px;">
+        ${t.status==='bill_requested'?'<span style="color:var(--orange);">🧾 Hisob so\'radi</span>':'⏱ '+( t.minutes_open||0)+' daqiqa'}
+      </div>
+    </div>`).join('');
+}
+
+// ===== ADMIN TOKEN (ofitsiant uchun maxfiy) =====
+// Ofitsiant sahifasi admin tokenisiz ishlashi uchun backend ga maxsus waiter endpointlar kerak
+// Hozircha localStorage dan token olamiz (admin panel orqali login qilinsa saqlanadi)
+function wToast(msg) {
+  const t = document.getElementById('wToast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+</script>
+</body>
+</html>

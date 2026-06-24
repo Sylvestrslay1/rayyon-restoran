@@ -60,6 +60,18 @@ def check_auth():
     return request.headers.get("X-Admin-Token", "").startswith("admin_")
 
 
+def check_staff_pin(pin, conn=None):
+    """PIN to'g'ri staff (waiter/cashier) ga tegishli ekanligini tekshiradi"""
+    if not pin: return None
+    h = hashlib.sha256(str(pin).encode()).hexdigest()
+    close = conn is None
+    if close: conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM staff WHERE pin=? AND active=1", (h,))
+    rows = rows_to_list(cur)
+    if close: conn.close()
+    return rows[0] if rows else None
+
+
 def db_exec(conn, sql, params=()):
     cur = conn.cursor()
     cur.execute(q(sql), params)
@@ -393,8 +405,12 @@ def delete_table(tid):
 @app.route("/api/session/open", methods=["POST"])
 def open_session():
     """Stol ochish — kassir yoki ofitsiant tomonidan"""
-    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    staff = check_staff_pin(d.get("waiter_pin")) if d.get("waiter_pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not d.get("waiter_name"):
+        d["waiter_name"] = staff["name"]
     table_id = d.get("table_id")
     conn = get_conn()
     # Stol mavjudligini tekshirish
@@ -464,10 +480,13 @@ def add_order_item(sid):
     rows  = rows_to_list(cur)
     if not rows: conn.close(); return jsonify({"error": "Sessiya topilmadi yoki yopilgan"}), 404
     s = rows[0]
-    if s["token"] != token and not check_auth():
+    body = request.json or {}
+    staff = check_staff_pin(body.get("waiter_pin"), conn) if body.get("waiter_pin") else None
+    if s["token"] != token and not check_auth() and not staff:
         conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
-    items = request.json.get("items", [])
+    items = body.get("items", [])
     if not items: conn.close(); return jsonify({"error": "Buyurtma bo'sh"}), 400
+    waiter_name_fallback = staff["name"] if staff else ""
     for item in items:
         total = item.get("price",0) * item.get("quantity",1)
         db_exec(conn, """INSERT INTO order_items
@@ -477,7 +496,7 @@ def add_order_item(sid):
             (sid, s["table_number"], item.get("menu_item_id"), item.get("name"),
              item.get("emoji","🍽"), item.get("price",0), item.get("quantity",1),
              total, item.get("comment",""), item.get("course",1),
-             item.get("category",""), item.get("waiter_id"), item.get("waiter_name","")))
+             item.get("category",""), item.get("waiter_id"), item.get("waiter_name") or waiter_name_fallback))
     conn.commit()
     # Umumiy summani yangilash
     cur2 = db_exec(conn, "SELECT SUM(total_price) FROM order_items WHERE session_id=? AND status!='cancelled'", (sid,))
