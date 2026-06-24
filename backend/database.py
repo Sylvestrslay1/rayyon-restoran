@@ -7,14 +7,23 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 USE_PG = bool(DATABASE_URL)
 
 if USE_PG:
-    import psycopg2
-    import psycopg2.extras
+    import pg8000.dbapi
+    from urllib.parse import urlparse
+
+    _u = urlparse(DATABASE_URL)
+    PG_PARAMS = dict(
+        host=_u.hostname,
+        port=_u.port or 5432,
+        database=_u.path.lstrip("/"),
+        user=_u.username,
+        password=_u.password,
+        ssl_context=True,
+    )
 
 
 def get_conn():
     if USE_PG:
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
+        return pg8000.dbapi.connect(**PG_PARAMS)
     else:
         DB_PATH = os.path.join(os.path.dirname(__file__), "rayyon.db")
         conn = sqlite3.connect(DB_PATH)
@@ -39,7 +48,7 @@ def rows_to_list(cur):
     """Cursor natijasini dict listga aylantirish"""
     if USE_PG:
         cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return [dict(zip(cols, row)) for row in (cur.fetchall() or [])]
     else:
         return [dict(r) for r in cur.fetchall()]
 
