@@ -95,6 +95,14 @@ audio{display:none;}
 
 <script>
 const API = '';
+// KITCHEN_TOKEN — URL dan o'qiladi: kitchen.html?kitchen_token=xxxx
+// Render da KITCHEN_TOKEN env o'rnatilgandan so'ng, kitchen URL ga token qo'shing.
+const KITCHEN_TOKEN = new URLSearchParams(window.location.search).get('kitchen_token') || '';
+function kitchenHeaders() {
+  const h = {'Content-Type':'application/json'};
+  if (KITCHEN_TOKEN) h['X-Kitchen-Token'] = KITCHEN_TOKEN;
+  return h;
+}
 let currentCat = '';
 let prevIds = new Set();
 let firstLoad = true;
@@ -137,7 +145,7 @@ function timerColor(dateStr) {
 async function updateItemStatus(sessionId, itemId, status) {
   await fetch(`${API}/api/session/${sessionId}/item/${itemId}/status`, {
     method: 'PUT',
-    headers: {'Content-Type':'application/json'},
+    headers: kitchenHeaders(),
     body: JSON.stringify({status})
   });
   load();
@@ -146,7 +154,8 @@ async function updateItemStatus(sessionId, itemId, status) {
 async function load() {
   const url = currentCat ? `${API}/api/kitchen?category=${currentCat}` : `${API}/api/kitchen`;
   const [kitchenRes, readyRes] = await Promise.all([
-    fetch(url), fetch(`${API}/api/kitchen/ready`)
+    fetch(url, { headers: kitchenHeaders() }),
+    fetch(`${API}/api/kitchen/ready`, { headers: kitchenHeaders() })
   ]);
   const groups = await kitchenRes.json();
   const ready  = await readyRes.json();

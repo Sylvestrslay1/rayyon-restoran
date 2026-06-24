@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
-import threading, datetime
+import threading, datetime, imghdr
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -30,8 +30,9 @@ app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 init_db()
 
-TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TG_CHAT  = os.environ.get("TELEGRAM_CHAT_ID", "")
+TG_TOKEN      = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TG_CHAT       = os.environ.get("TELEGRAM_CHAT_ID", "")
+KITCHEN_TOKEN = os.environ.get("KITCHEN_TOKEN", "")
 
 # ===== XAVFSIZLIK KONSTANTALARI =====
 TOKEN_TTL_HOURS = 8          # Smena uzunligi
@@ -110,6 +111,39 @@ def tg_send(text):
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+
+
+def check_image_mime(file_stream) -> bool:
+    """Fayl MIME turini bytes darajasida tekshirish (kengaytmani aldab bo'lmaydi)."""
+    try:
+        header = file_stream.read(512)
+        file_stream.seek(0)
+        detected = imghdr.what(None, h=header)
+        return detected in ("png", "jpeg", "gif", "webp")
+    except Exception:
+        return False
+
+
+def check_kitchen_auth() -> bool:
+    """Oshxona endpointlari uchun autentifikatsiya.
+    KITCHEN_TOKEN o'rnatilgan bo'lsa — headerni tekshiradi.
+    O'rnatilmagan bo'lsa — faqat admin token qabul qilinadi.
+    """
+    if check_auth():
+        return True
+    if not KITCHEN_TOKEN:
+        return False
+    provided = (request.headers.get("X-Kitchen-Token", "")
+                or request.args.get("kitchen_token", ""))
+    if not provided:
+        return False
+    return hmac.compare_digest(provided, KITCHEN_TOKEN)
+
+
+def _validate_str(val, max_len: int, field: str):
+    """Matn uzunligini tekshirish. Juda uzun bo'lsa ValueError ko'taradi."""
+    if val is not None and len(str(val)) > max_len:
+        raise ValueError(f"{field} juda uzun (maksimum {max_len} belgi)")
 
 
 def q(sql):
@@ -227,6 +261,8 @@ def login():
             else:
                 db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
                 db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
+                # Eski plaintext parolni bazadan o'chirish (xavfsizlik)
+                db_exec(conn, "DELETE FROM settings WHERE key=?", ("admin_password",))
             conn.commit(); conn.close()
 
     if not authenticated:
@@ -269,6 +305,12 @@ def get_menu():
 def add_menu():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("name"), 100, "Taom nomi")
+        _validate_str(d.get("description"), 500, "Tavsif")
+        _validate_str(d.get("emoji"), 10, "Emoji")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "INSERT INTO menu (name, category, description, price, emoji, available) VALUES (?,?,?,?,?,?)",
@@ -282,6 +324,12 @@ def add_menu():
 def update_menu(item_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("name"), 100, "Taom nomi")
+        _validate_str(d.get("description"), 500, "Tavsif")
+        _validate_str(d.get("emoji"), 10, "Emoji")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "UPDATE menu SET name=?, category=?, description=?, price=?, emoji=?, available=? WHERE id=?",
@@ -404,6 +452,11 @@ def get_news():
 def add_news():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("title"), 200, "Sarlavha")
+        _validate_str(d.get("content"), 2000, "Matn")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "INSERT INTO news (title, content, image, active) VALUES (?,?,?,?)",
@@ -442,7 +495,9 @@ def upload_image():
     if "file" not in request.files: return jsonify({"error": "Fayl topilmadi"}), 400
     file = request.files["file"]
     if file.filename == "" or not allowed_file(file.filename):
-        return jsonify({"error": "Noto'g'ri fayl turi"}), 400
+        return jsonify({"error": "Noto'g'ri fayl turi (png, jpg, gif, webp)"}), 400
+    if not check_image_mime(file.stream):
+        return jsonify({"error": "Fayl mazmuni rasm emas (MIME tekshiruvi muvaffaqiyatsiz)"}), 400
     filename = str(int(time.time())) + "_" + secure_filename(file.filename)
     file.save(os.path.join(UPLOAD_FOLDER, filename))
     return jsonify({"ok": True, "url": f"/uploads/{filename}"})
@@ -472,8 +527,23 @@ def update_settings():
     d = request.json or {}
     conn = get_conn()
     for key, val in d.items():
+        # Parol o'zgartirish: darhol pbkdf2 bilan hash qilib saqlash
+        if key == "admin_password":
+            if not val or len(str(val)) < 6:
+                conn.close()
+                return jsonify({"error": "Parol kamida 6 belgi bo'lishi kerak"}), 400
+            new_hash, new_salt = hash_password(str(val))
+            if USE_PG:
+                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ("admin_password_hash", new_hash))
+                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ("admin_password_salt", new_salt))
+                db_exec(conn, "DELETE FROM settings WHERE key='admin_password'")
+            else:
+                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
+                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
+                db_exec(conn, "DELETE FROM settings WHERE key=?", ("admin_password",))
+            continue
         if USE_PG:
-            db_exec(conn, "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, str(val)))
+            db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, str(val)))
         else:
             db_exec(conn, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, str(val)))
     conn.commit(); conn.close()
@@ -594,7 +664,7 @@ def open_session():
 
 @app.route("/api/session/validate", methods=["GET"])
 def validate_session():
-    """QR token tekshirish"""
+    """QR token tekshirish (24 soatlik TTL bilan)."""
     token = request.args.get("token")
     if not token: return jsonify({"valid": False}), 400
     conn = get_conn()
@@ -603,6 +673,18 @@ def validate_session():
     conn.close()
     if not rows: return jsonify({"valid": False, "error": "Token eskirgan yoki noto'g'ri"}), 404
     s = rows[0]
+    # QR token muddatini tekshirish (24 soat)
+    opened = s.get("opened_at")
+    if opened:
+        if isinstance(opened, str):
+            try:
+                opened = datetime.datetime.fromisoformat(opened.replace("Z", ""))
+            except Exception:
+                opened = None
+        if opened:
+            age_hours = (datetime.datetime.utcnow() - opened.replace(tzinfo=None)).total_seconds() / 3600
+            if age_hours > 24:
+                return jsonify({"valid": False, "error": "QR token eskirgan (24 soatdan ortiq)"}), 404
     return jsonify({"valid": True, "table_number": s["table_number"], "session_id": s["id"]})
 
 @app.route("/api/session/<int:sid>", methods=["GET"])
@@ -644,6 +726,14 @@ def add_order_item(sid):
         conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
     items = body.get("items", [])
     if not items: conn.close(); return jsonify({"error": "Buyurtma bo'sh"}), 400
+    # Input validatsiyasi
+    for item in items:
+        try:
+            _validate_str(item.get("name"), 100, "Taom nomi")
+            _validate_str(item.get("comment"), 500, "Izoh")
+        except ValueError as e:
+            conn.close()
+            return jsonify({"error": str(e)}), 400
     waiter_name_fallback = staff["name"] if staff else ""
     for item in items:
         total = item.get("price",0) * item.get("quantity",1)
@@ -792,6 +882,8 @@ def set_discount(sid):
 @app.route("/api/kitchen", methods=["GET"])
 def kitchen_orders():
     """Oshxona ekrani uchun — faqat pending va cooking itemlar"""
+    if not check_kitchen_auth():
+        return jsonify({"error": "Ruxsat yo'q. Kitchen token kerak."}), 403
     conn = get_conn()
     category = request.args.get("category")
     if category:
@@ -818,6 +910,8 @@ def kitchen_orders():
 @app.route("/api/kitchen/ready", methods=["GET"])
 def kitchen_ready():
     """Tayyor bo'lgan buyurtmalar — ofitsiant olishi kerak"""
+    if not check_kitchen_auth():
+        return jsonify({"error": "Ruxsat yo'q. Kitchen token kerak."}), 403
     conn = get_conn()
     cur  = db_exec(conn, """SELECT oi.* FROM order_items oi
         WHERE oi.status='ready' ORDER BY oi.updated_at""")
@@ -840,6 +934,11 @@ def get_staff():
 def add_staff():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("name"), 100, "Ism")
+        _validate_str(d.get("phone"), 20, "Telefon")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     pin = str(d.get("pin", "0000"))
     if len(pin) < 4:
         return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
@@ -894,7 +993,6 @@ def staff_checkin():
     staff = check_staff_pin(pin, conn)
     if not staff:
         conn.close()
-        time.sleep(0.2)  # brute-force sekinlashtirish
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     import datetime
     today = datetime.date.today().isoformat()

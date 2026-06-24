@@ -1087,6 +1087,15 @@ setInterval(checkTokenValidity, 15 * 60 * 1000); // 15 daqiqada bir
 
 function priceFmt(p) { return Number(p).toLocaleString('uz-UZ') + " so'm"; }
 function timeFmt(s)  { if (!s) return '—'; return s.slice(0,16).replace('T',' '); }
+// XSS himoya: barcha user ma'lumotlari innerHTML ga kirishdan oldin esc() orqali o'tkazilishi shart
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 function toast(msg, ok=true) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -1155,7 +1164,7 @@ async function loadDashboard() {
   if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${t('empty.orders')}</td></tr>`; return; }
   tbody.innerHTML = orders.slice(0,8).map(o => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
-    <td>${o.item_name}</td><td>${o.customer_name}</td><td>${o.customer_phone}</td>
+    <td>${esc(o.item_name)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td>
     <td style="color:var(--gold);font-weight:700">${priceFmt(o.total_price)}</td>
     <td>${statusBadge(o.status)}</td><td style="color:var(--muted)">${timeFmt(o.created_at)}</td>
   </tr>`).join('');
@@ -1171,8 +1180,8 @@ async function loadOrders() {
   if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${t('empty.orders')}</td></tr>`; return; }
   tbody.innerHTML = orders.map(o => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
-    <td>${o.item_name}</td><td>${o.quantity}</td>
-    <td>${o.customer_name}</td><td>${o.customer_phone}</td>
+    <td>${esc(o.item_name)}</td><td>${o.quantity}</td>
+    <td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td>
     <td style="color:var(--gold);font-weight:700">${priceFmt(o.total_price)}</td>
     <td>${statusBadge(o.status)}</td>
     <td style="color:var(--muted)">${timeFmt(o.created_at)}</td>
@@ -1195,8 +1204,8 @@ async function loadReservations() {
   if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">${t('empty.res')}</td></tr>`; return; }
   tbody.innerHTML = rows.map(row => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${row.id}</td>
-    <td>${row.customer_name}</td><td>${row.customer_phone}</td>
-    <td>${row.date}</td><td>${row.time}</td>
+    <td>${esc(row.customer_name)}</td><td>${esc(row.customer_phone)}</td>
+    <td>${esc(row.date)}</td><td>${esc(row.time)}</td>
     <td>${row.guests} kishi</td><td>${statusBadge(row.status)}</td>
     <td>${statusSelect(row.id, row.status, 'res')}</td>
   </tr>`).join('');
@@ -1251,7 +1260,7 @@ function renderMenuGrid() {
       '</div>' +
       '<div class="mac-body">' +
         '<div class="mac-cat">' + catLabel(item.category) + '</div>' +
-        '<div class="mac-name">' + (item.name || '') + '</div>' +
+        '<div class="mac-name">' + esc(item.name) + '</div>' +
         '<div class="mac-price">' + priceFmt(item.price) + '</div>' +
         '<div class="mac-actions">' +
           '<button class="btn btn-outline btn-sm" onclick="openMenuEdit(' + item.id + ')">✏ Tahrir</button>' +
@@ -1329,8 +1338,8 @@ async function loadNews() {
     <div class="news-card">
       <div class="news-emoji">${n.active ? '📢' : '📭'}</div>
       <div class="news-body">
-        <div class="news-title">${n.title}</div>
-        <div class="news-content">${n.content || ''}</div>
+        <div class="news-title">${esc(n.title)}</div>
+        <div class="news-content">${esc(n.content)}</div>
         <div class="news-actions">
           <button class="btn btn-outline btn-sm" onclick="openNewsEdit(${n.id})">✏ Tahrir</button>
           <button class="btn btn-danger btn-sm" onclick="deleteNews(${n.id})">✕ O'chirish</button>
@@ -1427,7 +1436,7 @@ async function loadTables() {
           border-radius:50%;background:${statusColor};box-shadow:0 0 8px ${statusColor};"></div>
       <div style="font-family:'Rajdhani',sans-serif;font-size:1.6rem;font-weight:700;
           color:${statusColor};letter-spacing:2px;">STOL ${t.number}</div>
-      <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${t.name || ''} · ${t.capacity} kishi</div>
+      <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${esc(t.name)} · ${t.capacity} kishi</div>
       <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;font-weight:600;">${statusText}</div>
       ${mins ? `<div style="color:rgba(255,255,255,0.35);font-size:0.72rem;">⏱ ${mins}</div>` : ''}
       ${sum  ? `<div style="color:var(--gold);font-weight:700;font-size:0.88rem;margin-top:4px;">${sum}</div>` : ''}
@@ -1476,7 +1485,7 @@ async function openTableSession(tableId) {
       <div style="max-height:200px;overflow-y:auto;margin-bottom:16px;">
         ${items.length ? items.filter(i=>i.status!=='cancelled').map(i=>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-            <span>${i.item_emoji||'🍽'} ${i.item_name} ×${i.quantity}</span>
+            <span>${esc(i.item_emoji)||'🍽'} ${esc(i.item_name)} ×${i.quantity}</span>
             <span style="display:flex;align-items:center;gap:8px;">
               <span style="color:rgba(255,255,255,0.4);font-size:0.75rem;">${statusLabel[i.status]||i.status}</span>
               <span style="color:var(--gold);">${priceFmt(i.total_price)}</span>
@@ -1617,9 +1626,9 @@ async function loadStaff() {
   const tbody = document.getElementById('staff-body');
   tbody.innerHTML = list.length ? list.map(s=>`<tr>
     <td style="color:var(--cyan)">#${s.id}</td>
-    <td style="font-weight:600">${s.name}</td>
-    <td><span style="background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:3px;font-size:0.75rem;">${roleNames[s.role]||s.role}</span></td>
-    <td style="color:#aaa">${s.phone||'—'}</td>
+    <td style="font-weight:600">${esc(s.name)}</td>
+    <td><span style="background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:3px;font-size:0.75rem;">${esc(roleNames[s.role]||s.role)}</span></td>
+    <td style="color:#aaa">${esc(s.phone)||'—'}</td>
     <td style="color:var(--gold)">${s.salary_amount ? priceFmt(s.salary_amount) + (s.salary_type==='hourly'?'/soat':s.salary_type==='percent'?'%':'') : '—'}</td>
     <td>${s.active?'<span style="color:var(--cyan)">Aktiv</span>':'<span style="color:#666">Nofaol</span>'}</td>
     <td>
@@ -1636,7 +1645,7 @@ async function loadAttendance() {
   const tbody = document.getElementById('att-body');
   const fmt   = dt => dt ? new Date(dt).toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'}) : '—';
   tbody.innerHTML = list.length ? list.map(a=>`<tr>
-    <td style="font-weight:600">${a.staff_name||'—'}</td>
+    <td style="font-weight:600">${esc(a.staff_name)||'—'}</td>
     <td style="color:var(--cyan)">${fmt(a.check_in)}</td>
     <td style="color:${a.check_out?'#ff9800':'rgba(255,255,255,0.3)'}">${fmt(a.check_out)}</td>
     <td style="color:var(--gold)">${a.hours_worked ? a.hours_worked + ' soat' : '—'}</td>
@@ -1700,8 +1709,8 @@ async function loadGalleryAdmin() {
   }
   tbody.innerHTML = items.map(g => `<tr>
     <td style="color:var(--cyan)">#${g.id}</td>
-    <td style="font-size:1.5rem">${g.emoji || '🖼'}</td>
-    <td style="font-weight:600">${g.title}</td>
+    <td style="font-size:1.5rem">${esc(g.emoji) || '🖼'}</td>
+    <td style="font-weight:600">${esc(g.title)}</td>
     <td>${g.image ? '<span style="color:var(--cyan);font-size:0.75rem;">✓ Rasm bor</span>' : '<span style="color:#666;font-size:0.75rem;">Yo\'q</span>'}</td>
     <td style="color:#aaa">${g.sort_order}</td>
     <td>${g.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
@@ -1771,11 +1780,11 @@ async function loadPromosAdmin() {
   }
   tbody.innerHTML = items.map(p => `<tr>
     <td style="color:var(--cyan)">#${p.id}</td>
-    <td style="font-size:1.5rem">${p.emoji || '🎁'}</td>
-    <td style="font-weight:600">${p.title}</td>
-    <td style="color:#aaa;font-size:0.82rem;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description || '—'}</td>
-    <td><span style="background:linear-gradient(135deg,var(--cyan),var(--gold));color:#000;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700">${p.badge || '—'}</span></td>
-    <td style="color:#aaa;font-size:0.8rem">${p.time_info || '—'}</td>
+    <td style="font-size:1.5rem">${esc(p.emoji) || '🎁'}</td>
+    <td style="font-weight:600">${esc(p.title)}</td>
+    <td style="color:#aaa;font-size:0.82rem;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.description) || '—'}</td>
+    <td><span style="background:linear-gradient(135deg,var(--cyan),var(--gold));color:#000;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700">${esc(p.badge) || '—'}</span></td>
+    <td style="color:#aaa;font-size:0.8rem">${esc(p.time_info) || '—'}</td>
     <td>${p.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
     <td>
       <button class="act-btn" onclick='editPromo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</button>
@@ -1868,7 +1877,7 @@ async function loadAccounting() {
   if (rep.expenses_by_cat && rep.expenses_by_cat.length) {
     catEl.innerHTML = rep.expenses_by_cat.map(c =>
       '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(200,169,110,0.1);">' +
-      '<span style="color:#aaa;">' + (c.cat || 'Boshqa') + '</span>' +
+      '<span style="color:#aaa;">' + esc(c.cat || 'Boshqa') + '</span>' +
       '<span style="color:var(--gold);font-weight:700;">' + priceFmt(c.total) + '</span></div>'
     ).join('');
   } else {
@@ -1880,10 +1889,10 @@ async function loadAccounting() {
   if (Array.isArray(expenses) && expenses.length) {
     expBody.innerHTML = expenses.slice(0,30).map(e =>
       '<tr><td style="color:var(--cyan)">#' + e.id + '</td>' +
-      '<td><span style="background:rgba(200,169,110,0.15);padding:2px 8px;border-radius:3px;font-size:0.75rem;">' + (e.category||'') + '</span></td>' +
-      '<td>' + (e.description||'—') + '</td>' +
+      '<td><span style="background:rgba(200,169,110,0.15);padding:2px 8px;border-radius:3px;font-size:0.75rem;">' + esc(e.category) + '</span></td>' +
+      '<td>' + esc(e.description || '—') + '</td>' +
       '<td style="color:var(--gold);font-weight:700">' + priceFmt(e.amount) + '</td>' +
-      '<td style="color:#aaa;font-size:0.8rem">' + (e.date||'') + '</td>' +
+      '<td style="color:#aaa;font-size:0.8rem">' + esc(e.date) + '</td>' +
       '<td><button class="act-btn" style="color:#ff4466" onclick="deleteExpense(' + e.id + ')">✕</button></td></tr>'
     ).join('');
   } else {
@@ -1900,8 +1909,8 @@ async function loadAccounting() {
         : '<span style="background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:3px;font-size:0.72rem;">✓ OK</span>';
       return '<tr>' +
         '<td style="color:var(--cyan)">#' + item.id + '</td>' +
-        '<td style="font-weight:600">' + item.name + '</td>' +
-        '<td style="color:#aaa">' + item.unit + '</td>' +
+        '<td style="font-weight:600">' + esc(item.name) + '</td>' +
+        '<td style="color:#aaa">' + esc(item.unit) + '</td>' +
         '<td style="color:' + (low ? '#ff4466' : '#fff') + ';font-weight:700">' + item.quantity + '</td>' +
         '<td style="color:#aaa">' + item.min_quantity + '</td>' +
         '<td style="color:var(--gold)">' + priceFmt(item.price_per_unit) + '</td>' +
@@ -2024,8 +2033,8 @@ function renderRecipeMenuList(filter = '') {
       background:${selectedRecipeMenuItem===m.id?'rgba(0,212,255,0.12)':'rgba(255,255,255,0.03)'};
       border:1px solid ${selectedRecipeMenuItem===m.id?'rgba(0,212,255,0.3)':'rgba(255,255,255,0.07)'};
       transition:all 0.15s;">
-      <span style="font-size:1.4rem;">${m.emoji||'🍽'}</span>
-      <div><div style="font-weight:600;font-size:0.9rem;">${m.name}</div>
+      <span style="font-size:1.4rem;">${esc(m.emoji)||'🍽'}</span>
+      <div><div style="font-weight:600;font-size:0.9rem;">${esc(m.name)}</div>
         <div style="font-size:0.75rem;color:var(--muted);">${(m.price||0).toLocaleString()} so'm</div></div>
     </div>`).join('');
 }
@@ -2039,12 +2048,12 @@ async function selectRecipeItem(menuItemId) {
   const box = document.getElementById('recipeEditBox');
   box.innerHTML = `
     <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;margin-bottom:14px;">
-      ${menuItem.emoji||'🍽'} ${menuItem.name} — RETSEPT
+      ${esc(menuItem.emoji)||'🍽'} ${esc(menuItem.name)} — RETSEPT
     </h3>
     <div style="display:grid;grid-template-columns:1fr 1fr 100px 80px auto;gap:8px;align-items:end;margin-bottom:12px;">
       <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Mahsulot</label>
         <select id="rec-inv" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-family:inherit;">
-          ${allInventoryItems.map(i=>`<option value="${i.id}">${i.name} (${i.unit})</option>`).join('')}
+          ${allInventoryItems.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}
         </select>
       </div>
       <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Miqdor</label>
@@ -2064,10 +2073,10 @@ async function selectRecipeItem(menuItemId) {
       <thead><tr><th>Mahsulot</th><th>Miqdor</th><th>Birlik</th><th>Omborda</th><th>Amal</th></tr></thead>
       <tbody>${recipes.map(r=>`
         <tr>
-          <td>${r.inv_name}</td>
+          <td>${esc(r.inv_name)}</td>
           <td>${r.quantity}</td>
-          <td>${r.unit}</td>
-          <td style="color:${r.inv_qty<=0?'var(--red)':r.inv_qty<5?'var(--orange)':'var(--green)'};">${r.inv_qty} ${r.inv_unit}</td>
+          <td>${esc(r.unit)}</td>
+          <td style="color:${r.inv_qty<=0?'var(--red)':r.inv_qty<5?'var(--orange)':'var(--green)'};">${r.inv_qty} ${esc(r.inv_unit)}</td>
           <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${menuItemId})">✕</button></td>
         </tr>`).join('')}
       </tbody>
@@ -2096,10 +2105,10 @@ function renderAllRecipes(recipes) {
   if (!recipes.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">Retseptlar yo\'q</td></tr>'; return; }
   body.innerHTML = recipes.map(r=>`
     <tr>
-      <td>${r.menu_name||'—'}</td>
-      <td>${r.inv_name}</td>
+      <td>${esc(r.menu_name)||'—'}</td>
+      <td>${esc(r.inv_name)}</td>
       <td>${r.quantity}</td>
-      <td>${r.unit}</td>
+      <td>${esc(r.unit)}</td>
       <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${r.menu_item_id})">✕</button></td>
     </tr>`).join('');
 }
