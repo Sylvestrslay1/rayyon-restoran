@@ -933,7 +933,8 @@ def shift_current():
     shifts = rows_to_list(cur)
     conn.close()
     if not shifts:
-        return jsonify({"ok": False, "cashier": staff["name"], "role": staff["role"]})
+        return jsonify({"ok": True, "shift": None, "cashier": staff["name"], "role": staff["role"],
+                        "cashier_id": staff["id"]})
     return jsonify({"ok": True, "shift": shifts[0], "cashier": staff["name"], "role": staff["role"],
                     "cashier_id": staff["id"]})
 

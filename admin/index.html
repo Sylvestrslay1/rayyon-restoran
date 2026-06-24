@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="uz">
 <head>
   <meta charset="UTF-8" />
@@ -595,7 +595,7 @@
   </div>
 
   <!-- Stol sessiya modal -->
-  <div class="modal-overlay" id="tableSessionModal" style="display:none;">
+  <div class="modal-overlay" id="tableSessionModal">
     <div class="modal-box" style="max-width:480px;">
       <div class="modal-header"><h3 id="tsm-title">Stol #1</h3><button onclick="closeTSM()">✕</button></div>
       <div class="modal-body" id="tsm-body"></div>
@@ -604,7 +604,7 @@
   </div>
 
   <!-- Stol qo'shish/tahrirlash modal -->
-  <div class="modal-overlay" id="tableEditModal" style="display:none;">
+  <div class="modal-overlay" id="tableEditModal">
     <div class="modal-box">
       <div class="modal-header"><h3 id="tem-title">Stol qo'shish</h3><button onclick="closeTEM()">✕</button></div>
       <div class="modal-body">
@@ -621,9 +621,9 @@
   </div>
 
   <!-- QR modal -->
-  <div class="modal-overlay" id="qrModal" style="display:none;">
+  <div class="modal-overlay" id="qrModal">
     <div class="modal-box" style="max-width:360px;text-align:center;">
-      <div class="modal-header"><h3 id="qr-title">QR Kod</h3><button onclick="document.getElementById('qrModal').style.display='none'">✕</button></div>
+      <div class="modal-header"><h3 id="qr-title">QR Kod</h3><button onclick="document.getElementById('qrModal').classList.remove('open')">✕</button></div>
       <div class="modal-body" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
         <div id="qr-canvas" style="background:#fff;padding:16px;border-radius:8px;"></div>
         <div id="qr-url" style="font-size:0.75rem;color:rgba(255,255,255,0.4);word-break:break-all;"></div>
@@ -658,7 +658,7 @@
   </div>
 
   <!-- Xodim modal -->
-  <div class="modal-overlay" id="staffModal" style="display:none;">
+  <div class="modal-overlay" id="staffModal">
     <div class="modal-box">
       <div class="modal-header"><h3 id="staff-modal-title">Xodim qo'shish</h3><button onclick="closeStaffModal()">✕</button></div>
       <div class="modal-body">
@@ -709,7 +709,7 @@
   </div>
 
   <!-- Galereya modal -->
-  <div class="modal-overlay" id="galleryModal" style="display:none;">
+  <div class="modal-overlay" id="galleryModal">
     <div class="modal-box">
       <div class="modal-header"><h3 id="gallery-modal-title">Rasm qo'shish</h3><button onclick="closeGalleryModal()">✕</button></div>
       <div class="modal-body">
@@ -745,7 +745,7 @@
   </div>
 
   <!-- Aksiya modal -->
-  <div class="modal-overlay" id="promoModal" style="display:none;">
+  <div class="modal-overlay" id="promoModal">
     <div class="modal-box">
       <div class="modal-header"><h3 id="promo-modal-title">Aksiya qo'shish</h3><button onclick="closePromoModal()">✕</button></div>
       <div class="modal-body">
@@ -835,7 +835,7 @@
   </div>
 
   <!-- Ombor modal -->
-  <div class="modal-overlay" id="invModal" style="display:none;">
+  <div class="modal-overlay" id="invModal">
     <div class="modal-box">
       <div class="modal-header"><h3 id="inv-modal-title">Mahsulot qo'shish</h3><button onclick="closeInvModal()">✕</button></div>
       <div class="modal-body">
@@ -1285,7 +1285,7 @@ function openMenuEdit(id) {
   document.getElementById('mAvailable').checked = !!item.available;
   const prev = document.getElementById('menuImgPreview');
   if (item.image) { prev.src = API + item.image; prev.style.display = 'block'; prev.dataset.url = item.image; }
-  else prev.style.display = 'none';
+  else prev.classList.remove('open');
   document.getElementById('menuModal').classList.add('open');
 }
 document.getElementById('addMenuBtn').addEventListener('click', () => {
@@ -1294,7 +1294,7 @@ document.getElementById('addMenuBtn').addEventListener('click', () => {
   ['mName','mPrice','mDesc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('mEmoji').value = '🍽';
   document.getElementById('mAvailable').checked = true;
-  document.getElementById('menuImgPreview').style.display = 'none';
+  document.getElementById('menuImgPreview').classList.remove('open');
   document.getElementById('menuModal').classList.add('open');
 });
 document.getElementById('menuModalClose').addEventListener('click', () => document.getElementById('menuModal').classList.remove('open'));
@@ -1357,14 +1357,14 @@ function openNewsEdit(id) {
   document.getElementById('nActive').checked = !!n.active;
   newsImageUrl = n.image || null;
   const prev = document.getElementById('newsImgPreview');
-  if (n.image) { prev.src = API+n.image; prev.style.display = 'block'; } else prev.style.display = 'none';
+  if (n.image) { prev.src = API+n.image; prev.style.display = 'block'; } else prev.classList.remove('open');
   document.getElementById('newsModal').classList.add('open');
 }
 document.getElementById('addNewsBtn').addEventListener('click', () => {
   document.getElementById('newsModalTitle').textContent = t('nm.add');
   document.getElementById('newsId').value = ''; document.getElementById('nTitle').value = ''; document.getElementById('nContent').value = '';
   document.getElementById('nActive').checked = true; newsImageUrl = null;
-  document.getElementById('newsImgPreview').style.display = 'none';
+  document.getElementById('newsImgPreview').classList.remove('open');
   document.getElementById('newsModal').classList.add('open');
 });
 document.getElementById('newsModalClose').addEventListener('click', () => document.getElementById('newsModal').classList.remove('open'));
@@ -1513,7 +1513,7 @@ async function openTableSession(tableId) {
         ✓ To'lovni qabul qilish
       </button>`;
   }
-  modal.style.display = 'flex';
+  modal.classList.add('open');
 }
 
 async function openTable(tableId) {
@@ -1544,7 +1544,7 @@ async function closeSession(sid, tableId) {
   closeTSM(); showToast('Sessiya yopildi ✓'); loadTables();
 }
 
-function closeTSM() { document.getElementById('tableSessionModal').style.display='none'; }
+function closeTSM() { document.getElementById('tableSessionModal').classList.remove('open'); }
 
 function showTableModal() {
   editingTableId = null;
@@ -1553,7 +1553,7 @@ function showTableModal() {
   document.getElementById('tem-num').value='';
   document.getElementById('tem-name').value='';
   document.getElementById('tem-cap').value='4';
-  document.getElementById('tableEditModal').style.display='flex';
+  document.getElementById('tableEditModal').classList.add('open');
 }
 function editTable(t) {
   editingTableId = t.id;
@@ -1562,9 +1562,9 @@ function editTable(t) {
   document.getElementById('tem-num').value=t.number;
   document.getElementById('tem-name').value=t.name||'';
   document.getElementById('tem-cap').value=t.capacity||4;
-  document.getElementById('tableEditModal').style.display='flex';
+  document.getElementById('tableEditModal').classList.add('open');
 }
-function closeTEM() { document.getElementById('tableEditModal').style.display='none'; }
+function closeTEM() { document.getElementById('tableEditModal').classList.remove('open'); }
 async function saveTable() {
   const data = {
     number:   parseInt(document.getElementById('tem-num').value),
@@ -1605,7 +1605,7 @@ function showQR(tableId) {
            width="200" height="200" alt="QR" style="display:block;" id="qr-img"/>
     </a>
   </div>`;
-  document.getElementById('qrModal').style.display='flex';
+  document.getElementById('qrModal').classList.add('open');
 }
 function downloadQR() {
   const img = document.getElementById('qr-img');
@@ -1659,7 +1659,7 @@ function showStaffModal() {
   ['staff-id','staff-name','staff-pin','staff-phone','staff-salary'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('staff-role').value='waiter';
   document.getElementById('staff-salary-type').value='monthly';
-  document.getElementById('staffModal').style.display='flex';
+  document.getElementById('staffModal').classList.add('open');
 }
 function editStaff(s) {
   editingStaffId = s.id;
@@ -1671,9 +1671,9 @@ function editStaff(s) {
   document.getElementById('staff-salary-type').value=s.salary_type||'monthly';
   document.getElementById('staff-salary').value=s.salary_amount||'';
   document.getElementById('staff-pin').value='';
-  document.getElementById('staffModal').style.display='flex';
+  document.getElementById('staffModal').classList.add('open');
 }
-function closeStaffModal() { document.getElementById('staffModal').style.display='none'; }
+function closeStaffModal() { document.getElementById('staffModal').classList.remove('open'); }
 async function saveStaff() {
   const data = {
     name:        document.getElementById('staff-name').value.trim(),
@@ -1731,7 +1731,7 @@ function showGalleryModal() {
   document.getElementById('gallery-image').value = '';
   document.getElementById('gallery-order').value = '0';
   document.getElementById('gallery-active').checked = true;
-  document.getElementById('galleryModal').style.display = 'flex';
+  document.getElementById('galleryModal').classList.add('open');
 }
 function editGallery(item) {
   editingGalleryId = item.id;
@@ -1742,9 +1742,9 @@ function editGallery(item) {
   document.getElementById('gallery-image').value = item.image || '';
   document.getElementById('gallery-order').value = item.sort_order || 0;
   document.getElementById('gallery-active').checked = !!item.active;
-  document.getElementById('galleryModal').style.display = 'flex';
+  document.getElementById('galleryModal').classList.add('open');
 }
-function closeGalleryModal() { document.getElementById('galleryModal').style.display = 'none'; }
+function closeGalleryModal() { document.getElementById('galleryModal').classList.remove('open'); }
 async function saveGallery() {
   const data = {
     title:      document.getElementById('gallery-title').value.trim(),
@@ -1800,7 +1800,7 @@ function showPromoModal() {
   ['promo-id','promo-title','promo-desc','promo-badge','promo-time','promo-order'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('promo-emoji').value = '🎁';
   document.getElementById('promo-active').checked = true;
-  document.getElementById('promoModal').style.display = 'flex';
+  document.getElementById('promoModal').classList.add('open');
 }
 function editPromo(item) {
   editingPromoId = item.id;
@@ -1813,9 +1813,9 @@ function editPromo(item) {
   document.getElementById('promo-time').value = item.time_info || '';
   document.getElementById('promo-order').value = item.sort_order || 0;
   document.getElementById('promo-active').checked = !!item.active;
-  document.getElementById('promoModal').style.display = 'flex';
+  document.getElementById('promoModal').classList.add('open');
 }
-function closePromoModal() { document.getElementById('promoModal').style.display = 'none'; }
+function closePromoModal() { document.getElementById('promoModal').classList.remove('open'); }
 async function savePromo() {
   const data = {
     title:       document.getElementById('promo-title').value.trim(),
@@ -1961,7 +1961,7 @@ function showInvModal() {
   document.getElementById('inv-price').value = '';
   document.getElementById('inv-note').value = '';
   document.getElementById('inv-note-wrap').style.display = 'none';
-  document.getElementById('invModal').style.display = 'flex';
+  document.getElementById('invModal').classList.add('open');
 }
 function editInv(item) {
   editingInvId = item.id;
@@ -1973,9 +1973,9 @@ function editInv(item) {
   document.getElementById('inv-min').value = item.min_quantity;
   document.getElementById('inv-price').value = item.price_per_unit;
   document.getElementById('inv-note-wrap').style.display = '';
-  document.getElementById('invModal').style.display = 'flex';
+  document.getElementById('invModal').classList.add('open');
 }
-function closeInvModal() { document.getElementById('invModal').style.display = 'none'; }
+function closeInvModal() { document.getElementById('invModal').classList.remove('open'); }
 async function saveInv() {
   const data = {
     name:          document.getElementById('inv-name').value,
@@ -2214,3 +2214,5 @@ setInterval(loadDashboard, 30000);
 </script>
 </body>
 </html>
+
+
