@@ -202,6 +202,9 @@
             style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
             border-radius:6px;color:#fff;padding:8px 12px;font-family:inherit;font-size:0.85rem;"
             oninput="lookupCustomer(this.value)"/>
+          <input id="m-cust-name" type="text" placeholder="Mijoz ismi"
+            style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:6px;color:#fff;padding:8px 12px;font-family:inherit;font-size:0.85rem;"/>
           <span id="m-cust-info" style="font-size:0.78rem;color:#c8a96e;min-width:80px;"></span>
         </div>
         <span class="disc-label">Chegirma %:</span>
@@ -526,6 +529,8 @@ async function lookupCustomer(phone) {
       customerDisc = d.customer.discount_pct || 0;
       info.textContent = `${d.customer.name||'Mijoz'} · ${d.customer.visits} ta tashrif${customerDisc?` · ${customerDisc}% chegirma`:''}`;
       info.style.color = '#c8a96e';
+      const nameEl = document.getElementById('m-cust-name');
+      if (nameEl && d.customer.name && !nameEl.value) nameEl.value = d.customer.name;
       document.getElementById('m-disc-input').value = customerDisc;
       updateTotals();
       // O-5: Sessiya ochiq bo'lsa chegirmani avtomatik saqlash
@@ -567,7 +572,8 @@ async function submitPayment() {
       ? [{method:'cash', amount: body.cash_amount}, {method:'card', amount: body.card_amount}]
       : [{method: payMethod, amount: body.amount}];
     const custPhone = (document.getElementById('m-cust-phone')?.value||'').trim();
-    const closeBody = {payments, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID, pin: PIN, customer_phone: custPhone};
+    const custName  = (document.getElementById('m-cust-name')?.value||'').trim();
+    const closeBody = {payments, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID, pin: PIN, customer_phone: custPhone, customer_name: custName};
     const r = await fetch(`${API}/api/session/${currentSession.id}/close`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(closeBody)

@@ -381,6 +381,7 @@ def get_orders():
 
 
 @app.route("/api/orders", methods=["POST"])
+@limiter.limit("20 per minute; 200 per hour")
 def add_order():
     d = request.json or {}
     conn = get_conn()
@@ -423,6 +424,7 @@ def get_reservations():
 
 
 @app.route("/api/reservations", methods=["POST"])
+@limiter.limit("10 per minute; 50 per hour")
 def add_reservation():
     d = request.json or {}
     conn = get_conn()
