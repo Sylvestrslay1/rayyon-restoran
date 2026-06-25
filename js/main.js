@@ -172,6 +172,7 @@ function renderMenu(category = 'all') {
 }
 
 function getCatLabel(cat) {
+  if (typeof t === 'function') return t('cat.' + cat) || cat;
   const labels = { milliy: '🇺🇿 Milliy', grill: '🔥 Grill', salad: '🥗 Salat', drink: '🥤 Ichimlik' };
   return labels[cat] || cat;
 }
@@ -186,6 +187,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 loadMenuFromAPI();
+
+// Til o'zganda menu va boshqa dinamik qismlarni qayta render qilish
+window.addEventListener('langchange', () => {
+  const activeBtn = document.querySelector('.tab-btn.active');
+  const activeCat = activeBtn ? activeBtn.dataset.category : 'all';
+  renderMenu(activeCat);
+});
 
 // ===== GALLERY FROM API =====
 async function loadGallery() {

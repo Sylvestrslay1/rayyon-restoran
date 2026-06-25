@@ -436,34 +436,34 @@
       <span class="n-icon">◉</span> <span data-i18n="adm.news">Yangiliklar</span>
     </button>
     <button class="nav-item" data-page="tables" data-roles="admin,director,manager">
-      <span class="n-icon">⊞</span> <span>Stollar</span>
+      <span class="n-icon">⊞</span> <span data-i18n="adm.tables">Stollar</span>
     </button>
     <button class="nav-item" data-page="staff" data-roles="admin,director,accountant">
-      <span class="n-icon">👤</span> <span>Xodimlar</span>
+      <span class="n-icon">👤</span> <span data-i18n="adm.staff">Xodimlar</span>
     </button>
     <button class="nav-item" data-page="gallery" data-roles="admin,director,manager">
-      <span class="n-icon">🖼</span> <span>Galereya</span>
+      <span class="n-icon">🖼</span> <span data-i18n="adm.gallery">Galereya</span>
     </button>
     <button class="nav-item" data-page="promos" data-roles="admin,director,manager,chef">
-      <span class="n-icon">🎁</span> <span>Aksiyalar</span>
+      <span class="n-icon">🎁</span> <span data-i18n="adm.promos">Aksiyalar</span>
     </button>
     <button class="nav-item" data-page="accounting" data-roles="admin,director,accountant,manager">
-      <span class="n-icon">₿</span> <span>Buxgalteriya</span>
+      <span class="n-icon">₿</span> <span data-i18n="adm.accounting">Buxgalteriya</span>
     </button>
     <button class="nav-item" data-page="recipes" data-roles="admin,director,chef">
-      <span class="n-icon">📋</span> <span>Retseptlar</span>
+      <span class="n-icon">📋</span> <span data-i18n="adm.recipes">Retseptlar</span>
     </button>
     <button class="nav-item" data-page="inventory" data-roles="admin,director,chef,accountant">
-      <span class="n-icon">📦</span> <span>Inventar</span>
+      <span class="n-icon">📦</span> <span data-i18n="adm.inventory">Inventar</span>
     </button>
     <button class="nav-item" data-page="loyalty" data-roles="admin,director,accountant,manager">
-      <span class="n-icon">💳</span> <span>Loyalty</span>
+      <span class="n-icon">💳</span> <span data-i18n="adm.loyalty">Loyalty</span>
     </button>
     <button class="nav-item" data-page="analytics" data-roles="admin,director,accountant,manager">
-      <span class="n-icon">📊</span> <span>Tahlil</span>
+      <span class="n-icon">📊</span> <span data-i18n="adm.analytics">Tahlil</span>
     </button>
     <button class="nav-item" data-page="shifts" data-roles="admin,director,accountant,manager">
-      <span class="n-icon">💼</span> <span>Smenalar</span>
+      <span class="n-icon">💼</span> <span data-i18n="adm.shifts">Smenalar</span>
     </button>
     <button class="nav-item" data-page="settings" data-roles="admin,director">
       <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
@@ -590,15 +590,15 @@
   <!-- STOLLAR PAGE -->
   <div class="page" id="page-tables">
     <div class="page-header">
-      <h2>Stollar xaritasi</h2>
-      <p>Stol holatlari, QR kodlar va sessiyalar boshqaruvi</p>
+      <h2 data-i18n="adm.tables.title">Stollar xaritasi</h2>
+      <p data-i18n="adm.tables.sub">Stol holatlari, QR kodlar va sessiyalar boshqaruvi</p>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
-      <button class="btn-primary" onclick="showTableModal()">+ Stol qo'shish</button>
+      <button class="btn-primary" onclick="showTableModal()" data-i18n="adm.tables.add">+ Stol qo'shish</button>
       <div style="display:flex;gap:16px;margin-left:auto;">
-        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#00e676;display:inline-block;"></span>Bo'sh</span>
-        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff9800;display:inline-block;"></span>Band</span>
-        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff4444;display:inline-block;"></span>Hisob so'radi</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#00e676;display:inline-block;"></span><span data-i18n="tbl.free">Bo'sh</span></span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff9800;display:inline-block;"></span><span data-i18n="tbl.occupied">Band</span></span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff4444;display:inline-block;"></span><span data-i18n="tbl.bill">Hisob so'radi</span></span>
       </div>
     </div>
     <div id="tablesMap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;"></div>
@@ -645,18 +645,18 @@
   <!-- XODIMLAR PAGE -->
   <div class="page" id="page-staff">
     <div class="page-header">
-      <h2>Xodimlar boshqaruvi</h2>
-      <p>Xodimlar, lavozimlar, PIN va davomot</p>
+      <h2 data-i18n="adm.staff.title">Xodimlar boshqaruvi</h2>
+      <p data-i18n="adm.staff.sub">Xodimlar, lavozimlar, PIN va davomot</p>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
-      <button class="btn-primary" onclick="showStaffModal()">+ Xodim qo'shish</button>
-      <button class="btn-secondary" onclick="loadAttendance()">📋 Bugungi davomot</button>
-      <button class="btn-secondary" onclick="loadPayroll()" style="margin-left:auto;">💰 Maosh hisoblash</button>
-      <a class="btn-secondary" href="/api/export/staff" style="text-decoration:none;display:inline-flex;align-items:center;">⬇ CSV</a>
+      <button class="btn-primary" onclick="showStaffModal()" data-i18n="adm.staff.add">+ Xodim qo'shish</button>
+      <button class="btn-secondary" onclick="loadAttendance()" data-i18n="adm.staff.attend">📋 Bugungi davomot</button>
+      <button class="btn-secondary" onclick="loadPayroll()" style="margin-left:auto;" data-i18n="adm.staff.payroll">💰 Maosh hisoblash</button>
+      <a class="btn-secondary" href="/api/export/staff" style="text-decoration:none;display:inline-flex;align-items:center;" data-i18n="btn.csv">⬇ CSV</a>
     </div>
     <div class="table-wrap" style="margin-bottom:20px;">
       <table class="data-table">
-        <thead><tr><th>#</th><th>Ism</th><th>Lavozim</th><th>Telefon</th><th>Maosh</th><th>Holat</th><th>Amal</th></tr></thead>
+        <thead><tr><th>#</th><th data-i18n="th.name">Ism</th><th data-i18n="th.role">Lavozim</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.salary">Maosh</th><th data-i18n="th.status">Holat</th><th data-i18n="th.action">Amal</th></tr></thead>
         <tbody id="staff-body"></tbody>
       </table>
     </div>
@@ -720,11 +720,11 @@
   <!-- GALEREYA PAGE -->
   <div class="page" id="page-gallery">
     <div class="page-header">
-      <h2>Galereya boshqaruvi</h2>
-      <p>Saytdagi galereya rasmlarini qo'shish, tahrirlash, o'chirish</p>
+      <h2 data-i18n="adm.gallery.title">Galereya boshqaruvi</h2>
+      <p data-i18n="adm.gallery.sub">Saytdagi galereya rasmlarini qo'shish, tahrirlash, o'chirish</p>
     </div>
     <div style="margin-bottom:16px;">
-      <button class="btn-primary" onclick="showGalleryModal()">+ Rasm qo'shish</button>
+      <button class="btn-primary" onclick="showGalleryModal()" data-i18n="adm.gallery.add">+ Rasm qo'shish</button>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -756,11 +756,11 @@
   <!-- AKSIYALAR PAGE -->
   <div class="page" id="page-promos">
     <div class="page-header">
-      <h2>Aksiyalar boshqaruvi</h2>
-      <p>Saytdagi aksiya va takliflarni boshqarish</p>
+      <h2 data-i18n="adm.promos.title">Aksiyalar boshqaruvi</h2>
+      <p data-i18n="adm.promos.sub">Saytdagi aksiya va takliflarni boshqarish</p>
     </div>
     <div style="margin-bottom:16px;">
-      <button class="btn-primary" onclick="showPromoModal()">+ Aksiya qo'shish</button>
+      <button class="btn-primary" onclick="showPromoModal()" data-i18n="adm.promos.add">+ Aksiya qo'shish</button>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -888,8 +888,8 @@
   <!-- RETSEPTLAR PAGE -->
   <div class="page" id="page-recipes">
     <div class="page-header">
-      <h2>Retseptlar & Ombor hisobdan chiqarish</h2>
-      <p>Har bir menyu elementiga mahsulot sarfini belgilang — buyurtma "tayyorlanmoqda" bo'lganda avtomatik chiqariladi</p>
+      <h2 data-i18n="adm.recipes.title">Retseptlar & Ombor hisobdan chiqarish</h2>
+      <p data-i18n="adm.recipes.sub">Har bir menyu elementiga mahsulot sarfini belgilang — buyurtma "tayyorlanmoqda" bo'lganda avtomatik chiqariladi</p>
     </div>
     <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;">
       <!-- Chap: menyu tanlash -->
@@ -919,8 +919,8 @@
   <!-- INVENTAR PAGE -->
   <div class="page" id="page-inventory">
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <div><h2>Inventar</h2><p>Ombor va mahsulot qoldiqlari</p></div>
-      <button class="btn btn-gold" onclick="showInvAddModal()">+ Mahsulot qo'shish</button>
+      <div><h2 data-i18n="adm.inventory.title">Inventar</h2><p data-i18n="adm.inventory.sub">Ombor va mahsulot qoldiqlari</p></div>
+      <button class="btn btn-gold" onclick="showInvAddModal()" data-i18n="adm.inventory.add">+ Mahsulot qo'shish</button>
     </div>
     <div id="inv-low-stock" style="display:none;background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#ff6b6b;font-size:0.88rem;"></div>
     <div class="table-wrap">
@@ -990,15 +990,15 @@
   <!-- TAHLIL PAGE -->
   <div class="page" id="page-analytics">
     <div class="page-header">
-      <h2>Tahlil & Hisobotlar</h2>
-      <p>Sessiyalar asosida real daromad, top taomlar, xodimlar samaradorligi</p>
+      <h2 data-i18n="adm.analytics.title">Tahlil & Hisobotlar</h2>
+      <p data-i18n="adm.analytics.sub">Sessiyalar asosida real daromad, top taomlar, xodimlar samaradorligi</p>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;flex-wrap:wrap;">
-      <button class="acc-period-btn active" data-period="daily" onclick="setAnalyticsPeriod('daily',this)">Bugun</button>
-      <button class="acc-period-btn" data-period="weekly" onclick="setAnalyticsPeriod('weekly',this)">Hafta</button>
-      <button class="acc-period-btn" data-period="monthly" onclick="setAnalyticsPeriod('monthly',this)">Oy</button>
+      <button class="acc-period-btn active" data-period="daily" onclick="setAnalyticsPeriod('daily',this)" data-i18n="period.today">Bugun</button>
+      <button class="acc-period-btn" data-period="weekly" onclick="setAnalyticsPeriod('weekly',this)" data-i18n="period.week">Hafta</button>
+      <button class="acc-period-btn" data-period="monthly" onclick="setAnalyticsPeriod('monthly',this)" data-i18n="period.month">Oy</button>
       <span style="flex:1"></span>
-      <a class="btn-secondary" href="/api/export/inventory" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Inventar CSV</a>
+      <a class="btn-secondary" href="/api/export/inventory" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;" data-i18n="adm.inventory.csv">⬇ Inventar CSV</a>
     </div>
 
     <!-- KPI kartalar -->
@@ -1058,13 +1058,13 @@
   <!-- SMENALAR PAGE -->
   <div class="page" id="page-shifts">
     <div class="page-header">
-      <h2>💼 Smenalar tarixi</h2>
-      <p>Kassir smena ochilishi va yopilishi ma'lumotlari</p>
+      <h2 data-i18n="adm.shifts.title">💼 Smenalar tarixi</h2>
+      <p data-i18n="adm.shifts.sub">Kassir smena ochilishi va yopilishi ma'lumotlari</p>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <button class="acc-period-btn active" onclick="loadShifts('',this)">Barchasi</button>
-      <button class="acc-period-btn" onclick="loadShifts('open',this)">Ochiq</button>
-      <button class="acc-period-btn" onclick="loadShifts('closed',this)">Yopilgan</button>
+      <button class="acc-period-btn active" onclick="loadShifts('',this)" data-i18n="filter.all2">Barchasi</button>
+      <button class="acc-period-btn" onclick="loadShifts('open',this)" data-i18n="shift.open">Ochiq</button>
+      <button class="acc-period-btn" onclick="loadShifts('closed',this)" data-i18n="shift.closed">Yopilgan</button>
     </div>
     <div class="table-wrap">
       <table class="data-table">
