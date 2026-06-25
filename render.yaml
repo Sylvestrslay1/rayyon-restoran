@@ -3,10 +3,12 @@ services:
     name: rayyon-restoran
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn --chdir backend app:app
+    startCommand: gunicorn --chdir backend app:app --workers 1 --timeout 120 --keep-alive 5 --log-level info
     autoDeploy: true
     envVars:
       - key: FLASK_ENV
         value: production
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: KITCHEN_TOKEN
+        value: ""

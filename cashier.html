@@ -164,6 +164,7 @@
     <div class="header-btns">
       <button class="btn btn-outline btn-sm" onclick="loadTables()">🔄 Yangilash</button>
       <button class="btn btn-warning btn-sm" onclick="openShiftReport()">📊 Hisobot</button>
+      <button class="btn btn-outline btn-sm" onclick="loadPaymentsHistory()">💰 To'lovlar</button>
       <button class="btn btn-danger btn-sm" onclick="closeShiftConfirm()">🔒 Smena yopish</button>
       <button class="btn btn-outline btn-sm" onclick="logout()">Chiqish</button>
     </div>
@@ -189,6 +190,13 @@
     <div class="total-row"><span class="label" style="font-weight:700">JAMI</span><span class="grand-total" id="m-grand">0</span></div>
     <div class="pay-section">
       <div class="discount-row">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;width:100%;">
+          <input id="m-cust-phone" type="text" placeholder="Mijoz telefoni (+998...)"
+            style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:6px;color:#fff;padding:8px 12px;font-family:inherit;font-size:0.85rem;"
+            oninput="lookupCustomer(this.value)"/>
+          <span id="m-cust-info" style="font-size:0.78rem;color:#c8a96e;min-width:80px;"></span>
+        </div>
         <span class="disc-label">Chegirma %:</span>
         <input class="disc-input" type="number" id="m-disc-input" value="0" min="0" max="100" onchange="updateTotals()">
         <span class="disc-label" style="margin-left:12px">X.Haqi %:</span>
@@ -368,13 +376,17 @@ function renderTables() {
   }
   grid.innerHTML = tablesData.map(t => {
     const occupied = !!t.current_session_id;
+    const overtime = occupied && (t.minutes_open || 0) > 120;
     const amt = t.total_amount ? `<div class="table-amount">${fmt(t.total_amount)} so'm</div>` : '';
-    const time = t.opened_at ? `<div class="table-time">${timeAgo(t.opened_at)}</div>` : '';
+    const mins = t.minutes_open || 0;
+    const timeStr = mins > 0 ? (mins >= 60 ? `${Math.floor(mins/60)}s ${mins%60}d` : `${mins}d`) : '';
+    const timeEl = timeStr ? `<div class="table-time" style="color:${overtime?'#f87171':'#64748b'}">${overtime?'⚠ ':' ⏱ '}${timeStr}</div>` : '';
     const waiter = t.waiter_name ? `<div class="table-waiter">👤 ${esc(t.waiter_name)}</div>` : '';
-    return `<div class="table-card ${occupied ? 'occupied' : 'free'}" onclick="openTable(${t.number}, ${t.current_session_id || 'null'})">
+    const extraStyle = overtime ? 'border-color:#f87171;background:#1c0a0a;' : '';
+    return `<div class="table-card ${occupied ? 'occupied' : 'free'}" style="${extraStyle}" onclick="openTable(${t.number}, ${t.current_session_id || 'null'})">
       <div class="table-num">Stol ${t.number}</div>
-      <div class="table-status">${occupied ? '🔴 Band' : '⚫ Bo\'sh'}</div>
-      ${amt}${time}${waiter}
+      <div class="table-status">${occupied ? (overtime ? '🔴 Uzoq' : '🔴 Band') : '⚫ Bo\'sh'}</div>
+      ${amt}${timeEl}${waiter}
     </div>`;
   }).join('');
 }
@@ -443,17 +455,17 @@ function updateTotals() {
   if (scAmt)   { sr.style.display='flex'; document.getElementById('m-sc-val').textContent=`+${fmt(scAmt)} so'm`; }   else sr.style.display='none';
 }
 
-async function saveDiscounts() {
+async function saveDiscounts(silent=false) {
   if (!currentSession) return;
   const disc = parseFloat(document.getElementById('m-disc-input').value)||0;
   const sc   = parseFloat(document.getElementById('m-sc-input').value)||0;
   try {
     await fetch(`${API}/api/session/${currentSession.id}/discount`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({discount:disc, service_charge:sc})
+      body: JSON.stringify({discount:disc, service_charge:sc, pin: PIN})
     });
-    showToast('Saqlandi', 'success');
-  } catch(e) { showToast('Xato', 'error'); }
+    if (!silent) showToast('Saqlandi', 'success');
+  } catch(e) { if (!silent) showToast('Xato', 'error'); }
 }
 
 let payMethod = 'cash';
@@ -492,8 +504,33 @@ function getGrand() {
   return Math.round(subtotal * (1 + sc/100 - disc/100));
 }
 
+let customerDisc = 0;
+async function lookupCustomer(phone) {
+  const info = document.getElementById('m-cust-info');
+  if (!phone || phone.length < 9) { info.textContent=''; customerDisc=0; return; }
+  try {
+    const r = await fetch(`${API}/api/customers/lookup?phone=${encodeURIComponent(phone)}`);
+    const d = await r.json();
+    if (d.found) {
+      customerDisc = d.customer.discount_pct || 0;
+      info.textContent = `${d.customer.name||'Mijoz'} · ${d.customer.visits} ta tashrif${customerDisc?` · ${customerDisc}% chegirma`:''}`;
+      info.style.color = '#c8a96e';
+      document.getElementById('m-disc-input').value = customerDisc;
+      updateTotals();
+      // O-5: Sessiya ochiq bo'lsa chegirmani avtomatik saqlash
+      if (currentSession && customerDisc > 0) saveDiscounts(true);
+    } else {
+      customerDisc = 0;
+      info.textContent = '';
+    }
+  } catch(e) { /* tarmoq xatosi — jim o'tamiz */ }
+}
+
 async function submitPayment() {
   if (!currentSession) return;
+  if (!SHIFT_ID) { showToast('Avval smena oching!', 'error'); return; }
+  // Chegirma/xizmat haqi ni avval DB ga saqlash (server_total mos bo'lishi uchun)
+  await saveDiscounts(true);
   const grand = getGrand();
   let amount = grand;
   let body = {method: payMethod, amount, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID};
@@ -514,7 +551,8 @@ async function submitPayment() {
     const payments = payMethod === 'split'
       ? [{method:'cash', amount: body.cash_amount}, {method:'card', amount: body.card_amount}]
       : [{method: payMethod, amount: body.amount}];
-    const closeBody = {payments, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID, pin: PIN};
+    const custPhone = (document.getElementById('m-cust-phone')?.value||'').trim();
+    const closeBody = {payments, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID, pin: PIN, customer_phone: custPhone};
     const r = await fetch(`${API}/api/session/${currentSession.id}/close`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(closeBody)
@@ -672,6 +710,54 @@ function showToast(msg, type='') {
   t.className = 'show' + (type ? ' '+type : '');
   setTimeout(()=>t.className='', 3000);
 }
+
+// ===== TO'LOVLAR TARIXI =====
+async function loadPaymentsHistory() {
+  if (!SHIFT_ID) { showToast('Smena topilmadi', 'error'); return; }
+  const today = new Date().toISOString().slice(0,10);
+  const shiftParam = `&shift_id=${SHIFT_ID}`;
+  const r = await fetch(`${API}/api/payments?date=${today}&limit=50${shiftParam}`);
+  const items = await r.json();
+  const modal = document.getElementById('payments-history-modal');
+  if (!modal) return;
+  const body = document.getElementById('payments-history-body');
+  if (!items.length) {
+    body.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:20px;">Bugun to\'lov yo\'q</p>';
+  } else {
+    const total = items.reduce((s,p)=>s+(p.amount||0),0);
+    body.innerHTML = `
+      <div style="text-align:right;color:#c8a96e;font-weight:700;margin-bottom:12px;">
+        Jami: ${total.toLocaleString()} so'm
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead><tr style="color:#94a3b8;font-size:0.75rem;">
+          <th style="text-align:left;padding:6px 4px;">Vaqt</th>
+          <th style="text-align:left;padding:6px 4px;">Stol</th>
+          <th style="text-align:left;padding:6px 4px;">Usul</th>
+          <th style="text-align:right;padding:6px 4px;">Summa</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(p=>`<tr style="border-top:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 4px;color:#94a3b8">${new Date(p.created_at).toLocaleTimeString('uz',{hour:'2-digit',minute:'2-digit'})}</td>
+            <td style="padding:6px 4px">Stol #${p.tbl||p.table_number||'?'}</td>
+            <td style="padding:6px 4px;color:#38bdf8">${p.method==='cash'?'💵 Naqd':p.method==='card'?'💳 Karta':'🔀 Aralash'}</td>
+            <td style="padding:6px 4px;text-align:right;color:#c8a96e;font-weight:700">${(p.amount||0).toLocaleString()}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+  modal.classList.remove('hidden');
+}
 </script>
+
+<div class="modal-overlay hidden" id="payments-history-modal" style="align-items:flex-end;">
+  <div style="background:#1e293b;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:70vh;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(56,189,248,0.15);">
+      <span style="font-weight:700;font-size:1rem;color:#38bdf8;letter-spacing:2px;">BUGUNGI TO'LOVLAR</span>
+      <button onclick="document.getElementById('payments-history-modal').classList.add('hidden')" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="payments-history-body" style="overflow-y:auto;padding:16px;"></div>
+  </div>
+</div>
 </body>
 </html>

@@ -578,6 +578,34 @@ def init_db():
                     item
                 )
 
+    # ===== LOYALTY MIJOZLAR =====
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                phone TEXT UNIQUE NOT NULL,
+                total_spent INTEGER DEFAULT 0,
+                visits INTEGER DEFAULT 0,
+                discount_pct REAL DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                phone TEXT UNIQUE NOT NULL,
+                total_spent INTEGER DEFAULT 0,
+                visits INTEGER DEFAULT 0,
+                discount_pct REAL DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
     # ===== KASSIR SMENALARI =====
     if USE_PG:
         cur.execute("""
@@ -622,13 +650,18 @@ def init_db():
         "ALTER TABLE payments ADD COLUMN refund_amount INTEGER DEFAULT 0",
         "ALTER TABLE sessions ADD COLUMN cashier_name TEXT",
         "ALTER TABLE sessions ADD COLUMN cashier_id INTEGER",
+        "ALTER TABLE sessions ADD COLUMN customer_id INTEGER",
+        "ALTER TABLE sessions ADD COLUMN customer_phone TEXT",
+        "ALTER TABLE sessions ADD COLUMN customer_name TEXT",
     ]
     for migration_sql in migrations:
         try:
             if USE_PG:
-                col = migration_sql.split("ADD COLUMN")[1].strip().split()[0]
-                tbl = migration_sql.split("ALTER TABLE")[1].strip().split()[0]
-                cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} TEXT")
+                # "ALTER TABLE <tbl> ADD COLUMN <col> <TYPE> [DEFAULT x]"
+                # col_def = "<col> <TYPE> [DEFAULT x]" — to'liq tip saqlanadi
+                col_def = migration_sql.split("ADD COLUMN")[1].strip()
+                tbl     = migration_sql.split("ALTER TABLE")[1].strip().split()[0]
+                cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def}")
             else:
                 cur.execute(migration_sql)
         except Exception:

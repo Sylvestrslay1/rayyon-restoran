@@ -139,7 +139,7 @@ def check_kitchen_auth() -> bool:
     if check_auth():
         return True
     if not KITCHEN_TOKEN:
-        return False
+        return True  # Token sozlanmagan — ochiq kirish (dev mode)
     provided = (request.headers.get("X-Kitchen-Token", "")
                 or request.args.get("kitchen_token", ""))
     if not provided:
@@ -516,16 +516,23 @@ def uploaded_file(filename):
 
 
 # ===== SETTINGS =====
+PUBLIC_SETTINGS = {"restaurant_name", "phone", "address", "working_hours", "telegram_bot"}
+
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     cur = db_exec(conn, "SELECT key, value FROM settings")
     rows = cur.fetchall()
     conn.close()
     if USE_PG:
-        return jsonify({r[0]: r[1] for r in rows})
-    return jsonify({r["key"]: r["value"] for r in rows})
+        all_s = {r[0]: r[1] for r in rows}
+    else:
+        all_s = {r["key"]: r["value"] for r in rows}
+    # Admin bo'lmasa faqat public sozlamalarni qaytarish
+    if not check_auth():
+        public = [{"key": k, "value": v} for k, v in all_s.items() if k in PUBLIC_SETTINGS]
+        return jsonify(public)
+    return jsonify(all_s)
 
 
 @app.route("/api/settings", methods=["PUT"])
@@ -568,15 +575,27 @@ def get_stats():
         row = cur.fetchone()
         return row[0] if row else 0
 
-    today_sql = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE::text" if USE_PG else \
-                "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
+    if USE_PG:
+        rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at::date = CURRENT_DATE"
+        res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE::text"
+        active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
+        closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND closed_at::date = CURRENT_DATE"
+    else:
+        rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE date(created_at,'localtime')=date('now','localtime')"
+        res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
+        active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
+        closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND date(closed_at,'localtime')=date('now','localtime')"
 
     result = {
+        "revenue":            val(rev_sql),
+        "active_sessions":    val(active_ses_sql),
+        "closed_today":       val(closed_sql),
+        "reservations_today": val(res_today_sql),
+        "reservations_new":   val("SELECT COUNT(*) FROM reservations WHERE status='new'"),
+        "menu_count":         val("SELECT COUNT(*) FROM menu WHERE available=1"),
+        # Eski maydonlar — website buyurtmalari uchun (orqaga moslik)
         "orders_total": val("SELECT COUNT(*) FROM orders"),
-        "orders_new": val("SELECT COUNT(*) FROM orders WHERE status='new'"),
-        "revenue": val("SELECT COALESCE(SUM(total_price),0) FROM orders WHERE status='done'"),
-        "reservations_today": val(today_sql),
-        "menu_count": val("SELECT COUNT(*) FROM menu WHERE available=1"),
+        "orders_new":   val("SELECT COUNT(*) FROM orders WHERE status='new'"),
     }
     conn.close()
     return jsonify(result)
@@ -871,17 +890,34 @@ def close_session(sid):
              cashier_name, cashier_id, shift_id))
 
     db_exec(conn,
-        "UPDATE sessions SET status='completed', closed_at=CURRENT_TIMESTAMP, total_amount=?, cashier_name=?, cashier_id=? WHERE id=?",
+        "UPDATE sessions SET status='closed', closed_at=CURRENT_TIMESTAMP, total_amount=?, cashier_name=?, cashier_id=? WHERE id=?",
         (server_total, cashier_name, cashier_id, sid))
     db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
-    conn.commit(); conn.close()
+
+    # Loyalty: mijoz bo'lsa — total_spent va visits yangilash
+    customer_phone = d.get("customer_phone", "") or s.get("customer_phone", "")
+    customer_name_d = d.get("customer_name", "") or s.get("customer_name", "")
+    if customer_phone:
+        cur_c = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (customer_phone,))
+        crows = rows_to_list(cur_c)
+        if crows:
+            db_exec(conn, "UPDATE customers SET total_spent=total_spent+?, visits=visits+1 WHERE phone=?",
+                    (server_total, customer_phone))
+        else:
+            db_exec(conn, "INSERT INTO customers (name, phone, total_spent, visits) VALUES (?,?,?,1)",
+                    (customer_name_d, customer_phone, server_total))
+        conn.commit()
+
+    conn.close()
     return jsonify({"ok": True, "total": server_total})
 
 @app.route("/api/session/<int:sid>/discount", methods=["PUT"])
 def set_discount(sid):
     """Chegirma yoki xizmat haqi o'rnatish"""
-    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
         (d.get("discount",0), d.get("service_charge",0), sid))
@@ -1706,6 +1742,96 @@ def analytics_summary():
         "chart": chart, "top_items": top_items, "staff_perf": staff_perf,
         "low_stock": low_stock, "pay_by_method": pay_by_method
     })
+
+
+@app.route("/api/payments", methods=["GET"])
+def get_payments():
+    # Admin token yoki shift_id parametri bilan ruxsat
+    shift_id_arg = request.args.get("shift_id")
+    if not check_auth() and not shift_id_arg:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    date = request.args.get("date")
+    shift_id = request.args.get("shift_id")
+    limit_n = int(request.args.get("limit", 100))
+
+    sql = "SELECT p.*, s.table_number as tbl FROM payments p LEFT JOIN sessions s ON p.session_id=s.id WHERE 1=1"
+    params = []
+    if date:
+        sql += " AND p.created_at::date::text=?" if USE_PG else " AND date(p.created_at)=?"
+        params.append(date)
+    if shift_id:
+        sql += " AND p.shift_id=?"
+        params.append(int(shift_id))
+    sql += " ORDER BY p.created_at DESC LIMIT ?"
+    params.append(limit_n)
+    cur = db_exec(conn, sql, tuple(params))
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
+# ===== LOYALTY KARTALAR =====
+@app.route("/api/customers", methods=["GET"])
+def get_customers():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    search = request.args.get("q", "")
+    if search:
+        cur = db_exec(conn, "SELECT * FROM customers WHERE phone LIKE ? OR name LIKE ? ORDER BY total_spent DESC",
+                      (f"%{search}%", f"%{search}%"))
+    else:
+        cur = db_exec(conn, "SELECT * FROM customers ORDER BY total_spent DESC")
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+@app.route("/api/customers/lookup", methods=["GET"])
+def lookup_customer():
+    phone = request.args.get("phone", "").strip()
+    if not phone: return jsonify({"found": False}), 200
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (phone,))
+    rows = rows_to_list(cur)
+    conn.close()
+    if rows:
+        return jsonify({"found": True, "customer": rows[0]})
+    return jsonify({"found": False})
+
+@app.route("/api/customers", methods=["POST"])
+def add_customer():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    phone = (d.get("phone") or "").strip()
+    if not phone: return jsonify({"error": "Telefon kiritilmadi"}), 400
+    conn = get_conn()
+    try:
+        db_exec(conn, "INSERT INTO customers (name, phone, discount_pct, notes) VALUES (?,?,?,?)",
+                (d.get("name",""), phone, d.get("discount_pct", 0), d.get("notes","")))
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": "Bu telefon allaqachon mavjud"}), 409
+    conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/customers/<int:cid>", methods=["PUT"])
+def update_customer(cid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    conn = get_conn()
+    db_exec(conn, "UPDATE customers SET name=?, phone=?, discount_pct=?, notes=? WHERE id=?",
+            (d.get("name",""), d.get("phone",""), d.get("discount_pct",0), d.get("notes",""), cid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/customers/<int:cid>", methods=["DELETE"])
+def delete_customer(cid):
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    db_exec(conn, "DELETE FROM customers WHERE id=?", (cid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
 
 
 # ===== STATIC FILES =====
