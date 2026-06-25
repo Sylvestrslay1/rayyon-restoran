@@ -427,6 +427,7 @@
     </button>
     <button class="nav-item" data-page="reservations">
       <span class="n-icon">◆</span> <span data-i18n="adm.reservations">Bronlar</span>
+      <span class="nav-badge" id="resBadge" style="display:none">0</span>
     </button>
     <button class="nav-item" data-page="menu">
       <span class="n-icon">⬡</span> <span data-i18n="adm.menu">Menyu</span>
@@ -452,8 +453,17 @@
     <button class="nav-item" data-page="recipes">
       <span class="n-icon">📋</span> <span>Retseptlar</span>
     </button>
+    <button class="nav-item" data-page="inventory">
+      <span class="n-icon">📦</span> <span>Inventar</span>
+    </button>
+    <button class="nav-item" data-page="loyalty">
+      <span class="n-icon">💳</span> <span>Loyalty</span>
+    </button>
     <button class="nav-item" data-page="analytics">
       <span class="n-icon">📊</span> <span>Tahlil</span>
+    </button>
+    <button class="nav-item" data-page="shifts">
+      <span class="n-icon">💼</span> <span>Smenalar</span>
     </button>
     <button class="nav-item" data-page="settings">
       <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
@@ -477,35 +487,35 @@
     </div>
     <div class="stats-grid">
       <div class="stat-card red">
-        <div class="s-label" data-i18n="st.new_orders">Yangi buyurtmalar</div>
-        <div class="s-value" id="st-new-orders">—</div>
-        <div class="s-sub" data-i18n="st.new_sub">Ko'rib chiqilmagan</div>
+        <div class="s-label">Faol stollar</div>
+        <div class="s-value" id="st-active-sessions">—</div>
+        <div class="s-sub">Hozir band</div>
       </div>
       <div class="stat-card cyan">
-        <div class="s-label" data-i18n="st.total">Jami buyurtmalar</div>
-        <div class="s-value" id="st-total-orders">—</div>
-        <div class="s-sub" data-i18n="st.total_sub">Barcha vaqt</div>
+        <div class="s-label">Bugun yopilgan</div>
+        <div class="s-value" id="st-closed-today">—</div>
+        <div class="s-sub">Sessiyalar soni</div>
       </div>
       <div class="stat-card gold">
-        <div class="s-label" data-i18n="st.revenue">Daromad</div>
+        <div class="s-label">Bugungi daromad</div>
         <div class="s-value" id="st-revenue">—</div>
-        <div class="s-sub" data-i18n="st.revenue_sub">Bajarilgan buyurtmalar</div>
+        <div class="s-sub">To'lovlar jami</div>
       </div>
       <div class="stat-card green">
-        <div class="s-label" data-i18n="st.res_today">Bugungi bronlar</div>
+        <div class="s-label">Yangi bronlar</div>
         <div class="s-value" id="st-reservations">—</div>
-        <div class="s-sub" data-i18n="st.res_sub">Bugungi kun</div>
+        <div class="s-sub">Ko'rib chiqilmagan</div>
       </div>
       <div class="stat-card">
-        <div class="s-label" data-i18n="st.menu_cnt">Aktiv taomlar</div>
+        <div class="s-label">Aktiv taomlar</div>
         <div class="s-value" id="st-menu" style="color:var(--muted)">—</div>
-        <div class="s-sub" data-i18n="st.menu_sub">Menyuda mavjud</div>
+        <div class="s-sub">Menyuda mavjud</div>
       </div>
     </div>
-    <div class="cyber-divider"><span data-i18n="dash.recent">So'nggi buyurtmalar</span></div>
+    <div class="cyber-divider"><span>Bugungi to'lovlar</span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th data-i18n="th.id">#</th><th data-i18n="th.dish">Taom</th><th data-i18n="th.client">Mijoz</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.price">Narx</th><th data-i18n="th.status">Status</th><th data-i18n="th.time">Vaqt</th></tr></thead>
+        <thead><tr><th>#</th><th>Stol</th><th>Summa</th><th>Usul</th><th>Kassir</th><th>Vaqt</th></tr></thead>
         <tbody id="dashOrdersBody"></tbody>
       </table>
     </div>
@@ -887,6 +897,77 @@
     </div>
   </div>
 
+  <!-- INVENTAR PAGE -->
+  <div class="page" id="page-inventory">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><h2>Inventar</h2><p>Ombor va mahsulot qoldiqlari</p></div>
+      <button class="btn btn-gold" onclick="showInvAddModal()">+ Mahsulot qo'shish</button>
+    </div>
+    <div id="inv-low-stock" style="display:none;background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.3);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#ff6b6b;font-size:0.88rem;"></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Mahsulot</th><th>Birlik</th><th>Qoldiq</th><th>Min. qoldiq</th><th>Narx/birlik</th><th>Holat</th><th>Amal</th></tr></thead>
+        <tbody id="inv-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOYALTY PAGE -->
+  <div class="page" id="page-loyalty">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><h2>Loyalty kartalar</h2><p>Doimiy mijozlar va chegirmalar</p></div>
+      <button class="btn btn-gold" onclick="showAddCustomerModal()">+ Mijoz qo'shish</button>
+    </div>
+    <div class="search-bar" style="margin-bottom:16px;">
+      <input type="text" id="customer-search" placeholder="Ism yoki telefon..." oninput="searchCustomers(this.value)" style="width:100%;max-width:400px;"/>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Ism</th><th>Telefon</th><th>Tashrif</th><th>Jami xarid</th><th>Chegirma</th><th>Izoh</th><th>Amal</th></tr></thead>
+        <tbody id="loyalty-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Inventar qo'shish modal -->
+  <div class="modal-overlay" id="invAddModal">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="ia-modal-title">Mahsulot qo'shish</h3><button onclick="document.getElementById('invAddModal').classList.remove('open')">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="ia-edit-id"/>
+        <div class="form-group"><label>Nomi</label><input type="text" id="ia-name" placeholder="Un, Guruch..."/></div>
+        <div class="form-group"><label>Birlik</label>
+          <select id="ia-unit"><option value="kg">kg</option><option value="g">g</option><option value="l">l</option><option value="ml">ml</option><option value="dona">dona</option></select>
+        </div>
+        <div class="form-group"><label>Qoldiq</label><input type="number" id="ia-qty" placeholder="0" step="0.1"/></div>
+        <div class="form-group"><label>Minimal qoldiq (ogohlantirish uchun)</label><input type="number" id="ia-min" placeholder="0" step="0.1"/></div>
+        <div class="form-group"><label>Narx (1 birlik, so'm)</label><input type="number" id="ia-price" placeholder="0"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('invAddModal').classList.remove('open')">Bekor</button>
+        <button class="btn-primary" onclick="saveInventoryItem()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mijoz qo'shish/tahrirlash modal -->
+  <div class="modal-overlay" id="customerModal">
+    <div class="modal-box">
+      <div class="modal-header"><h3 id="cust-modal-title">Mijoz qo'shish</h3><button onclick="document.getElementById('customerModal').classList.remove('open')">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="cust-id"/>
+        <div class="form-group"><label>Ism</label><input type="text" id="cust-name" placeholder="Ism familiya"/></div>
+        <div class="form-group"><label>Telefon *</label><input type="text" id="cust-phone" placeholder="+998901234567"/></div>
+        <div class="form-group"><label>Chegirma (%)</label><input type="number" id="cust-disc" placeholder="0" min="0" max="50"/></div>
+        <div class="form-group"><label>Izoh</label><input type="text" id="cust-notes" placeholder="..."/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('customerModal').classList.remove('open')">Bekor</button>
+        <button class="btn-primary" onclick="saveCustomer()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TAHLIL PAGE -->
   <div class="page" id="page-analytics">
     <div class="page-header">
@@ -949,6 +1030,25 @@
       <table class="data-table">
         <thead><tr><th>Mahsulot</th><th>Qolgan</th><th>Minimal</th><th>Birlik</th></tr></thead>
         <tbody id="an-low-stock"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SMENALAR PAGE -->
+  <div class="page" id="page-shifts">
+    <div class="page-header">
+      <h2>💼 Smenalar tarixi</h2>
+      <p>Kassir smena ochilishi va yopilishi ma'lumotlari</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="acc-period-btn active" onclick="loadShifts('',this)">Barchasi</button>
+      <button class="acc-period-btn" onclick="loadShifts('open',this)">Ochiq</button>
+      <button class="acc-period-btn" onclick="loadShifts('closed',this)">Yopilgan</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Kassir</th><th>Ochildi</th><th>Yopildi</th><th>Boshlanma</th><th>Jami tushum</th><th>Status</th></tr></thead>
+        <tbody id="shiftsBody"></tbody>
       </table>
     </div>
   </div>
@@ -1143,30 +1243,37 @@ function loadPage(p) {
   else if (p==='accounting') loadAccounting();
   else if (p==='recipes')   loadRecipesPage();
   else if (p==='analytics') loadAnalytics();
+  else if (p==='inventory')  loadInventoryPage();
+  else if (p==='loyalty')    loadLoyaltyPage();
+  else if (p==='shifts')     loadShifts('');
 }
 
 // DASHBOARD
 async function loadDashboard() {
   const r = await fetch(`${API}/api/stats`, { headers: H() });
   const d = await r.json();
-  document.getElementById('st-new-orders').textContent  = d.orders_new;
-  document.getElementById('st-total-orders').textContent = d.orders_total;
-  document.getElementById('st-revenue').textContent     = d.revenue > 0 ? priceFmt(d.revenue) : '0';
-  document.getElementById('st-reservations').textContent = d.reservations_today;
-  document.getElementById('st-menu').textContent        = d.menu_count;
+  document.getElementById('st-active-sessions').textContent = d.active_sessions ?? '—';
+  document.getElementById('st-closed-today').textContent    = d.closed_today ?? '—';
+  document.getElementById('st-revenue').textContent         = d.revenue > 0 ? priceFmt(d.revenue) : "0 so'm";
+  document.getElementById('st-reservations').textContent    = d.reservations_new ?? d.reservations_today ?? '—';
+  document.getElementById('st-menu').textContent            = d.menu_count ?? '—';
   const badge = document.getElementById('ordersCount');
-  badge.textContent = d.orders_new;
-  badge.style.display = d.orders_new > 0 ? '' : 'none';
+  badge.textContent = d.orders_new ?? 0;
+  badge.style.display = (d.orders_new > 0) ? '' : 'none';
 
-  const r2 = await fetch(`${API}/api/orders`, { headers: H() });
-  const orders = await r2.json();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const r2 = await fetch(`${API}/api/payments?date=${todayIso}&limit=8`, { headers: H() });
+  const paymentsData = await r2.json();
+  const pays = Array.isArray(paymentsData) ? paymentsData : (paymentsData.payments || []);
   const tbody = document.getElementById('dashOrdersBody');
-  if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${t('empty.orders')}</td></tr>`; return; }
-  tbody.innerHTML = orders.slice(0,8).map(o => `<tr>
-    <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
-    <td>${esc(o.item_name)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td>
-    <td style="color:var(--gold);font-weight:700">${priceFmt(o.total_price)}</td>
-    <td>${statusBadge(o.status)}</td><td style="color:var(--muted)">${timeFmt(o.created_at)}</td>
+  if (!pays.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Bugun to'lov yo'q</td></tr>`; return; }
+  tbody.innerHTML = pays.map(p => `<tr>
+    <td style="color:var(--cyan);font-weight:700">#${p.id}</td>
+    <td>${esc(p.table_number ? 'Stol ' + p.table_number : '—')}</td>
+    <td style="color:var(--gold);font-weight:700">${priceFmt(p.amount)}</td>
+    <td>${esc(p.method || 'naqd')}</td>
+    <td>${esc(p.cashier_name || '—')}</td>
+    <td style="color:var(--muted)">${timeFmt(p.created_at)}</td>
   </tr>`).join('');
 }
 
@@ -1423,11 +1530,13 @@ async function loadTables() {
     return;
   }
   map.innerHTML = tablesData.map(t => {
-    const statusColor = t.status === 'free' ? '#00e676' : t.status === 'bill_requested' ? '#ff4444' : '#ff9800';
+    const overtime = t.minutes_open > 120;
+    const statusColor = t.status === 'free' ? '#00e676' : t.status === 'bill_requested' ? '#ff4444' : overtime ? '#ff4444' : '#ff9800';
     const statusText  = t.status === 'free' ? 'Bo\'sh' : t.status === 'bill_requested' ? 'Hisob so\'radi' : 'Band';
     const mins = t.minutes_open ? `${t.minutes_open} daq` : '';
     const sum  = t.total_amount ? priceFmt(t.total_amount) : '';
-    return `<div style="background:rgba(255,255,255,0.03);border:1px solid ${statusColor}33;
+    const overtimeBadge = overtime ? `<div style="color:#ff4444;font-size:0.72rem;font-weight:700;animation:pulse 1s infinite;">⚠ ${Math.floor(t.minutes_open/60)}s ${t.minutes_open%60}d</div>` : '';
+    return `<div style="background:${overtime?'rgba(255,68,68,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${statusColor}33;
         border-radius:12px;padding:18px;cursor:pointer;transition:all 0.2s;position:relative;"
         onclick="openTableSession(${t.id})"
         onmouseover="this.style.borderColor='${statusColor}88'"
@@ -1438,7 +1547,8 @@ async function loadTables() {
           color:${statusColor};letter-spacing:2px;">STOL ${t.number}</div>
       <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${esc(t.name)} · ${t.capacity} kishi</div>
       <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;font-weight:600;">${statusText}</div>
-      ${mins ? `<div style="color:rgba(255,255,255,0.35);font-size:0.72rem;">⏱ ${mins}</div>` : ''}
+      ${mins ? `<div style="color:${overtime?'#ff4444':'rgba(255,255,255,0.35)'};font-size:0.72rem;">⏱ ${mins}</div>` : ''}
+      ${overtimeBadge}
       ${sum  ? `<div style="color:var(--gold);font-weight:700;font-size:0.88rem;margin-top:4px;">${sum}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:12px;" onclick="event.stopPropagation()">
         <button class="act-btn" title="QR" onclick="showQR(${t.id})">QR</button>
@@ -2211,6 +2321,211 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 loadDashboard();
 loadMenu();
 setInterval(loadDashboard, 30000);
+
+// ===== BRONLAR AUTO-REFRESH =====
+let lastResCount = 0;
+async function autoRefreshReservations() {
+  try {
+    const r = await fetch(`${API}/api/reservations`, { headers: H() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const badge = document.getElementById('resBadge');
+    const pending = rows.filter(x => x.status === 'new').length;
+    if (pending > 0) {
+      badge.textContent = pending;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+    if (pending > lastResCount && lastResCount >= 0) {
+      toast('🔔 Yangi bron keldi!');
+    }
+    lastResCount = pending;
+  } catch(e) {}
+}
+setInterval(autoRefreshReservations, 15000);
+
+// ===== SMENALAR =====
+async function loadShifts(statusFilter, btnEl) {
+  document.querySelectorAll('#page-shifts .acc-period-btn').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+  const url = statusFilter
+    ? `${API}/api/shifts?status=${statusFilter}&limit=100`
+    : `${API}/api/shifts?limit=100`;
+  const r = await fetch(url, { headers: H() });
+  if (!r.ok) { toast('Smenalar yuklanmadi', false); return; }
+  const rows = await r.json();
+  const tbody = document.getElementById('shiftsBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Smenalar yo'q</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(s => {
+    const isOpen = s.status === 'open';
+    const dur = s.opened_at && s.closed_at
+      ? (() => { const d = Math.round((new Date(s.closed_at) - new Date(s.opened_at)) / 60000); return d >= 60 ? `${Math.floor(d/60)}s ${d%60}d` : `${d}d`; })()
+      : (isOpen ? '<span style="color:var(--cyan)">Ochiq</span>' : '—');
+    return `<tr>
+      <td style="color:var(--cyan);font-weight:700">#${s.id}</td>
+      <td>${esc(s.cashier_name || '—')}</td>
+      <td style="color:var(--muted)">${timeFmt(s.opened_at)}</td>
+      <td style="color:var(--muted)">${s.closed_at ? timeFmt(s.closed_at) : dur}</td>
+      <td>${priceFmt(s.opening_cash || 0)}</td>
+      <td style="color:var(--gold);font-weight:700">${priceFmt(s.total_revenue || s.total_collected || 0)}</td>
+      <td>${isOpen ? '<span class="badge badge-confirmed">Ochiq</span>' : '<span class="badge badge-done">Yopilgan</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== INVENTAR =====
+let inventoryData = [];
+async function loadInventoryPage() {
+  const r = await fetch(`${API}/api/inventory`, { headers: H() });
+  const items = await r.json();
+  inventoryData = items;
+  const tbody = document.getElementById('inv-body');
+  const lowDiv = document.getElementById('inv-low-stock');
+  const low = items.filter(i => i.quantity <= i.min_quantity);
+  if (low.length) {
+    lowDiv.style.display = '';
+    lowDiv.innerHTML = '⚠ Kam qolgan: ' + low.map(i=>`<b>${i.name}</b> (${i.quantity} ${i.unit})`).join(', ');
+  } else {
+    lowDiv.style.display = 'none';
+  }
+  if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Inventar bo\'sh</td></tr>'; return; }
+  tbody.innerHTML = items.map(item => {
+    const low = item.quantity <= item.min_quantity;
+    return `<tr>
+      <td style="color:var(--cyan)">#${item.id}</td>
+      <td style="font-weight:600">${esc(item.name)}</td>
+      <td>${esc(item.unit)}</td>
+      <td style="color:${low?'#ff4444':'#00e676'};font-weight:700">${item.quantity}</td>
+      <td style="color:var(--muted)">${item.min_quantity}</td>
+      <td style="color:var(--gold)">${priceFmt(item.price_per_unit)}</td>
+      <td>${low?'<span style="color:#ff4444;font-weight:700">⚠ Kam</span>':'<span style="color:#00e676">OK</span>'}</td>
+      <td>
+        <button class="btn-sm btn-secondary" onclick="editInventory(${item.id})">✎</button>
+        <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteInventory(${item.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showInvAddModal(item) {
+  document.getElementById('ia-modal-title').textContent = item ? 'Tahrirlash' : 'Mahsulot qo\'shish';
+  document.getElementById('ia-edit-id').value = item ? item.id : '';
+  document.getElementById('ia-name').value = item ? item.name : '';
+  document.getElementById('ia-unit').value = item ? item.unit : 'kg';
+  document.getElementById('ia-qty').value = item ? item.quantity : '';
+  document.getElementById('ia-min').value = item ? item.min_quantity : '';
+  document.getElementById('ia-price').value = item ? item.price_per_unit : '';
+  document.getElementById('invAddModal').classList.add('open');
+}
+
+function editInventory(id) {
+  const item = inventoryData.find(i => i.id === id);
+  if (item) showInvAddModal(item);
+}
+
+async function saveInventoryItem() {
+  const id = document.getElementById('ia-edit-id').value;
+  const body = {
+    name: document.getElementById('ia-name').value.trim(),
+    unit: document.getElementById('ia-unit').value,
+    quantity: parseFloat(document.getElementById('ia-qty').value)||0,
+    min_quantity: parseFloat(document.getElementById('ia-min').value)||0,
+    price_per_unit: parseInt(document.getElementById('ia-price').value)||0
+  };
+  if (!body.name) { toast('Nom kiritilmadi', 'error'); return; }
+  const url = id ? `${API}/api/inventory/${id}` : `${API}/api/inventory`;
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: H(), body: JSON.stringify(body) });
+  document.getElementById('invAddModal').classList.remove('open');
+  toast('Saqlandi ✓');
+  loadInventoryPage();
+}
+
+async function deleteInventory(id) {
+  if (!confirm('O\'chirilsinmi?')) return;
+  await fetch(`${API}/api/inventory/${id}`, { method:'DELETE', headers: H() });
+  toast('O\'chirildi');
+  loadInventoryPage();
+}
+
+// ===== LOYALTY =====
+let loyaltyData = [];
+async function loadLoyaltyPage() {
+  const r = await fetch(`${API}/api/customers`, { headers: H() });
+  const rows = await r.json();
+  loyaltyData = rows;
+  renderLoyaltyTable(rows);
+}
+
+function renderLoyaltyTable(rows) {
+  const tbody = document.getElementById('loyalty-body');
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Mijozlar yo\'q</td></tr>'; return; }
+  tbody.innerHTML = rows.map(c => `<tr>
+    <td style="color:var(--cyan)">#${c.id}</td>
+    <td style="font-weight:600">${esc(c.name||'—')}</td>
+    <td>${esc(c.phone)}</td>
+    <td style="color:var(--gold)">${c.visits}</td>
+    <td style="color:var(--green);font-weight:700">${priceFmt(c.total_spent)}</td>
+    <td style="color:${c.discount_pct>0?'#ff9800':'var(--muted)'}">${c.discount_pct}%</td>
+    <td style="color:var(--muted);font-size:0.8rem">${esc(c.notes||'')}</td>
+    <td>
+      <button class="btn-sm btn-secondary" onclick="editCustomer(${c.id})">✎</button>
+      <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteCustomer(${c.id})">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function searchCustomers(q) {
+  if (!q) { renderLoyaltyTable(loyaltyData); return; }
+  const r = await fetch(`${API}/api/customers?q=${encodeURIComponent(q)}`, { headers: H() });
+  const rows = await r.json();
+  renderLoyaltyTable(rows);
+}
+
+function showAddCustomerModal(c) {
+  document.getElementById('cust-modal-title').textContent = c ? 'Tahrirlash' : 'Mijoz qo\'shish';
+  document.getElementById('cust-id').value = c ? c.id : '';
+  document.getElementById('cust-name').value = c ? c.name||'' : '';
+  document.getElementById('cust-phone').value = c ? c.phone : '';
+  document.getElementById('cust-disc').value = c ? c.discount_pct : 0;
+  document.getElementById('cust-notes').value = c ? c.notes||'' : '';
+  document.getElementById('customerModal').classList.add('open');
+}
+
+function editCustomer(id) {
+  const c = loyaltyData.find(x => x.id === id);
+  if (c) showAddCustomerModal(c);
+}
+
+async function saveCustomer() {
+  const id = document.getElementById('cust-id').value;
+  const body = {
+    name: document.getElementById('cust-name').value.trim(),
+    phone: document.getElementById('cust-phone').value.trim(),
+    discount_pct: parseFloat(document.getElementById('cust-disc').value)||0,
+    notes: document.getElementById('cust-notes').value.trim()
+  };
+  if (!body.phone) { toast('Telefon kiritilmadi', 'error'); return; }
+  const url = id ? `${API}/api/customers/${id}` : `${API}/api/customers`;
+  const method = id ? 'PUT' : 'POST';
+  const r = await fetch(url, { method, headers: H(), body: JSON.stringify(body) });
+  const d = await r.json();
+  if (!r.ok) { toast(d.error||'Xato', 'error'); return; }
+  document.getElementById('customerModal').classList.remove('open');
+  toast('Saqlandi ✓');
+  loadLoyaltyPage();
+}
+
+async function deleteCustomer(id) {
+  if (!confirm('O\'chirilsinmi?')) return;
+  await fetch(`${API}/api/customers/${id}`, { method:'DELETE', headers: H() });
+  toast('O\'chirildi');
+  loadLoyaltyPage();
+}
 </script>
 </body>
 </html>

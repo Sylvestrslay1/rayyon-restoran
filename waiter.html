@@ -227,6 +227,11 @@ function updDots() {
 }
 // ===== GLOBAL XATO YORDAMCHISI =====
 function wErr(msg) { wToast('❌ '+msg); }
+function wEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 async function safeFetch(url, opts={}) {
   try {
@@ -270,7 +275,11 @@ function startApp() {
   document.getElementById('wName').textContent=waiter.name;
   loadMenu();
   loadTables();
-  setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+  setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000);
+  // Browser notification ruxsati so'rash
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
 }
 function logout() {
   waiter=null; pin=''; waiterPin=''; updDots();
@@ -339,26 +348,49 @@ function showOpenTablePrompt() {
 }
 
 async function openTableSession() {
-  const res = await safeFetch(API+'/api/session/open', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})
-  });
-  if (!res) return;
-  const data = await res.json();
+  let rawRes;
+  try {
+    rawRes = await fetch(API+'/api/session/open', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})
+    });
+  } catch(e) { wErr('Tarmoq xatosi'); return; }
+
+  if (rawRes.status === 409) {
+    const data = await rawRes.json();
+    wToast('⚠ Stol allaqachon band — sessiya yuklanmoqda...');
+    await loadTables();
+    currentTable = tablesData.find(t=>t.id===currentTable.id) || currentTable;
+    if (data.session_id && !currentTable.current_session_id) {
+      currentTable.current_session_id = data.session_id;
+      currentTable.token = data.token || '';
+    }
+    await loadSessionView();
+    return;
+  }
+
+  if (!rawRes.ok) {
+    let msg = `Server xatosi (${rawRes.status})`;
+    try { const d = await rawRes.json(); msg = d.error || msg; } catch {}
+    wErr(msg); return;
+  }
+
+  const data = await rawRes.json();
   if (data.ok) {
     await loadTables();
     currentTable = tablesData.find(t=>t.id===currentTable.id);
     showMenuView();
-  } else if (data.session_id) {
-    await loadSessionView();
   }
 }
 
 async function loadSessionView() {
   document.getElementById('cartBar').style.display='none';
   if (!currentTable.current_session_id) { showMenuView(); return; }
-  const sid = currentTable.current_session_id;
-  const res = await safeFetch(API+'/api/session/'+sid);
+  const sid   = currentTable.current_session_id;
+  const token = currentTable.token || '';
+  const res = await safeFetch(API+'/api/session/'+sid, {
+    headers: {'X-Session-Token': token}
+  });
   if (!res) return;
   currentSession = await res.json();
   const items = (currentSession.items||[]).filter(i=>i.status!=='cancelled');
@@ -369,9 +401,9 @@ async function loadSessionView() {
       <div class="session-items">
         ${items.length ? items.map(i=>`
           <div class="si-row">
-            <span>${i.item_emoji||'🍽'} ${i.item_name} ×${i.quantity}</span>
+            <span>${wEsc(i.item_emoji)||'🍽'} ${wEsc(i.item_name)} ×${Number(i.quantity)}</span>
             <span style="display:flex;align-items:center;gap:8px;">
-              <span class="si-status ${statusCls[i.status]||''}">${statusLabel[i.status]||i.status}</span>
+              <span class="si-status ${statusCls[i.status]||''}">${wEsc(statusLabel[i.status]||i.status)}</span>
               <span style="color:var(--gold);font-size:0.82rem;">${Number(i.total_price).toLocaleString()}</span>
             </span>
           </div>`).join('') : '<p style="color:var(--muted);text-align:center;padding:20px;">Hali buyurtma yo\'q</p>'}
@@ -386,10 +418,15 @@ async function loadSessionView() {
 
 async function sendBillRequest() {
   if (!currentSession) return;
+  const btn = document.querySelector('.btn-bill');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Yuborilmoqda...'; }
   const res = await safeFetch(API+'/api/session/'+currentSession.id+'/bill', {
     method:'POST', headers:{'Content-Type':'application/json','X-Session-Token':currentSession.token||''}
   });
-  if (!res) return;
+  if (!res) {
+    if (btn) { btn.disabled = false; btn.textContent = '🧾 Hisob so\'rash'; }
+    return;
+  }
   wToast('Kassirga signal yuborildi ✓');
   closeOrderPanel(); loadTables();
 }
@@ -419,12 +456,11 @@ function renderMenuView(cat) {
         ${cats.map(c=>`<button class="mcat ${activeMenuCat===c?'active':''}" onclick="renderMenuView('${c}')">${names[c]}</button>`).join('')}
       </div>
       <div class="menu-grid">
-        ${items.map(item=>`
-          <div class="m-item ${item.available?'':'m-unavail'}" onclick="addToWCart(${item.id})">
-            <div class="m-emoji">${item.emoji||'🍽'}</div>
-            <div class="m-name">${item.name}</div>
+        ${items.filter(i=>i.available).map(item=>`
+          <div class="m-item" onclick="addToWCart(${Number(item.id)})">
+            <div class="m-emoji">${wEsc(item.emoji)||'🍽'}</div>
+            <div class="m-name">${wEsc(item.name)}</div>
             <div class="m-price">${Number(item.price).toLocaleString()} so'm</div>
-            ${!item.available?'<div style="font-size:0.7rem;color:var(--red);margin-top:2px;">Mavjud emas</div>':''}
           </div>`).join('')}
       </div>
     </div>`;
@@ -480,7 +516,7 @@ function showCartReview() {
       <div style="display:flex;justify-content:space-between;font-weight:700;padding:14px 0;border-top:1px solid rgba(255,255,255,0.1);margin-top:8px;">
         <span>Jami:</span><span style="color:var(--gold);">${Number(total).toLocaleString()} so'm</span>
       </div>
-      <button onclick="submitWCart()" style="width:100%;background:linear-gradient(135deg,#004455,#007799);
+      <button id="btn-submit-order" onclick="submitWCart()" style="width:100%;background:linear-gradient(135deg,#004455,#007799);
         border:none;color:#fff;padding:14px;border-radius:10px;font-family:'Rajdhani',sans-serif;
         font-size:1rem;font-weight:700;letter-spacing:2px;cursor:pointer;">
         ✓ JO'NATISH (Oshxonaga)
@@ -502,6 +538,8 @@ async function submitWCart() {
   if (!currentTable || !currentTable.current_session_id) {
     wErr("Stol sessiyasi topilmadi!"); return;
   }
+  const submitBtn = document.getElementById('btn-submit-order');
+  if (submitBtn) { if (submitBtn.disabled) return; submitBtn.disabled = true; submitBtn.textContent = '⏳ Yuborilmoqda...'; }
   const sid   = currentTable.current_session_id;
   const token = currentTable.token || '';
   const items = wCart.map(c=>({
@@ -514,6 +552,7 @@ async function submitWCart() {
     headers:{'Content-Type':'application/json','X-Session-Token':token},
     body:JSON.stringify({items, waiter_pin:waiterPin})
   });
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✅ Buyurtma berish'; }
   if (!res) return;
   wCart=[];
   wToast('Buyurtma oshxonaga yuborildi ✓');
@@ -534,6 +573,17 @@ async function loadReady() {
   const badge = document.getElementById('readyBadge');
   badge.textContent  = items.length;
   badge.style.display = items.length ? '' : 'none';
+  // Browser notification: yangi tayyor buyurtma
+  if (items.length > 0 && Notification.permission === 'granted') {
+    const prev = parseInt(badge.dataset.prev||'0');
+    if (items.length > prev) {
+      new Notification('Rayyon — Tayyor buyurtma! 🍽', {
+        body: `${items.length} ta buyurtma sizni kutmoqda`,
+        icon: '/favicon.ico'
+      });
+    }
+    badge.dataset.prev = items.length;
+  }
   const list = document.getElementById('readyList');
   if (!list) return;
   if (!items.length) {
@@ -541,12 +591,12 @@ async function loadReady() {
   }
   list.innerHTML = items.map(i=>`
     <div class="ready-item">
-      <div class="ci-emoji" style="font-size:1.8rem;margin-right:12px;">${i.item_emoji||'🍽'}</div>
+      <div class="ci-emoji" style="font-size:1.8rem;margin-right:12px;">${wEsc(i.item_emoji)||'🍽'}</div>
       <div class="ri-info">
-        <div class="ri-name">${i.item_name} ×${i.quantity}</div>
-        <div class="ri-table">STOL #${i.table_number}</div>
+        <div class="ri-name">${wEsc(i.item_name)} ×${Number(i.quantity)}</div>
+        <div class="ri-table">STOL #${Number(i.table_number)}</div>
       </div>
-      <button class="btn-served" onclick="markServed(${i.session_id},${i.id})">Berildi ✓</button>
+      <button class="btn-served" onclick="markServed(${Number(i.session_id)},${Number(i.id)})">Berildi ✓</button>
     </div>`).join('');
 }
 
@@ -572,13 +622,13 @@ async function loadMyOrders() {
   }
   el.innerHTML = active.map(t=>`
     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
-        border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;" onclick="openTable(${t.id})">
+        border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;" onclick="openTable(${Number(t.id)})">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--cyan);">STOL #${t.number}</span>
+        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--cyan);">STOL #${Number(t.number)}</span>
         <span style="color:var(--gold);font-weight:600;">${t.total_amount?Number(t.total_amount).toLocaleString()+' so\'m':'—'}</span>
       </div>
       <div style="color:var(--muted);font-size:0.78rem;margin-top:4px;">
-        ${t.status==='bill_requested'?'<span style="color:var(--orange);">🧾 Hisob so\'radi</span>':'⏱ '+( t.minutes_open||0)+' daqiqa'}
+        ${t.status==='bill_requested'?'<span style="color:var(--orange);">🧾 Hisob so\'radi</span>':'⏱ '+Number(t.minutes_open||0)+' daqiqa'}
       </div>
     </div>`).join('');
 }

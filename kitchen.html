@@ -94,6 +94,11 @@ audio{display:none;}
 <div id="mainGrid" class="grid"></div>
 
 <script>
+function kEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 const API = '';
 // KITCHEN_TOKEN — URL dan o'qiladi: kitchen.html?kitchen_token=xxxx
 // Render da KITCHEN_TOKEN env o'rnatilgandan so'ng, kitchen URL ga token qo'shing.
@@ -201,11 +206,11 @@ async function load() {
     g.items.forEach(item => {
       const isCooking = item.status === 'cooking';
       html += `<div class="order-item">
-        <div class="item-emoji">${item.item_emoji||'🍽'}</div>
+        <div class="item-emoji">${kEsc(item.item_emoji)||'🍽'}</div>
         <div class="item-info">
-          <div class="item-name">${item.item_name}</div>
+          <div class="item-name">${kEsc(item.item_name)}</div>
           <div class="item-qty">× ${item.quantity}</div>
-          ${item.comment ? `<div class="item-comment">💬 ${item.comment}</div>` : ''}
+          ${item.comment ? `<div class="item-comment">💬 ${kEsc(item.comment)}</div>` : ''}
           <div class="item-timer" style="${timerColor(item.created_at)}">⏱ ${timeSince(item.created_at)}</div>
         </div>
         <span class="status-badge ${isCooking?'badge-cooking':'badge-pending'}">${isCooking?'PISHMOQDA':'KUTMOQDA'}</span>
@@ -235,9 +240,9 @@ async function load() {
         <div class="order-list">`;
       data.items.forEach(item => {
         html += `<div class="order-item">
-          <div class="item-emoji">${item.item_emoji||'🍽'}</div>
+          <div class="item-emoji">${kEsc(item.item_emoji)||'🍽'}</div>
           <div class="item-info">
-            <div class="item-name">${item.item_name}</div>
+            <div class="item-name">${kEsc(item.item_name)}</div>
             <div class="item-qty">× ${item.quantity}</div>
           </div>
           <button class="action-btn btn-served" onclick="updateItemStatus(${data.sid},${item.id},'served')">Berildi ✓</button>

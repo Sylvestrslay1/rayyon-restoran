@@ -24,6 +24,7 @@ limiter = Limiter(
 )
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
@@ -105,8 +106,8 @@ def tg_send(text):
         }).encode()
         req = urllib.request.Request(url, data=data, method="POST")
         urllib.request.urlopen(req, timeout=5)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("tg_send xato: %s", e)
 
 
 def allowed_file(filename):
@@ -177,6 +178,15 @@ def add_security_headers(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
     return response
 
 
@@ -844,8 +854,10 @@ def _calc_session_total(sid, conn) -> int:
     srow = cur2.fetchone()
     sc_pct = disc_pct = 0
     if srow:
-        sc_pct   = float(srow[0] if USE_PG else srow["service_charge"] or 0)
-        disc_pct = float(srow[1] if USE_PG else srow["discount"] or 0)
+        sc_raw   = srow[0] if USE_PG else srow["service_charge"]
+        disc_raw = srow[1] if USE_PG else srow["discount"]
+        sc_pct   = float(sc_raw   if sc_raw   is not None else 0)
+        disc_pct = float(disc_raw if disc_raw is not None else 0)
     sc_amount   = int(subtotal * sc_pct   / 100)
     disc_amount = int(subtotal * disc_pct / 100)
     return subtotal + sc_amount - disc_amount
@@ -945,8 +957,9 @@ def shift_open():
         conn.close()
         return jsonify({"ok": True, "shift_id": existing[0]["id"],
                         "already_open": True, "cashier": staff["name"]})
-    db_exec(conn, "INSERT INTO shifts (cashier_id, cashier_name, status) VALUES (?,?,?)",
-            (staff["id"], staff["name"], "open"))
+    opening_cash = int(d.get("opening_cash") or 0)
+    db_exec(conn, "INSERT INTO shifts (cashier_id, cashier_name, status, opening_cash) VALUES (?,?,?,?)",
+            (staff["id"], staff["name"], "open", opening_cash))
     cur2 = db_exec(conn, "SELECT id FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
     row = cur2.fetchone()
     shift_id = row[0] if USE_PG else row["id"]
@@ -999,8 +1012,8 @@ def shift_close(shift_id):
     total = int(row2[0] if USE_PG else (row2["total"] or 0))
     sess_cnt = int(row2[1] if USE_PG else (row2["sess"] or 0))
     notes = d.get("notes", "")
-    db_exec(conn, "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=? WHERE id=?",
-            (total, sess_cnt, notes, shift_id))
+    db_exec(conn, "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=?, total_revenue=? WHERE id=?",
+            (total, sess_cnt, notes, total, shift_id))
     conn.commit(); conn.close()
     cashier_name = staff["name"] if staff else shift_rows[0].get("cashier_name", "")
     tg_send(f"🔒 <b>Smena yopildi</b>\n👤 Kassir: {cashier_name}\n💰 Jami: {total:,} so'm\n🧾 Sessiya: {sess_cnt} ta")
@@ -1592,30 +1605,34 @@ def delete_recipe(rid):
     return jsonify({"ok": True})
 
 
+def _inv_update(conn, needed, inv_id, unit_cond=""):
+    """MAX(0, qty-?) — SQLite: CASE WHEN, PG: GREATEST()"""
+    where = f"id=? {unit_cond}".strip()
+    if USE_PG:
+        sql = f"UPDATE inventory SET quantity = GREATEST(0, quantity - ?) WHERE {where}"
+    else:
+        sql = f"UPDATE inventory SET quantity = CASE WHEN quantity - ? < 0 THEN 0 ELSE quantity - ? END WHERE {where}"
+        needed = (needed, needed) + ((inv_id,) if not unit_cond else (inv_id,))
+        db_exec(conn, sql, needed)
+        return
+    db_exec(conn, sql, (needed, inv_id))
+
+
 def deduct_inventory(menu_item_id, quantity, conn, note=""):
     """Retsept bo'yicha ombordan avtomatik hisobdan chiqarish"""
     cur = db_exec(conn, "SELECT * FROM recipes WHERE menu_item_id=?", (menu_item_id,))
     recipes = rows_to_list(cur)
     for r in recipes:
         needed = r["quantity"] * quantity
-        # Unit konvertatsiya: g→kg, ml→l
+        inv_id = r["inventory_id"]
         if r["unit"] == "g":
-            needed_kg = needed / 1000.0
-            db_exec(conn,
-                "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='kg'",
-                (needed_kg, r["inventory_id"]))
-            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='g'",
-                (needed, r["inventory_id"]))
+            _inv_update(conn, needed / 1000.0, inv_id, "AND unit='kg'")
+            _inv_update(conn, needed,           inv_id, "AND unit='g'")
         elif r["unit"] == "ml":
-            needed_l = needed / 1000.0
-            db_exec(conn,
-                "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='l'",
-                (needed_l, r["inventory_id"]))
-            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=? AND unit='ml'",
-                (needed, r["inventory_id"]))
+            _inv_update(conn, needed / 1000.0, inv_id, "AND unit='l'")
+            _inv_update(conn, needed,           inv_id, "AND unit='ml'")
         else:
-            db_exec(conn, "UPDATE inventory SET quantity = MAX(0, quantity - ?) WHERE id=?",
-                (needed, r["inventory_id"]))
+            _inv_update(conn, needed, inv_id)
         # Log
         inv_cur = db_exec(conn, "SELECT name FROM inventory WHERE id=?", (r["inventory_id"],))
         inv_row = inv_cur.fetchone()
@@ -1623,6 +1640,34 @@ def deduct_inventory(menu_item_id, quantity, conn, note=""):
         db_exec(conn,
             "INSERT INTO inventory_log (item_id, item_name, type, quantity, note) VALUES (?,?,?,?,?)",
             (r["inventory_id"], inv_name, "expense", needed, note or "Auto chiqim"))
+
+
+# ===== SMENALAR RO'YXATI =====
+@app.route("/api/shifts", methods=["GET"])
+def get_shifts():
+    """Barcha smenalar ro'yxati — admin uchun."""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    limit_n = min(int(request.args.get("limit", 100)), 500)
+    status  = request.args.get("status", "")
+    if status:
+        cur = db_exec(conn,
+            "SELECT * FROM shifts WHERE status=? ORDER BY opened_at DESC LIMIT ?",
+            (status, limit_n))
+    else:
+        cur = db_exec(conn,
+            "SELECT * FROM shifts ORDER BY opened_at DESC LIMIT ?",
+            (limit_n,))
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify(result)
+
+
+# ===== ANALYTICS ALIAS =====
+@app.route("/api/analytics", methods=["GET"])
+def analytics_alias():
+    """/api/analytics/summary ga qisqartma — orqaga moslik uchun."""
+    return analytics_summary()
 
 
 # ===== STOP-LIST =====

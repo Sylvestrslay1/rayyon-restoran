@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Rayyon Restoran — Menyu</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#030810;--card:#0d1420;--cyan:#00d4ff;--gold:#c8a96e;--green:#00e676;--orange:#ff9800;--red:#ff4444;--muted:rgba(255,255,255,0.45);}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:#fff;font-family:'Inter',sans-serif;min-height:100vh;max-width:480px;margin:0 auto;}
+header{background:#060d1a;border-bottom:1px solid rgba(0,212,255,0.15);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;}
+.logo{font-family:'Cinzel',serif;font-size:1.3rem;font-weight:700;letter-spacing:4px;}
+.logo span{color:var(--cyan);}.logo .y{color:var(--gold);}
+.cart-fab{position:relative;background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.35);
+  color:var(--cyan);padding:8px 16px;border-radius:20px;cursor:pointer;font-family:'Rajdhani',sans-serif;
+  font-weight:700;font-size:0.85rem;letter-spacing:1px;transition:all 0.2s;display:none;}
+.cart-fab.show{display:block;}
+.cart-count{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;
+  font-size:0.65rem;padding:2px 6px;border-radius:10px;font-weight:700;}
+.subtitle-bar{background:#060d1a;border-bottom:1px solid rgba(255,255,255,0.04);
+  padding:6px 16px;text-align:center;color:var(--muted);font-size:0.7rem;letter-spacing:2px;font-family:'Rajdhani',sans-serif;}
+.table-badge{display:inline-block;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.25);
+  color:var(--cyan);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.72rem;
+  letter-spacing:2px;padding:2px 10px;border-radius:10px;margin-left:8px;}
+.cats{display:flex;gap:8px;padding:12px 16px;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,0.05);}
+.cats::-webkit-scrollbar{display:none;}
+.cat-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--muted);
+  font-family:'Rajdhani',sans-serif;font-size:0.78rem;font-weight:700;letter-spacing:1px;
+  padding:7px 16px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:all 0.2s;flex-shrink:0;}
+.cat-btn.active{background:rgba(0,212,255,0.12);color:var(--cyan);border-color:rgba(0,212,255,0.3);}
+.menu-list{padding:12px 16px 100px;}
+.section-title{font-family:'Rajdhani',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:3px;
+  color:var(--muted);text-transform:uppercase;padding:10px 0 8px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:10px;}
+.item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:background 0.15s;border-radius:8px;}
+.item:hover{background:rgba(255,255,255,0.03);}
+.item:last-child{border-bottom:none;}
+.item-emoji{font-size:2rem;flex-shrink:0;width:44px;text-align:center;}
+.item-info{flex:1;}
+.item-name{font-weight:600;font-size:0.95rem;line-height:1.3;}
+.item-desc{color:var(--muted);font-size:0.75rem;margin-top:3px;line-height:1.4;}
+.item-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.item-price{color:var(--gold);font-weight:700;font-size:0.9rem;white-space:nowrap;}
+.add-btn{background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.25);color:var(--cyan);
+  width:28px;height:28px;border-radius:50%;font-size:1.1rem;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;}
+.add-btn:hover{background:rgba(0,212,255,0.25);}
+.item-qty-ctrl{display:flex;align-items:center;gap:6px;}
+.qty-btn{background:rgba(255,255,255,0.08);border:none;color:#fff;width:24px;height:24px;
+  border-radius:50%;cursor:pointer;font-size:0.9rem;display:flex;align-items:center;justify-content:center;}
+.qty-num{font-weight:700;min-width:16px;text-align:center;font-size:0.9rem;color:var(--cyan);}
+.item-unavail{opacity:0.4;pointer-events:none;}
+.empty{text-align:center;padding:60px 20px;color:var(--muted);}
+
+/* SAVATCHA MODAL */
+.cart-modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;flex-direction:column;justify-content:flex-end;}
+.cart-modal.hidden{display:none;}
+.cart-sheet{background:#0d1a2a;border-radius:20px 20px 0 0;max-height:80vh;display:flex;flex-direction:column;}
+.cart-header{padding:16px 20px;border-bottom:1px solid rgba(0,212,255,0.15);display:flex;align-items:center;justify-content:space-between;}
+.cart-title{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:2px;color:var(--cyan);font-size:1rem;}
+.cart-close{background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;}
+.cart-body{overflow-y:auto;padding:12px 20px;flex:1;}
+.cart-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.ci-name{flex:1;font-size:0.9rem;font-weight:600;}
+.ci-price{color:var(--gold);font-size:0.82rem;}
+.cart-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08);}
+.cart-total{display:flex;justify-content:space-between;margin-bottom:12px;font-weight:700;}
+.cart-total .label{color:var(--muted);}
+.cart-total .val{color:var(--gold);font-size:1.1rem;}
+.comment-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+  border-radius:8px;color:#fff;padding:10px 12px;font-family:inherit;font-size:0.85rem;
+  margin-bottom:12px;outline:none;resize:none;}
+.comment-input:focus{border-color:rgba(0,212,255,0.3);}
+.order-btn{width:100%;background:linear-gradient(135deg,#005577,#0099cc);border:none;color:#fff;
+  padding:14px;border-radius:12px;font-family:'Rajdhani',sans-serif;font-size:1rem;font-weight:700;
+  letter-spacing:2px;cursor:pointer;transition:all 0.2s;}
+.order-btn:disabled{opacity:0.5;cursor:not-allowed;}
+.order-btn:hover:not(:disabled){background:linear-gradient(135deg,#006688,#00aadd);}
+
+/* SUCCESS */
+.success-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;display:none;}
+.success-icon{font-size:5rem;}
+.success-title{font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;letter-spacing:3px;color:var(--green);}
+.success-sub{color:var(--muted);font-size:0.9rem;text-align:center;}
+
+/* TOAST */
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:#1a2a3a;border:1px solid rgba(0,212,255,0.2);color:#fff;padding:10px 20px;
+  border-radius:20px;font-size:0.85rem;opacity:0;transition:all 0.3s;pointer-events:none;z-index:300;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+footer{text-align:center;padding:20px 16px;color:rgba(255,255,255,0.2);font-size:0.72rem;border-top:1px solid rgba(255,255,255,0.05);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>R</span>A<span class="y">Y</span>YON</div>
+  <button class="cart-fab" id="cart-fab" onclick="openCart()">
+    🛒 Savatcha
+    <span class="cart-count" id="cart-count">0</span>
+  </button>
+</header>
+
+<div class="subtitle-bar" id="subtitle-bar">
+  RESTORAN MENYUSI
+</div>
+
+<div class="cats">
+  <button class="cat-btn active" onclick="filterCat('all',this)">Hammasi</button>
+  <button class="cat-btn" onclick="filterCat('milliy',this)">Milliy</button>
+  <button class="cat-btn" onclick="filterCat('grill',this)">Grill</button>
+  <button class="cat-btn" onclick="filterCat('salad',this)">Salatlar</button>
+  <button class="cat-btn" onclick="filterCat('drink',this)">Ichimliklar</button>
+</div>
+
+<div class="menu-list" id="menu-list">
+  <div class="empty">⟳ Yuklanmoqda...</div>
+</div>
+
+<!-- SAVATCHA MODAL -->
+<div class="cart-modal hidden" id="cart-modal">
+  <div class="cart-sheet">
+    <div class="cart-header">
+      <span class="cart-title">SAVATCHA</span>
+      <button class="cart-close" onclick="closeCart()">✕</button>
+    </div>
+    <div class="cart-body" id="cart-body"></div>
+    <div class="cart-footer">
+      <div class="cart-total">
+        <span class="label">Jami:</span>
+        <span class="val" id="cart-total-val">0 so'm</span>
+      </div>
+      <textarea class="comment-input" id="order-comment" rows="2" placeholder="Izoh (ixtiyoriy): allergiya, maxsus talab..."></textarea>
+      <button class="order-btn" id="order-btn" onclick="submitOrder()">✓ BUYURTMA BERISH</button>
+    </div>
+  </div>
+</div>
+
+<!-- MUVAFFAQIYAT EKRANI -->
+<div class="success-screen" id="success-screen">
+  <div class="success-icon">✅</div>
+  <div class="success-title">BUYURTMA QABUL QILINDI!</div>
+  <div class="success-sub">Buyurtmangiz oshxonaga yuborildi.<br>Ofitsiant tez orada keltiradi.</div>
+  <button onclick="resetAfterOrder()" style="margin-top:12px;background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.3);
+    color:var(--cyan);padding:12px 32px;border-radius:10px;font-family:'Rajdhani',sans-serif;
+    font-weight:700;letter-spacing:2px;cursor:pointer;font-size:0.9rem;">← MENYUGA QAYTISH</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  <div id="footer-info">Rayyon Restoran</div>
+  <div style="margin-top:4px;">© 2025</div>
+</footer>
+
+<script>
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+const API = '';
+const params = new URLSearchParams(window.location.search);
+const SESSION_TOKEN = params.get('token') || '';
+const TABLE_NUM     = params.get('table') || '';
+const SESSION_ID    = params.get('sid')   || '';
+
+let allItems = [];
+let currentCat = 'all';
+let cart = []; // [{item, qty, comment}]
+
+const catNames = {milliy:'Milliy taomlar',grill:'Grill',salad:'Salatlar',drink:'Ichimliklar'};
+const catOrder = ['milliy','grill','salad','drink'];
+
+// ===== INIT =====
+async function init() {
+  await Promise.all([loadMenu(), loadSettings()]);
+  if (TABLE_NUM) {
+    const bar = document.getElementById('subtitle-bar');
+    bar.innerHTML = `STOL #${TABLE_NUM} <span class="table-badge">QR BUYURTMA</span>`;
+  }
+  if (!SESSION_TOKEN && !SESSION_ID) {
+    // Faqat menyu ko'rish rejimi — buyurtma bermaydi
+    document.querySelectorAll('.add-btn').forEach(b => b.style.display='none');
+  }
+}
+
+async function loadMenu() {
+  try {
+    const r = await fetch(API+'/api/menu');
+    allItems = await r.json();
+    render();
+  } catch(e) {
+    document.getElementById('menu-list').innerHTML = '<div class="empty">⚠ Menyu yuklanmadi.</div>';
+  }
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch(API+'/api/settings');
+    const s = await r.json();
+    if (!Array.isArray(s)) return;
+    const hours = s.find(x=>x.key==='working_hours');
+    const name  = s.find(x=>x.key==='restaurant_name');
+    const phone = s.find(x=>x.key==='phone');
+    if (hours?.value && !TABLE_NUM) {
+      document.getElementById('subtitle-bar').textContent = '🕐 ' + hours.value;
+    }
+    let footerText = name?.value || 'Rayyon Restoran';
+    if (phone?.value) footerText += ' · ' + phone.value;
+    document.getElementById('footer-info').textContent = footerText;
+  } catch(e) {}
+}
+
+// ===== RENDER =====
+function filterCat(cat, btn) {
+  currentCat = cat;
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function fmt(n) { return Number(n).toLocaleString() + ' so\'m'; }
+
+function getQty(itemId) {
+  const c = cart.find(x=>x.item.id===itemId);
+  return c ? c.qty : 0;
+}
+
+function render() {
+  const list = document.getElementById('menu-list');
+  const items = currentCat === 'all' ? allItems : allItems.filter(i=>i.category===currentCat);
+  if (!items.length) { list.innerHTML = '<div class="empty">Bu bo\'limda taom yo\'q</div>'; return; }
+
+  const canOrder = !!(SESSION_TOKEN || SESSION_ID);
+
+  function itemHtml(item) {
+    const avail = item.available !== 0 && item.available !== false;
+    const qty = getQty(item.id);
+    const qtyCtrl = (canOrder && avail) ? (qty > 0
+      ? `<div class="item-qty-ctrl">
+           <button class="qty-btn" onclick="changeQty(${item.id},-1,event)">−</button>
+           <span class="qty-num">${qty}</span>
+           <button class="qty-btn" style="background:rgba(0,212,255,0.15);color:var(--cyan);" onclick="changeQty(${item.id},1,event)">+</button>
+         </div>`
+      : `<button class="add-btn" onclick="addToCart(${item.id},event)">+</button>`)
+      : (!avail ? `<span style="font-size:0.7rem;color:var(--red);padding:4px 8px;border:1px solid rgba(255,60,60,0.3);border-radius:4px;">Mavjud emas</span>` : '');
+    return `<div class="item" style="${avail ? '' : 'opacity:0.45;pointer-events:none;'}">
+      <div class="item-emoji">${esc(item.emoji)||'🍽'}</div>
+      <div class="item-info">
+        <div class="item-name">${esc(item.name)}</div>
+        ${item.description?`<div class="item-desc">${esc(item.description)}</div>`:''}
+      </div>
+      <div class="item-right">
+        <div class="item-price">${fmt(item.price)}</div>
+        ${qtyCtrl}
+      </div>
+    </div>`;
+  }
+
+  if (currentCat === 'all') {
+    let html = '';
+    catOrder.filter(c=>items.some(i=>i.category===c)).forEach(cat => {
+      html += `<div class="section-title">${catNames[cat]||cat}</div>`;
+      html += items.filter(i=>i.category===cat).map(itemHtml).join('');
+    });
+    const others = items.filter(i=>!catOrder.includes(i.category));
+    if (others.length) { html += `<div class="section-title">Boshqalar</div>`; html += others.map(itemHtml).join(''); }
+    list.innerHTML = html;
+  } else {
+    list.innerHTML = items.map(itemHtml).join('');
+  }
+}
+
+// ===== CART =====
+function addToCart(itemId, e) {
+  e && e.stopPropagation();
+  const item = allItems.find(i=>i.id===itemId);
+  if (!item) return;
+  const ex = cart.find(c=>c.item.id===itemId);
+  if (ex) ex.qty++; else cart.push({item, qty:1});
+  updateCartFab();
+  render();
+  showToast(item.name + ' qo\'shildi');
+}
+
+function changeQty(itemId, delta, e) {
+  e && e.stopPropagation();
+  const idx = cart.findIndex(c=>c.item.id===itemId);
+  if (idx < 0) return;
+  cart[idx].qty += delta;
+  if (cart[idx].qty <= 0) cart.splice(idx, 1);
+  updateCartFab();
+  render();
+  if (document.getElementById('cart-modal').classList.contains('hidden') === false) renderCart();
+}
+
+function updateCartFab() {
+  const total = cart.reduce((s,c)=>s+c.qty,0);
+  const fab = document.getElementById('cart-fab');
+  document.getElementById('cart-count').textContent = total;
+  if (total > 0) fab.classList.add('show'); else fab.classList.remove('show');
+}
+
+function openCart() {
+  renderCart();
+  document.getElementById('cart-modal').classList.remove('hidden');
+}
+
+function closeCart() {
+  document.getElementById('cart-modal').classList.add('hidden');
+}
+
+function renderCart() {
+  const body = document.getElementById('cart-body');
+  if (!cart.length) {
+    body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);">Savatcha bo\'sh</div>';
+    document.getElementById('cart-total-val').textContent = '0 so\'m';
+    return;
+  }
+  body.innerHTML = cart.map((c,i) => `
+    <div class="cart-item">
+      <span style="font-size:1.4rem;">${c.item.emoji||'🍽'}</span>
+      <div style="flex:1;">
+        <div class="ci-name">${c.item.name}</div>
+        <div class="ci-price">${fmt(c.item.price)} × ${c.qty}</div>
+      </div>
+      <div class="item-qty-ctrl">
+        <button class="qty-btn" onclick="changeQty(${c.item.id},-1)">−</button>
+        <span class="qty-num">${c.qty}</span>
+        <button class="qty-btn" style="background:rgba(0,212,255,0.15);color:var(--cyan);" onclick="changeQty(${c.item.id},1)">+</button>
+      </div>
+    </div>`).join('');
+  const total = cart.reduce((s,c)=>s+c.item.price*c.qty, 0);
+  document.getElementById('cart-total-val').textContent = fmt(total);
+}
+
+// ===== BUYURTMA YUBORISH =====
+async function submitOrder() {
+  if (!cart.length) { showToast('Savatcha bo\'sh!'); return; }
+  if (!SESSION_TOKEN && !SESSION_ID) { showToast('QR kodni skanerlang!'); return; }
+
+  const btn = document.getElementById('order-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Yuborilmoqda...';
+
+  const comment = document.getElementById('order-comment').value.trim();
+  const items = cart.map(c => ({
+    menu_item_id: c.item.id,
+    name: c.item.name,
+    emoji: c.item.emoji,
+    price: c.item.price,
+    quantity: c.qty,
+    comment: comment,
+    category: c.item.category
+  }));
+
+  try {
+    let sid = SESSION_ID;
+    // Agar sid yo'q bo'lsa, tokendan sessiyani topamiz
+    if (!sid && SESSION_TOKEN) {
+      const vr = await fetch(`${API}/api/session/validate?token=${encodeURIComponent(SESSION_TOKEN)}`);
+      const vd = await vr.json();
+      if (!vd.valid || !vd.session_id) { showToast('QR kod eskirgan yoki noto\'g\'ri'); btn.disabled=false; btn.textContent='✓ BUYURTMA BERISH'; return; }
+      sid = vd.session_id;
+    }
+    if (!sid) { showToast('Sessiya topilmadi. QR kodni qayta skanerlang.'); btn.disabled=false; btn.textContent='✓ BUYURTMA BERISH'; return; }
+    const r = await fetch(`${API}/api/session/${sid}/order`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-Session-Token': SESSION_TOKEN},
+      body: JSON.stringify({items})
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      cart = [];
+      updateCartFab();
+      closeCart();
+      document.getElementById('success-screen').style.display = 'flex';
+    } else {
+      showToast(d.error || 'Xato yuz berdi');
+      btn.disabled = false;
+      btn.textContent = '✓ BUYURTMA BERISH';
+    }
+  } catch(e) {
+    showToast('Server bilan bog\'lanib bo\'lmadi');
+    btn.disabled = false;
+    btn.textContent = '✓ BUYURTMA BERISH';
+  }
+}
+
+function resetAfterOrder() {
+  document.getElementById('success-screen').style.display = 'none';
+  document.getElementById('order-btn').disabled = false;
+  document.getElementById('order-btn').textContent = '✓ BUYURTMA BERISH';
+  document.getElementById('order-comment').value = '';
+  render();
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+init();
+</script>
+</body>
+</html>

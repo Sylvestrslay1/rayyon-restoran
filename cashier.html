@@ -147,6 +147,13 @@
     <button class="pin-btn zero" onclick="pinPress('0')">0</button>
     <button class="pin-btn del" onclick="pinDel()">⌫</button>
   </div>
+  <div style="display:flex;flex-direction:column;gap:6px;width:250px;">
+    <label style="font-size:12px;color:#64748b;">Boshlang'ich kassa (ixtiyoriy)</label>
+    <input id="opening-cash-input" type="number" min="0" placeholder="0 so'm"
+      style="background:#1e293b;border:1.5px solid #334155;border-radius:10px;color:#e2e8f0;
+      font-size:15px;padding:10px 14px;outline:none;text-align:center;"
+      onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='#334155'"/>
+  </div>
   <button class="pin-enter-btn" onclick="pinEnter()">Kirish →</button>
   <div class="pin-error" id="pin-error"></div>
 </div>
@@ -212,7 +219,7 @@
         <div class="pay-row"><span class="pay-label">Naqd:</span><input class="pay-input" id="pay-cash" type="number" placeholder="0" oninput="calcChange()"></div>
       </div>
       <div class="total-row hidden" id="change-row"><span class="label">Qaytim</span><span class="val" id="change-val" style="color:#fbbf24">0 so'm</span></div>
-      <button class="pay-btn" onclick="submitPayment()">✅ To'lovni tasdiqlash</button>
+      <button class="pay-btn" id="btn-pay-confirm" onclick="submitPayment()">✅ To'lovni tasdiqlash</button>
     </div>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="btn btn-outline btn-sm" onclick="openReceipt()">🧾 Chek ko'rish</button>
@@ -321,10 +328,12 @@ async function pinEnter() {
       showMain();
     } else {
       // Ochiq smena yo'q — yangi ochish
+      const openingCashEl = document.getElementById('opening-cash-input');
+      const opening_cash = openingCashEl ? parseInt(openingCashEl.value) || 0 : 0;
       const r2 = await fetch(`${API}/api/shift/open`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({pin: PIN})
+        body: JSON.stringify({pin: PIN, opening_cash})
       });
       const d2 = await r2.json();
       if (d2.ok) {
@@ -501,7 +510,9 @@ function getGrand() {
   const subtotal = currentItems.filter(i=>i.status!=='cancelled').reduce((s,i)=>s+i.total_price,0);
   const disc = parseFloat(document.getElementById('m-disc-input').value)||0;
   const sc   = parseFloat(document.getElementById('m-sc-input').value)||0;
-  return Math.round(subtotal * (1 + sc/100 - disc/100));
+  const sc_amount   = Math.round(subtotal * sc   / 100);
+  const disc_amount = Math.round(subtotal * disc / 100);
+  return subtotal + sc_amount - disc_amount;
 }
 
 let customerDisc = 0;
@@ -529,6 +540,9 @@ async function lookupCustomer(phone) {
 async function submitPayment() {
   if (!currentSession) return;
   if (!SHIFT_ID) { showToast('Avval smena oching!', 'error'); return; }
+  const payBtn = document.getElementById('btn-pay-confirm');
+  if (payBtn && payBtn.disabled) return;
+  if (payBtn) { payBtn.disabled = true; payBtn.textContent = '⏳ Yuborilmoqda...'; }
   // Chegirma/xizmat haqi ni avval DB ga saqlash (server_total mos bo'lishi uchun)
   await saveDiscounts(true);
   const grand = getGrand();
@@ -558,11 +572,18 @@ async function submitPayment() {
       body: JSON.stringify(closeBody)
     });
     const data = await r.json();
-    if (!r.ok) { showToast(data.error||'To\'lov xatosi', 'error'); return; }
+    if (!r.ok) {
+      showToast(data.error||'To\'lov xatosi', 'error');
+      if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ To\'lovni tasdiqlash'; }
+      return;
+    }
     showToast('To\'lov qabul qilindi! ✅', 'success');
     closeModal('session-modal');
     loadTables();
-  } catch(e) { showToast('Server xatosi', 'error'); }
+  } catch(e) {
+    showToast('Server xatosi', 'error');
+    if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ To\'lovni tasdiqlash'; }
+  }
 }
 
 // ===== VOID =====

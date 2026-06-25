@@ -11,4 +11,8 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.0"
       - key: KITCHEN_TOKEN
-        value: ""
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "https://rayyon-restoran.onrender.com"
+      - key: SECRET_KEY
+        generateValue: true

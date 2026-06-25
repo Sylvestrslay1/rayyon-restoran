@@ -653,6 +653,8 @@ def init_db():
         "ALTER TABLE sessions ADD COLUMN customer_id INTEGER",
         "ALTER TABLE sessions ADD COLUMN customer_phone TEXT",
         "ALTER TABLE sessions ADD COLUMN customer_name TEXT",
+        "ALTER TABLE shifts ADD COLUMN opening_cash INTEGER DEFAULT 0",
+        "ALTER TABLE shifts ADD COLUMN total_revenue INTEGER DEFAULT 0",
     ]
     for migration_sql in migrations:
         try:

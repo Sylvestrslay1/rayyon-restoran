@@ -52,6 +52,9 @@ def api(method, path, data=None):
         return {}
 
 
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
 def login():
     global admin_token
     res = api("POST", "/api/login", {"password": ADMIN_PASS})
@@ -59,7 +62,12 @@ def login():
         admin_token = res["token"]
         log.info("Admin login OK")
     else:
-        log.warning("Admin login FAILED")
+        log.warning("Admin login FAILED — barcha API calllar 403 oladi")
+        if CHAT_ID:
+            tg("sendMessage", chat_id=CHAT_ID,
+               text="❌ <b>Bot login xatosi!</b>\nAdmin paroli noto'g'ri yoki server ishlamayapti.\n"
+                    "RAYYON_ADMIN_PASS env o'zgaruvchisini tekshiring.",
+               parse_mode="HTML")
 
 
 STATUS_LABELS = {
@@ -166,7 +174,7 @@ def show_reservations(chat_id):
         send_kb(chat_id, "📅 Bronlar yo'q.",
                 [[{"text": "🏠 Menyu", "callback_data": "main"}]])
         return
-    new_only = [r for r in items if r.get("status") in ("new", "pending")][:10]
+    new_only = [r for r in items if r.get("status") in ("new", "confirmed")][:10]
     if not new_only:
         send_kb(chat_id, "📅 Yangi bronlar yo'q.",
                 [[{"text": "🏠 Menyu", "callback_data": "main"}]])
