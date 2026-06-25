@@ -487,35 +487,35 @@
     </div>
     <div class="stats-grid">
       <div class="stat-card red">
-        <div class="s-label">Faol stollar</div>
+        <div class="s-label" data-i18n="dash.active_tables">Faol stollar</div>
         <div class="s-value" id="st-active-sessions">—</div>
-        <div class="s-sub">Hozir band</div>
+        <div class="s-sub" data-i18n="dash.active_tables_sub">Hozir band</div>
       </div>
       <div class="stat-card cyan">
-        <div class="s-label">Bugun yopilgan</div>
+        <div class="s-label" data-i18n="dash.closed_today">Bugun yopilgan</div>
         <div class="s-value" id="st-closed-today">—</div>
-        <div class="s-sub">Sessiyalar soni</div>
+        <div class="s-sub" data-i18n="dash.closed_today_sub">Sessiyalar soni</div>
       </div>
       <div class="stat-card gold">
-        <div class="s-label">Bugungi daromad</div>
+        <div class="s-label" data-i18n="dash.revenue_today">Bugungi daromad</div>
         <div class="s-value" id="st-revenue">—</div>
-        <div class="s-sub">To'lovlar jami</div>
+        <div class="s-sub" data-i18n="dash.revenue_today_sub">To'lovlar jami</div>
       </div>
       <div class="stat-card green">
-        <div class="s-label">Yangi bronlar</div>
+        <div class="s-label" data-i18n="dash.new_res">Yangi bronlar</div>
         <div class="s-value" id="st-reservations">—</div>
-        <div class="s-sub">Ko'rib chiqilmagan</div>
+        <div class="s-sub" data-i18n="dash.new_res_sub">Ko'rib chiqilmagan</div>
       </div>
       <div class="stat-card">
-        <div class="s-label">Aktiv taomlar</div>
+        <div class="s-label" data-i18n="dash.active_menu">Aktiv taomlar</div>
         <div class="s-value" id="st-menu" style="color:var(--muted)">—</div>
-        <div class="s-sub">Menyuda mavjud</div>
+        <div class="s-sub" data-i18n="dash.active_menu_sub">Menyuda mavjud</div>
       </div>
     </div>
-    <div class="cyber-divider"><span>Bugungi to'lovlar</span></div>
+    <div class="cyber-divider"><span data-i18n="dash.payments_today">Bugungi to'lovlar</span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Stol</th><th>Summa</th><th>Usul</th><th>Kassir</th><th>Vaqt</th></tr></thead>
+        <thead><tr><th>#</th><th data-i18n="th.table">Stol</th><th data-i18n="th.amount">Summa</th><th data-i18n="th.method">Usul</th><th data-i18n="th.cashier">Kassir</th><th data-i18n="th.time">Vaqt</th></tr></thead>
         <tbody id="dashOrdersBody"></tbody>
       </table>
     </div>
@@ -1591,34 +1591,36 @@ async function loadTables() {
   tablesData = await res.json();
   const map = document.getElementById('tablesMap');
   if (!tablesData.length) {
-    map.innerHTML = '<p style="color:rgba(255,255,255,0.3);grid-column:1/-1;text-align:center;padding:40px;">Stollar yo\'q. + Stol qo\'shish tugmasini bosing.</p>';
+    map.innerHTML = `<p style="color:rgba(255,255,255,0.3);grid-column:1/-1;text-align:center;padding:40px;">${typeof t==='function'?t('tbl.empty'):'Stollar yo\'q.'}</p>`;
     return;
   }
-  map.innerHTML = tablesData.map(t => {
-    const overtime = t.minutes_open > 120;
-    const statusColor = t.status === 'free' ? '#00e676' : t.status === 'bill_requested' ? '#ff4444' : overtime ? '#ff4444' : '#ff9800';
-    const statusText  = t.status === 'free' ? 'Bo\'sh' : t.status === 'bill_requested' ? 'Hisob so\'radi' : 'Band';
-    const mins = t.minutes_open ? `${t.minutes_open} daq` : '';
-    const sum  = t.total_amount ? priceFmt(t.total_amount) : '';
-    const overtimeBadge = overtime ? `<div style="color:#ff4444;font-size:0.72rem;font-weight:700;animation:pulse 1s infinite;">⚠ ${Math.floor(t.minutes_open/60)}s ${t.minutes_open%60}d</div>` : '';
+  map.innerHTML = tablesData.map(tbl => {
+    const overtime = tbl.minutes_open > 120;
+    const statusColor = tbl.status === 'free' ? '#00e676' : tbl.status === 'bill_requested' ? '#ff4444' : overtime ? '#ff4444' : '#ff9800';
+    const statusText  = tbl.status === 'free' ? (typeof t==='function'?t('tbl.free'):"Bo'sh") : tbl.status === 'bill_requested' ? (typeof t==='function'?t('tbl.bill'):"Hisob so'radi") : (typeof t==='function'?t('tbl.occupied'):'Band');
+    const pplLabel = typeof t==='function' ? t('tbl.person') : 'kishi';
+    const tableLabel = typeof t==='function' ? t('tbl.label') : 'STOL';
+    const mins = tbl.minutes_open ? `${tbl.minutes_open} ${typeof t==='function'?t('tbl.min'):'daq'}` : '';
+    const sum  = tbl.total_amount ? priceFmt(tbl.total_amount) : '';
+    const overtimeBadge = overtime ? `<div style="color:#ff4444;font-size:0.72rem;font-weight:700;animation:pulse 1s infinite;">⚠ ${Math.floor(tbl.minutes_open/60)}s ${tbl.minutes_open%60}d</div>` : '';
     return `<div style="background:${overtime?'rgba(255,68,68,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${statusColor}33;
         border-radius:12px;padding:18px;cursor:pointer;transition:all 0.2s;position:relative;"
-        onclick="openTableSession(${t.id})"
+        onclick="openTableSession(${tbl.id})"
         onmouseover="this.style.borderColor='${statusColor}88'"
         onmouseout="this.style.borderColor='${statusColor}33'">
       <div style="position:absolute;top:12px;right:12px;width:10px;height:10px;
           border-radius:50%;background:${statusColor};box-shadow:0 0 8px ${statusColor};"></div>
       <div style="font-family:'Rajdhani',sans-serif;font-size:1.6rem;font-weight:700;
-          color:${statusColor};letter-spacing:2px;">STOL ${t.number}</div>
-      <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${esc(t.name)} · ${t.capacity} kishi</div>
+          color:${statusColor};letter-spacing:2px;">${tableLabel} ${tbl.number}</div>
+      <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:4px 0;">${esc(tbl.name)} · ${tbl.capacity} ${pplLabel}</div>
       <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;font-weight:600;">${statusText}</div>
       ${mins ? `<div style="color:${overtime?'#ff4444':'rgba(255,255,255,0.35)'};font-size:0.72rem;">⏱ ${mins}</div>` : ''}
       ${overtimeBadge}
       ${sum  ? `<div style="color:var(--gold);font-weight:700;font-size:0.88rem;margin-top:4px;">${sum}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:12px;" onclick="event.stopPropagation()">
-        <button class="act-btn" title="QR" onclick="showQR(${t.id})">QR</button>
-        <button class="act-btn" title="Tahrirlash" onclick="editTable(${JSON.stringify(t).replace(/"/g,'&quot;')})">✎</button>
-        <button class="act-btn" style="color:#ff4466" title="O'chirish" onclick="deleteTable(${t.id})">✕</button>
+        <button class="act-btn" title="QR" onclick="showQR(${tbl.id})">QR</button>
+        <button class="act-btn" title="Tahrirlash" onclick="editTable(${JSON.stringify(tbl).replace(/"/g,'&quot;')})">✎</button>
+        <button class="act-btn" style="color:#ff4466" title="O'chirish" onclick="deleteTable(${tbl.id})">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -2626,6 +2628,11 @@ async function deleteCustomer(id) {
   toast('O\'chirildi');
   loadLoyaltyPage();
 }
+
+// Til o'zganda dinamik qismlarni qayta render qilish
+window.addEventListener('langchange', () => {
+  if (typeof renderTables === 'function' && tablesData && tablesData.length) renderTables();
+});
 </script>
 </body>
 </html>
