@@ -548,16 +548,17 @@ async function submitPayment() {
   const grand = getGrand();
   let amount = grand;
   let body = {method: payMethod, amount, cashier_name: CASHIER, cashier_id: CASHIER_ID, shift_id: SHIFT_ID};
+  const reEnable = () => { if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ To\'lovni tasdiqlash'; } };
   if (payMethod === 'split') {
     const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
     const card = parseFloat(document.getElementById('pay-card')?.value)||0;
-    if (cash+card < grand) { showToast('Jami summa yetarli emas', 'error'); return; }
+    if (cash+card < grand) { showToast('Jami summa yetarli emas', 'error'); reEnable(); return; }
     body.cash_amount = cash; body.card_amount = card; body.amount = cash + card;
   } else if (payMethod === 'card') {
     body.amount = grand;
   } else {
     const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
-    if (cash < grand) { showToast('Naqd miqdor yetarli emas', 'error'); return; }
+    if (cash < grand) { showToast('Naqd miqdor yetarli emas', 'error'); reEnable(); return; }
     body.amount = grand;
   }
   try {

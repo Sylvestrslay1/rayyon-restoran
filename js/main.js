@@ -1,5 +1,12 @@
 // ===== API CONFIG =====
 const API_BASE = "";
+
+// XSS himoyasi — admin kiritgan matnlarni xavfsiz chiqarish
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 let menuItems = [];
 
 // ===== GLOBAL XATO BOSHQARUVI (mijoz sahifasi) =====
@@ -143,14 +150,14 @@ function renderMenu(category = 'all') {
     <div class="menu-card">
       <div class="menu-card-img">
         ${item.image
-          ? `<img src="${API_BASE}${item.image}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" />`
+          ? `<img src="${API_BASE}${encodeURI(item.image)}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" />`
           : ''}
-        <span style="position:relative;z-index:1">${item.emoji}</span>
+        <span style="position:relative;z-index:1">${esc(item.emoji)}</span>
       </div>
       <div class="menu-card-body">
-        <p class="menu-card-cat">${getCatLabel(item.category)}</p>
-        <h3 class="menu-card-name">${item.name}</h3>
-        <p class="menu-card-desc">${item.desc}</p>
+        <p class="menu-card-cat">${esc(getCatLabel(item.category))}</p>
+        <h3 class="menu-card-name">${esc(item.name)}</h3>
+        <p class="menu-card-desc">${esc(item.desc)}</p>
         <div class="menu-card-footer">
           <span class="menu-price">${formatPrice(item.price)}</span>
           <button class="menu-order-btn" data-id="${item.id}">${typeof t==='function' ? t('menu.order') : 'Buyurtma'}</button>
@@ -194,15 +201,15 @@ async function loadGallery() {
       const bg   = colors[i % colors.length];
       const span = spans[i] || '';
       const img  = item.image
-        ? `<img src="${item.image}" alt="${item.title}" style="width:100%;height:100%;object-fit:cover;" />`
+        ? `<img src="${encodeURI(item.image)}" alt="${esc(item.title)}" style="width:100%;height:100%;object-fit:cover;" />`
         : `<div class="gallery-placeholder" style="background:linear-gradient(135deg,${bg});width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
-             <span style="font-size:3.5rem;">${item.emoji || '🖼'}</span>
-             <span class="g-label">${item.title}</span>
+             <span style="font-size:3.5rem;">${esc(item.emoji) || '🖼'}</span>
+             <span class="g-label">${esc(item.title)}</span>
            </div>`;
       return `<div class="gallery-item ${span} reveal">
         <div class="gallery-inner">
           ${img}
-          <div class="gallery-overlay"><span>${item.title}</span></div>
+          <div class="gallery-overlay"><span>${esc(item.title)}</span></div>
         </div>
       </div>`;
     }).join('');
@@ -220,13 +227,13 @@ async function loadPromos() {
     if (!Array.isArray(items) || !items.length) return;
     grid.innerHTML = items.map(p => `
       <div class="promo-card glass-card reveal">
-        ${p.badge ? `<div class="promo-badge">${p.badge}</div>` : ''}
-        <div class="promo-icon">${p.emoji || '🎁'}</div>
-        <h3>${p.title}</h3>
-        <p>${p.description || ''}</p>
+        ${p.badge ? `<div class="promo-badge">${esc(p.badge)}</div>` : ''}
+        <div class="promo-icon">${esc(p.emoji) || '🎁'}</div>
+        <h3>${esc(p.title)}</h3>
+        <p>${esc(p.description || '')}</p>
         <div class="promo-time">
           <span style="color:var(--cyan);font-size:0.8rem;">⏰</span>
-          <span style="color:rgba(255,255,255,0.45);font-size:0.8rem;">${p.time_info || ''}</span>
+          <span style="color:rgba(255,255,255,0.45);font-size:0.8rem;">${esc(p.time_info || '')}</span>
         </div>
       </div>`).join('');
     grid.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
@@ -557,7 +564,7 @@ document.getElementById('confirmOrder').addEventListener('click', async () => {
   const phone = document.getElementById('orderPhone').value.trim();
   if (!name || !phone) { showToast(typeof t==='function' ? t('toast.fill') : 'Iltimos, ism va telefon raqamni kiriting!'); return; }
   try {
-    await fetch(`${API_BASE}/api/orders`, {
+    const r = await fetch(`${API_BASE}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -566,7 +573,8 @@ document.getElementById('confirmOrder').addEventListener('click', async () => {
         customer_name: name, customer_phone: phone
       })
     });
-  } catch {}
+    if (!r.ok) { showToast('Xatolik yuz berdi, qayta urinib ko\'ring'); return; }
+  } catch { showToast('Tarmoq xatosi, qayta urinib ko\'ring'); return; }
   closeModal();
   showToast(`"${currentItem.name}" ✓`);
   document.getElementById('orderName').value  = '';
@@ -586,12 +594,13 @@ document.getElementById('reservationForm').addEventListener('submit', async e =>
   const note   = document.getElementById('resNote').value.trim();
   if (!name || !phone || !date || !time) { showToast(typeof t==='function' ? t('toast.res.err') : "Barcha maydonlarni to'ldiring!"); return; }
   try {
-    await fetch(`${API_BASE}/api/reservations`, {
+    const r = await fetch(`${API_BASE}/api/reservations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer_name: name, customer_phone: phone, date, time, guests, note })
     });
-  } catch {}
+    if (!r.ok) { showToast('Bron yuborilmadi, qayta urinib ko\'ring'); return; }
+  } catch { showToast('Tarmoq xatosi, qayta urinib ko\'ring'); return; }
   showToast(`${name} — ${typeof t==='function' ? t('toast.res.ok') : 'Bron tasdiqlandi!'} (${date} ${time})`);
   e.target.reset();
 });
