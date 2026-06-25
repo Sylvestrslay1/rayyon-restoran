@@ -360,7 +360,14 @@ function showMain() {
   document.getElementById('cashier-name-lbl').textContent = CASHIER;
   document.getElementById('shift-badge').textContent = `Smena #${SHIFT_ID}`;
   loadTables();
-  setInterval(loadTables, 30000);
+  // SSE — real-time stol yangilash
+  const _ces = new EventSource('/api/events');
+  _ces.addEventListener('new_order', () => loadTables());
+  _ces.addEventListener('item_ready', () => loadTables());
+  _ces.onerror = () => {
+    if (_ces.readyState === EventSource.CLOSED) setInterval(loadTables, 30000);
+  };
+  setTimeout(() => { if (_ces.readyState !== EventSource.OPEN) setInterval(loadTables, 30000); }, 3000);
 }
 function logout() {
   if (!confirm('Tizimdan chiqmoqchimisiz?')) return;

@@ -121,6 +121,16 @@ let currentCat = '';
 let prevIds = new Set();
 let firstLoad = true;
 
+// Browser notification ruxsati
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+function kNotify(title, body) {
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/favicon.ico' });
+  }
+}
+
 // Soat
 function updateClock() {
   const now = new Date();
@@ -275,7 +285,10 @@ function showNewOrderToast() {
 // SSE — real-time yangilanish
 load();
 const _es = new EventSource('/api/events');
-_es.addEventListener('new_order', () => load());
+_es.addEventListener('new_order', e => {
+  load();
+  try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(_) {}
+});
 _es.addEventListener('item_cooking', () => load());
 _es.onerror = () => {
   // SSE uzilsa — 5 soniyada polling ga qaytamiz

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -241,6 +241,15 @@ def get_setting(key):
     return row["value"] if not USE_PG else row[0]
 
 
+@app.before_request
+def force_https():
+    """Production da HTTP → HTTPS yo'naltirish (Render proxy orqali)."""
+    if os.environ.get("FLASK_ENV") == "production":
+        proto = request.headers.get("X-Forwarded-Proto", "https")
+        if proto == "http":
+            url = request.url.replace("http://", "https://", 1)
+            return redirect(url, code=301)
+
 @app.after_request
 def add_security_headers(response):
     """Barcha javoblarga xavfsizlik headerlari qo'shish."""
@@ -249,12 +258,15 @@ def add_security_headers(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # HSTS — HTTPS ni 1 yilga majburlash (production da)
+    if os.environ.get("FLASK_ENV") == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data: blob:; "
+        "img-src 'self' data: blob: https:; "
         "connect-src 'self'; "
         "frame-ancestors 'none';"
     )
@@ -1071,14 +1083,23 @@ def close_session(sid):
     customer_phone = d.get("customer_phone", "") or s.get("customer_phone", "")
     customer_name_d = d.get("customer_name", "") or s.get("customer_name", "")
     if customer_phone:
+        # 1000 so'm = 1 ball; 100 ball = 5% chegirma, 200 ball = 10%, 500 ball = 15%
+        earned_points = int(server_total // 1000)
         cur_c = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (customer_phone,))
         crows = rows_to_list(cur_c)
         if crows:
-            db_exec(conn, "UPDATE customers SET total_spent=total_spent+?, visits=visits+1 WHERE phone=?",
-                    (server_total, customer_phone))
+            db_exec(conn,
+                "UPDATE customers SET total_spent=total_spent+?, visits=visits+1, loyalty_points=loyalty_points+? WHERE phone=?",
+                (server_total, earned_points, customer_phone))
+            # Ball asosida chegirmani avtomatik yangilash
+            new_points = (crows[0].get("loyalty_points") or 0) + earned_points
+            auto_disc = 15 if new_points >= 500 else (10 if new_points >= 200 else (5 if new_points >= 100 else 0))
+            if auto_disc > 0:
+                db_exec(conn, "UPDATE customers SET discount_pct=? WHERE phone=?", (auto_disc, customer_phone))
         else:
-            db_exec(conn, "INSERT INTO customers (name, phone, total_spent, visits) VALUES (?,?,?,1)",
-                    (customer_name_d, customer_phone, server_total))
+            db_exec(conn,
+                "INSERT INTO customers (name, phone, total_spent, visits, loyalty_points) VALUES (?,?,?,1,?)",
+                (customer_name_d, customer_phone, server_total, earned_points))
         conn.commit()
 
     conn.close()

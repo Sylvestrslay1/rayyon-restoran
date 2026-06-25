@@ -942,7 +942,7 @@
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>#</th><th>Ism</th><th>Telefon</th><th>Tashrif</th><th>Jami xarid</th><th>Chegirma</th><th>Izoh</th><th>Amal</th></tr></thead>
+        <thead><tr><th>#</th><th>Ism</th><th>Telefon</th><th>Tashrif</th><th>Jami xarid</th><th>Ballar</th><th>Chegirma</th><th>Daraja</th><th>Izoh</th><th>Amal</th></tr></thead>
         <tbody id="loyalty-body"></tbody>
       </table>
     </div>
@@ -2563,22 +2563,35 @@ async function loadLoyaltyPage() {
   renderLoyaltyTable(rows);
 }
 
+function loyaltyTier(pts) {
+  if (pts >= 500) return { label: '💎 Platinum', color: '#e2e8f0' };
+  if (pts >= 200) return { label: '🥇 Gold', color: '#f59e0b' };
+  if (pts >= 100) return { label: '🥈 Silver', color: '#94a3b8' };
+  if (pts >= 1)   return { label: '🥉 Bronze', color: '#cd7c39' };
+  return { label: '—', color: 'var(--muted)' };
+}
+
 function renderLoyaltyTable(rows) {
   const tbody = document.getElementById('loyalty-body');
-  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Mijozlar yo\'q</td></tr>'; return; }
-  tbody.innerHTML = rows.map(c => `<tr>
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Mijozlar yo\'q</td></tr>'; return; }
+  tbody.innerHTML = rows.map(c => {
+    const pts = c.loyalty_points || 0;
+    const tier = loyaltyTier(pts);
+    return `<tr>
     <td style="color:var(--cyan)">#${c.id}</td>
     <td style="font-weight:600">${esc(c.name||'—')}</td>
     <td>${esc(c.phone)}</td>
     <td style="color:var(--gold)">${c.visits}</td>
     <td style="color:var(--green);font-weight:700">${priceFmt(c.total_spent)}</td>
+    <td style="color:#60a5fa;font-weight:700">${pts} <span style="font-size:0.75rem;color:var(--muted)">ball</span></td>
     <td style="color:${c.discount_pct>0?'#ff9800':'var(--muted)'}">${c.discount_pct}%</td>
+    <td style="color:${tier.color};font-size:0.85rem">${tier.label}</td>
     <td style="color:var(--muted);font-size:0.8rem">${esc(c.notes||'')}</td>
     <td>
       <button class="btn-sm btn-secondary" onclick="editCustomer(${c.id})">✎</button>
       <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteCustomer(${c.id})">✕</button>
     </td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 }
 
 async function searchCustomers(q) {
@@ -2633,6 +2646,21 @@ async function deleteCustomer(id) {
 window.addEventListener('langchange', () => {
   if (typeof renderTables === 'function' && tablesData && tablesData.length) renderTables();
 });
+
+// SSE — admin panelda real-time yangilanish
+(function initAdminSSE() {
+  const es = new EventSource('/api/events');
+  es.addEventListener('new_order', () => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
+    if (document.getElementById('page-tables').classList.contains('active')) loadTables();
+  });
+  es.addEventListener('item_ready', () => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
+  });
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) setTimeout(initAdminSSE, 5000);
+  };
+})();
 </script>
 </body>
 </html>

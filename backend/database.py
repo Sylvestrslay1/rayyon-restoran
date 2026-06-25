@@ -610,6 +610,15 @@ def init_db():
             )
         """)
 
+    # loyalty_points ustunini migration orqali qo'shish
+    try:
+        if USE_PG:
+            cur.execute("ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0")
+        else:
+            cur.execute("ALTER TABLE customers ADD COLUMN loyalty_points INTEGER DEFAULT 0")
+    except Exception:
+        pass  # Ustun allaqachon mavjud
+
     # ===== KASSIR SMENALARI =====
     if USE_PG:
         cur.execute("""
