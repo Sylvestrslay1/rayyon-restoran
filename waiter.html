@@ -276,7 +276,14 @@ function startApp() {
   document.getElementById('wName').textContent=waiter.name;
   loadMenu();
   loadTables();
-  setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000);
+  // SSE — real-time yangilanish
+  const _wes = new EventSource('/api/events');
+  _wes.addEventListener('item_ready', () => { loadReady(); loadTables(); });
+  _wes.addEventListener('new_order', () => loadTables());
+  _wes.onerror = () => {
+    if (_wes.readyState === EventSource.CLOSED) setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000);
+  };
+  setTimeout(() => { if (_wes.readyState !== EventSource.OPEN) setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000); }, 3000);
   // Browser notification ruxsati so'rash
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();

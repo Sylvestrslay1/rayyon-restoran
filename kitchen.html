@@ -272,9 +272,17 @@ function showNewOrderToast() {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// 5 soniyada bir yangilash
+// SSE — real-time yangilanish
 load();
-setInterval(load, 5000);
+const _es = new EventSource('/api/events');
+_es.addEventListener('new_order', () => load());
+_es.addEventListener('item_cooking', () => load());
+_es.onerror = () => {
+  // SSE uzilsa — 5 soniyada polling ga qaytamiz
+  if (_es.readyState === EventSource.CLOSED) setInterval(load, 5000);
+};
+// Fallback polling (agar SSE ishlamasa)
+setTimeout(() => { if (_es.readyState !== EventSource.OPEN) setInterval(load, 5000); }, 3000);
 </script>
 </body>
 </html>

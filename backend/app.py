@@ -3,7 +3,9 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
-import threading, datetime, csv, io
+import threading, datetime, csv, io, logging
+
+log = logging.getLogger(__name__)
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -44,6 +46,36 @@ ALLOWED_PERIODS = {"daily", "weekly", "monthly"}
 # Multi-worker (Gunicorn) uchun Redis ishlatish tavsiya etiladi
 _tokens_lock = threading.Lock()
 ACTIVE_TOKENS: dict = {}  # token -> {"created": datetime, "ip": str}
+
+# ===== PIN BRUTE-FORCE HIMOYA =====
+_pin_fails: dict = {}  # ip -> {"count": int, "last": datetime}
+_pin_fails_lock = threading.Lock()
+PIN_MAX_TRIES = 5
+PIN_LOCKOUT_MINUTES = 15
+
+def _pin_check_locked(ip: str) -> bool:
+    """True qaytarsa — IP bloklangan."""
+    with _pin_fails_lock:
+        rec = _pin_fails.get(ip)
+        if not rec:
+            return False
+        if rec["count"] < PIN_MAX_TRIES:
+            return False
+        elapsed = (datetime.datetime.utcnow() - rec["last"]).total_seconds()
+        if elapsed > PIN_LOCKOUT_MINUTES * 60:
+            del _pin_fails[ip]
+            return False
+        return True
+
+def _pin_record_fail(ip: str):
+    with _pin_fails_lock:
+        rec = _pin_fails.setdefault(ip, {"count": 0, "last": datetime.datetime.utcnow()})
+        rec["count"] += 1
+        rec["last"] = datetime.datetime.utcnow()
+
+def _pin_record_success(ip: str):
+    with _pin_fails_lock:
+        _pin_fails.pop(ip, None)
 
 # ===== ROL VA RUXSATLAR =====
 # "all" - to'liq kirish; boshqalar - faqat belgilangan imkoniyatlar
@@ -294,29 +326,32 @@ def login():
     stored_hash = get_setting("admin_password_hash")
     stored_salt = get_setting("admin_password_salt")
     stored_plain = get_setting("admin_password")
+    # Env var dan yoki hardcoded default (faqat DB da hech narsa yo'q bo'lsa)
+    fallback_plain = os.environ.get("ADMIN_PASSWORD", "rayyon2024")
 
     authenticated = False
     if stored_hash and stored_salt:
-        # Yangi pbkdf2 format
         authenticated = verify_password(password, stored_hash, stored_salt)
-    elif stored_plain:
-        # Eski plaintext — muvofiqligini tekshir va yangilash
-        if hmac.compare_digest(password, stored_plain):
+    else:
+        # Plaintext tekshirish: DB dagi yoki env var default
+        candidate = stored_plain or fallback_plain
+        if hmac.compare_digest(password, candidate):
             authenticated = True
-            # Zudlik bilan yangi hash ga o'tkazish
+            # Zudlik bilan pbkdf2 hash ga o'tkazish
             new_hash, new_salt = hash_password(password)
-            conn = get_conn()
+            conn2 = get_conn()
             if USE_PG:
-                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-                        ("admin_password_hash", new_hash))
-                db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-                        ("admin_password_salt", new_salt))
+                for k, v in [("admin_password_hash", new_hash), ("admin_password_salt", new_salt)]:
+                    db_exec(conn2,
+                        "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+                        (k, v))
+                # Plaintext ni bazadan o'chirish
+                db_exec(conn2, "DELETE FROM settings WHERE key=%s", ("admin_password",))
             else:
-                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
-                db_exec(conn, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
-                # Eski plaintext parolni bazadan o'chirish (xavfsizlik)
-                db_exec(conn, "DELETE FROM settings WHERE key=?", ("admin_password",))
-            conn.commit(); conn.close()
+                db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
+                db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
+                db_exec(conn2, "DELETE FROM settings WHERE key=?", ("admin_password",))
+            conn2.commit(); conn2.close()
 
     if not authenticated:
         time.sleep(0.3)  # Vaqt hujumiga qarshi kechiktirish
@@ -347,6 +382,10 @@ def staff_login():
     Qaytaradi: {ok, name, role, id, redirect}
     redirect: cashier | waiter | kitchen | chef | manager | accountant | director
     """
+    ip = get_remote_address()
+    if _pin_check_locked(ip):
+        return jsonify({"ok": False, "error": f"Juda ko'p urinish. {PIN_LOCKOUT_MINUTES} daqiqadan keyin qayta urinib ko'ring."}), 429
+
     d = request.json or {}
     pin = str(d.get("pin", "")).strip()
     if not pin:
@@ -354,8 +393,10 @@ def staff_login():
 
     staff = check_staff_pin(pin)
     if not staff:
+        _pin_record_fail(ip)
         time.sleep(0.3)
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
+    _pin_record_success(ip)
 
     role = staff.get("role", "waiter")
     redirect_map = {
@@ -900,6 +941,7 @@ def add_order_item(sid):
     # Telegram xabarnomasi
     names = ", ".join(f"{i.get('name')} x{i.get('quantity',1)}" for i in items)
     tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
+    _sse_broadcast("new_order", {"session_id": sid, "table": s["table_number"], "items": names})
     return jsonify({"ok": True})
 
 @app.route("/api/session/<int:sid>/item/<int:iid>/status", methods=["PUT"])
@@ -931,6 +973,11 @@ def update_item_status(sid, iid):
     if status == "ready" and pre_rows:
         item = pre_rows[0]
         tg_send(f"✅ <b>Stol #{item['table_number']} — Tayyor!</b>\n🍽 {item['item_name']}\nOfitsiant olib keling!")
+        _sse_broadcast("item_ready", {"session_id": sid, "item_id": iid,
+                                      "item_name": item["item_name"], "table": item.get("table_number")})
+    elif status == "cooking" and pre_rows:
+        _sse_broadcast("item_cooking", {"session_id": sid, "item_id": iid,
+                                        "item_name": pre_rows[0]["item_name"]})
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -1785,12 +1832,10 @@ def _inv_update(conn, needed, inv_id, unit_cond=""):
     where = f"id=? {unit_cond}".strip()
     if USE_PG:
         sql = f"UPDATE inventory SET quantity = GREATEST(0, quantity - ?) WHERE {where}"
+        db_exec(conn, sql, (needed, inv_id))
     else:
         sql = f"UPDATE inventory SET quantity = CASE WHEN quantity - ? < 0 THEN 0 ELSE quantity - ? END WHERE {where}"
-        needed = (needed, needed) + ((inv_id,) if not unit_cond else (inv_id,))
-        db_exec(conn, sql, needed)
-        return
-    db_exec(conn, sql, (needed, inv_id))
+        db_exec(conn, sql, (needed, needed, inv_id))
 
 
 def deduct_inventory(menu_item_id, quantity, conn, note=""):
@@ -2143,6 +2188,48 @@ def export_inventory():
     cur  = db_exec(conn, "SELECT * FROM inventory ORDER BY name")
     rows = rows_to_list(cur); conn.close()
     return _csv_response(rows, "inventory.csv")
+
+
+# ===== SSE — REAL-TIME YANGILANISHLAR =====
+_sse_clients: list = []
+_sse_lock = threading.Lock()
+
+def _sse_broadcast(event: str, data: dict):
+    """Barcha ulangan mijozlarga SSE xabari yuborish."""
+    msg = f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+    with _sse_lock:
+        for q in list(_sse_clients):
+            try:
+                q.put_nowait(msg)
+            except Exception:
+                pass
+
+@app.route("/api/events")
+def sse_stream():
+    """SSE oqimi — oshxona va ofitsiant paneli uchun real-time."""
+    from queue import Queue, Empty
+    client_q = Queue(maxsize=50)
+    with _sse_lock:
+        _sse_clients.append(client_q)
+
+    def generate():
+        try:
+            yield "data: {\"type\": \"connected\"}\n\n"
+            while True:
+                try:
+                    msg = client_q.get(timeout=25)
+                    yield msg
+                except Empty:
+                    yield ": ping\n\n"
+        finally:
+            with _sse_lock:
+                try:
+                    _sse_clients.remove(client_q)
+                except ValueError:
+                    pass
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 if __name__ == "__main__":

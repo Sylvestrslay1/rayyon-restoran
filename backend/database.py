@@ -535,7 +535,7 @@ def init_db():
         ("phone", "+998 71 123 45 67"),
         ("address", "Toshkent sh., Yunusobod tumani, Amir Temur ko'chasi 15"),
         ("working_hours", "10:00 – 23:00"),
-        ("admin_password", "rayyon2024"),
+        ("app_version", "2.0"),
         ("telegram_bot", "@rayyon_restoran_bot"),
     ]
     for key, val in defaults:
