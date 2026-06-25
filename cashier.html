@@ -264,7 +264,11 @@
   <div class="modal">
     <div class="modal-title">
       📊 Smena hisoboti
-      <button class="close-btn" onclick="closeModal('report-modal')">✕</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-outline btn-sm" onclick="printShiftReport()">🖨 Chop etish</button>
+        <button class="btn btn-outline btn-sm" onclick="exportShiftPDF()">📄 PDF</button>
+        <button class="close-btn" onclick="closeModal('report-modal')">✕</button>
+      </div>
     </div>
     <div id="report-content"></div>
   </div>
@@ -703,6 +707,7 @@ async function openShiftReport() {
     });
     const data = await r.json();
     if (!r.ok) { showToast(data.error||'Xato','error'); return; }
+    _lastReportData = data;
     renderReport(data);
     document.getElementById('report-modal').classList.remove('hidden');
   } catch(e) { showToast('Hisobot yuklanmadi','error'); }
@@ -725,6 +730,82 @@ function renderReport(data) {
     </div>
     <div style="margin-bottom:8px;font-weight:700">To'lov usullari:</div>
     ${methodRows || '<div style="color:#64748b;font-size:13px">To\'lovlar yo\'q</div>'}`;
+}
+
+// ===== SMENA HISOBOT PRINT / PDF =====
+let _lastReportData = null;
+
+function _buildReportHTML(data, forPrint=false) {
+  const d = data || _lastReportData;
+  if (!d) return '';
+  const byM = d.by_method || {};
+  const methodRows = Object.entries(byM).map(([m, s]) =>
+    `<tr><td>${m}</td><td style="text-align:right;font-weight:600">${fmt(s)} so'm</td></tr>`
+  ).join('');
+  const now = new Date().toLocaleString('uz');
+  return `
+    <div style="font-family:monospace;font-size:13px;color:#111;max-width:400px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:12px;">
+        <b style="font-size:16px">RAYYON RESTORAN</b><br>
+        <span style="font-size:11px;color:#555">Smena #${SHIFT_ID} hisoboti</span><br>
+        <span style="font-size:11px;color:#555">${now}</span>
+      </div>
+      <hr style="border-top:1px dashed #999;margin:8px 0">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr><td>Kassir</td><td style="text-align:right">${esc(CASHIER||'')}</td></tr>
+        <tr><td>Sessiyalar</td><td style="text-align:right">${d.sessions_count||0} ta</td></tr>
+        <tr><td>Jami yig'ilgan</td><td style="text-align:right;font-weight:700">${fmt(d.total_collected||0)} so'm</td></tr>
+        <tr><td>Chiqimlar</td><td style="text-align:right;color:#dc2626">${fmt(d.expenses||0)} so'm</td></tr>
+        <tr style="border-top:1px solid #ddd"><td><b>SOF DAROMAD</b></td><td style="text-align:right;font-weight:700;color:#16a34a">${fmt(d.net!=null?d.net:(d.total_collected||0))} so'm</td></tr>
+      </table>
+      <hr style="border-top:1px dashed #999;margin:8px 0">
+      <div style="font-weight:700;margin-bottom:4px">To'lov usullari:</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        ${methodRows || '<tr><td colspan="2" style="color:#999">To\'lovlar yo\'q</td></tr>'}
+      </table>
+      ${d.sessions && d.sessions.length ? `
+      <hr style="border-top:1px dashed #999;margin:8px 0">
+      <div style="font-weight:700;margin-bottom:4px">Sessiyalar:</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <tr style="color:#555"><th style="text-align:left">Stol</th><th style="text-align:left">Ofitsiant</th><th style="text-align:right">Summa</th></tr>
+        ${d.sessions.map(s=>`<tr><td>#${s.table_number}</td><td>${esc(s.waiter_name||'')}</td><td style="text-align:right">${fmt(s.total_amount)} so'm</td></tr>`).join('')}
+      </table>` : ''}
+      <hr style="border-top:1px dashed #999;margin:8px 0">
+      <div style="text-align:center;font-size:11px;color:#777">Rayyon Restoran — Boshqaruv tizimi</div>
+    </div>`;
+}
+
+function printShiftReport() {
+  const w = window.open('','_blank');
+  w.document.write(`<html><head><title>Smena #${SHIFT_ID} hisoboti</title>
+    <style>body{background:#fff;padding:20px}@media print{body{padding:0}}</style>
+    </head><body>${_buildReportHTML()}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}
+
+async function exportShiftPDF() {
+  const html = _buildReportHTML();
+  if (!html) return;
+  // jsPDF yo'q — print dialog orqali PDF saqlash
+  const w = window.open('','_blank');
+  w.document.write(`<html><head><title>Smena #${SHIFT_ID} hisoboti</title>
+    <style>
+      body{background:#fff;padding:20px;font-family:monospace}
+      @page{size:A5;margin:10mm}
+      @media print{.no-print{display:none}}
+    </style></head>
+    <body>
+      <div class="no-print" style="margin-bottom:16px;font-family:sans-serif">
+        <button onclick="window.print()" style="padding:8px 20px;background:#1e40af;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">
+          📄 PDF sifatida saqlash (Print → Save as PDF)
+        </button>
+      </div>
+      ${html}
+    </body></html>`);
+  w.document.close();
+  w.focus();
 }
 
 // ===== CLOSE SHIFT =====

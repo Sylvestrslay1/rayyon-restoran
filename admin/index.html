@@ -2588,6 +2588,7 @@ function renderLoyaltyTable(rows) {
     <td style="color:${tier.color};font-size:0.85rem">${tier.label}</td>
     <td style="color:var(--muted);font-size:0.8rem">${esc(c.notes||'')}</td>
     <td>
+      <button class="btn-sm" style="background:rgba(212,175,55,0.15);color:#d4af37;border:1px solid rgba(212,175,55,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;margin-right:4px" onclick="window.open('/loyalty-card.html?id=${c.id}','_blank')" title="Loyalty karta">🎴</button>
       <button class="btn-sm btn-secondary" onclick="editCustomer(${c.id})">✎</button>
       <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteCustomer(${c.id})">✕</button>
     </td>

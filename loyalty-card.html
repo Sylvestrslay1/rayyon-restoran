@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rayyon — Loyalty Karta</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:linear-gradient(135deg,#0a0a0f 0%,#1a0a2e 50%,#0d1117 100%);display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;padding:20px}
+.card{width:100%;max-width:380px}
+.card-front{background:linear-gradient(135deg,#1e1e2e 0%,#16213e 60%,#0f3460 100%);border-radius:20px;padding:28px 24px;color:#fff;position:relative;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(212,175,55,0.3)}
+.card-front::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(212,175,55,0.12) 0%,transparent 70%);pointer-events:none}
+.card-front::after{content:'';position:absolute;bottom:-40px;left:-40px;width:160px;height:160px;background:radial-gradient(circle,rgba(0,212,255,0.08) 0%,transparent 70%);pointer-events:none}
+.logo{font-size:22px;font-weight:700;letter-spacing:2px;color:#d4af37;margin-bottom:4px}
+.logo-sub{font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
+.tier-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:16px}
+.tier-Platinum{background:rgba(226,232,240,0.15);color:#e2e8f0;border:1px solid rgba(226,232,240,0.3)}
+.tier-Gold{background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)}
+.tier-Silver{background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3)}
+.tier-Bronze{background:rgba(205,124,57,0.15);color:#cd7c39;border:1px solid rgba(205,124,57,0.3)}
+.tier-Yangi{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.15)}
+.member-name{font-size:20px;font-weight:600;margin-bottom:4px;color:#fff}
+.member-phone{font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:24px}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.stat{background:rgba(255,255,255,0.06);border-radius:10px;padding:12px 10px;text-align:center;border:1px solid rgba(255,255,255,0.08)}
+.stat-val{font-size:20px;font-weight:700;color:#d4af37}
+.stat-lbl{font-size:10px;color:rgba(255,255,255,0.4);margin-top:3px;letter-spacing:0.5px}
+.points-bar{margin-bottom:20px}
+.points-bar-top{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px}
+.bar-track{height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,#d4af37,#00d4ff);border-radius:3px;transition:width 1s ease}
+.next-tier{font-size:11px;color:rgba(255,255,255,0.35);text-align:right;margin-top:4px}
+.discount-box{background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.25);border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.discount-lbl{font-size:12px;color:rgba(255,255,255,0.5)}
+.discount-val{font-size:24px;font-weight:700;color:#d4af37}
+.qr-section{display:flex;align-items:center;gap:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:18px}
+.qr-box{background:#fff;border-radius:10px;padding:8px;flex-shrink:0}
+.qr-info{font-size:11px;color:rgba(255,255,255,0.35);line-height:1.6}
+.qr-info b{color:rgba(255,255,255,0.6);display:block;font-size:12px;margin-bottom:3px}
+.error-box{text-align:center;color:rgba(255,255,255,0.5);padding:40px 20px}
+.error-box h2{color:#d4af37;margin-bottom:8px}
+.share-btn{width:100%;margin-top:16px;padding:12px;background:rgba(212,175,55,0.15);border:1px solid rgba(212,175,55,0.3);color:#d4af37;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:0.5px}
+.share-btn:active{opacity:0.8}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-front" id="card-front">
+    <div class="logo">RAYYON</div>
+    <div class="logo-sub">Restoran</div>
+    <div id="card-body"><div class="error-box"><p>Yuklanmoqda...</p></div></div>
+  </div>
+  <button class="share-btn" id="share-btn" style="display:none" onclick="shareCard()">📤 Do'stlarga ulashish</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const cid = parseInt(params.get('id') || '0');
+const TIER_ICONS = { Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉', Yangi:'🌱' };
+const TIER_NEXT_LABELS = { Platinum:'Maksimal daraja', Gold:'500 ballga Platinum', Silver:'200 ballga Gold', Bronze:'100 ballga Silver', Yangi:'1 ballga Bronze' };
+
+function tierProgress(pts) {
+  if (pts >= 500) return 100;
+  if (pts >= 200) return Math.round(50 + (pts-200)/300*50);
+  if (pts >= 100) return Math.round(25 + (pts-100)/100*25);
+  return Math.round(pts/100*25);
+}
+
+async function load() {
+  if (!cid) { showErr('Karta ID ko\'rsatilmagan'); return; }
+  try {
+    const r = await fetch(`/api/loyalty-card/${cid}`);
+    if (!r.ok) { showErr('Mijoz topilmadi'); return; }
+    const c = await r.json();
+    render(c);
+  } catch(e) { showErr('Ulanishda xato'); }
+}
+
+function showErr(msg) {
+  document.getElementById('card-body').innerHTML =
+    `<div class="error-box"><h2>⚠️</h2><p>${msg}</p></div>`;
+}
+
+function fmt(n) { return Number(n||0).toLocaleString(); }
+
+function render(c) {
+  const pts = c.loyalty_points || 0;
+  const icon = TIER_ICONS[c.tier] || '🌱';
+  const pct = tierProgress(pts);
+  const nextLabel = TIER_NEXT_LABELS[c.tier] || '';
+  const cardUrl = location.href;
+
+  document.getElementById('card-body').innerHTML = `
+    <div class="tier-badge tier-${c.tier}">${icon} ${c.tier}</div>
+    <div class="member-name">${c.name}</div>
+    <div class="member-phone">${c.phone}</div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-val">${pts}</div><div class="stat-lbl">BALLAR</div></div>
+      <div class="stat"><div class="stat-val">${c.visits}</div><div class="stat-lbl">TASHRIF</div></div>
+      <div class="stat"><div class="stat-val">${fmt(Math.round(c.total_spent/1000))}K</div><div class="stat-lbl">XARID</div></div>
+    </div>
+    <div class="points-bar">
+      <div class="points-bar-top"><span>Daraja</span><span>${pts} ball</span></div>
+      <div class="bar-track"><div class="bar-fill" id="bar-fill" style="width:0%"></div></div>
+      <div class="next-tier">${nextLabel}</div>
+    </div>
+    ${c.discount_pct > 0 ? `
+    <div class="discount-box">
+      <div><div class="discount-lbl">Faol chegirma</div></div>
+      <div class="discount-val">${c.discount_pct}%</div>
+    </div>` : ''}
+    <div class="qr-section">
+      <div class="qr-box" id="qr-canvas"></div>
+      <div class="qr-info">
+        <b>Karta #${c.id}</b>
+        QR kodni kassirga ko'rsating — chegirma avtomatik qo'llaniladi.<br>
+        <span style="color:rgba(255,255,255,0.2);font-size:10px">Karta shaxsiy va boshqalarga berilmaydi</span>
+      </div>
+    </div>`;
+
+  setTimeout(() => {
+    document.getElementById('bar-fill').style.width = pct + '%';
+    new QRCode(document.getElementById('qr-canvas'), {
+      text: cardUrl, width: 80, height: 80,
+      colorDark: '#0a0a0f', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }, 100);
+
+  document.getElementById('share-btn').style.display = 'block';
+}
+
+async function shareCard() {
+  const url = location.href;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Rayyon Loyalty Karta', text: 'Mening loyalty kartam', url });
+      return;
+    } catch(_) {}
+  }
+  try { await navigator.clipboard.writeText(url); alert('Havola nusxalandi!'); }
+  catch(_) { prompt('Havolani nusxalang:', url); }
+}
+
+load();
+</script>
+</body>
+</html>

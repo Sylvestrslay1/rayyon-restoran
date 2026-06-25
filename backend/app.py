@@ -2187,6 +2187,29 @@ def delete_customer(cid):
     return jsonify({"ok": True})
 
 
+# ===== LOYALTY KARTA (public) =====
+@app.route("/api/loyalty-card/<int:cid>", methods=["GET"])
+def loyalty_card(cid):
+    """Ochiq endpoint — mijoz o'z karta ma'lumotlarini ko'radi (token kerak emas)."""
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT id,name,phone,total_spent,visits,loyalty_points,discount_pct FROM customers WHERE id=?", (cid,))
+    rows = rows_to_list(cur)
+    conn.close()
+    if not rows:
+        return jsonify({"error": "Mijoz topilmadi"}), 404
+    c = rows[0]
+    pts = c.get("loyalty_points") or 0
+    tier = ("Platinum" if pts >= 500 else "Gold" if pts >= 200 else "Silver" if pts >= 100 else "Bronze" if pts >= 1 else "Yangi")
+    next_tier_pts = (500 if pts < 500 else (200 if pts < 200 else (100 if pts < 100 else 0)))
+    return jsonify({
+        "id": c["id"], "name": c["name"] or "Mijoz",
+        "phone": str(c["phone"])[:4] + "****" + str(c["phone"])[-2:],
+        "total_spent": c["total_spent"], "visits": c["visits"],
+        "loyalty_points": pts, "discount_pct": c["discount_pct"],
+        "tier": tier, "next_tier_pts": max(0, next_tier_pts - pts),
+    })
+
+
 # ===== STATIC FILES =====
 @app.route("/")
 def serve_site():
