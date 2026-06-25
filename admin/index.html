@@ -764,7 +764,7 @@
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>#</th><th>Emoji</th><th>Sarlavha</th><th>Tavsif</th><th>Badge</th><th>Vaqt</th><th>Holat</th><th>Amal</th></tr></thead>
+        <thead><tr><th>#</th><th>Emoji</th><th data-i18n="th.title">Sarlavha</th><th data-i18n="th.desc">Tavsif</th><th>Badge</th><th data-i18n="th.time">Vaqt</th><th data-i18n="th.status">Holat</th><th data-i18n="th.action">Amal</th></tr></thead>
         <tbody id="promos-body"></tbody>
       </table>
     </div>
@@ -799,42 +799,42 @@
     </div>
     <!-- Period tanlash -->
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
-      <button class="acc-period-btn active" data-period="daily">Bugun</button>
-      <button class="acc-period-btn" data-period="weekly">Hafta</button>
-      <button class="acc-period-btn" data-period="monthly">Oy</button>
+      <button class="acc-period-btn active" data-period="daily" data-i18n="period.today">Bugun</button>
+      <button class="acc-period-btn" data-period="weekly" data-i18n="period.week">Hafta</button>
+      <button class="acc-period-btn" data-period="monthly" data-i18n="period.month">Oy</button>
       <span style="flex:1"></span>
-      <a class="btn-secondary" id="export-payments-link" href="#" onclick="exportPayments(event)" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ To'lovlar CSV</a>
-      <a class="btn-secondary" href="/api/export/sessions" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Sessiyalar CSV</a>
+      <a class="btn-secondary" id="export-payments-link" href="#" onclick="exportPayments(event)" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;" data-i18n="acc.csv.payments">⬇ To'lovlar CSV</a>
+      <a class="btn-secondary" href="/api/export/sessions" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;" data-i18n="acc.csv.sessions">⬇ Sessiyalar CSV</a>
     </div>
     <!-- Statistika kartalar -->
     <div class="stats-grid" style="margin-bottom:24px;">
-      <div class="stat-card"><div class="stat-value" id="acc-revenue">0</div><div class="stat-label">💰 Daromad</div><div class="stat-sub">Bajarilgan buyurtmalar</div></div>
-      <div class="stat-card"><div class="stat-value" id="acc-expenses">0</div><div class="stat-label">📤 Chiqim</div><div class="stat-sub">Umumiy xarajatlar</div></div>
-      <div class="stat-card"><div class="stat-value" id="acc-profit">0</div><div class="stat-label">📊 Foyda</div><div class="stat-sub">Daromad − Chiqim</div></div>
-      <div class="stat-card"><div class="stat-value" id="acc-orders">0</div><div class="stat-label">📦 Buyurtmalar</div><div class="stat-sub">Ushbu davr</div></div>
+      <div class="stat-card"><div class="stat-value" id="acc-revenue">0</div><div class="stat-label" data-i18n="acc.revenue">💰 Daromad</div><div class="stat-sub" data-i18n="acc.revenue_sub">Bajarilgan buyurtmalar</div></div>
+      <div class="stat-card"><div class="stat-value" id="acc-expenses">0</div><div class="stat-label" data-i18n="acc.expenses">📤 Chiqim</div><div class="stat-sub" data-i18n="acc.expenses_sub">Umumiy xarajatlar</div></div>
+      <div class="stat-card"><div class="stat-value" id="acc-profit">0</div><div class="stat-label" data-i18n="acc.profit">📊 Foyda</div><div class="stat-sub" data-i18n="acc.profit_sub">Daromad − Chiqim</div></div>
+      <div class="stat-card"><div class="stat-value" id="acc-orders">0</div><div class="stat-label" data-i18n="acc.orders">📦 Buyurtmalar</div><div class="stat-sub" data-i18n="acc.orders_sub">Ushbu davr</div></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
       <!-- Chiqim qo'shish -->
       <div class="table-wrap" style="padding:20px;">
-        <h3 style="color:var(--cyan);margin-bottom:14px;font-size:0.9rem;letter-spacing:2px;">+ CHIQIM QO'SHISH</h3>
-        <div class="form-group"><label>Kategoriya</label>
+        <h3 style="color:var(--cyan);margin-bottom:14px;font-size:0.9rem;letter-spacing:2px;" data-i18n="acc.add_expense">+ CHIQIM QO'SHISH</h3>
+        <div class="form-group"><label data-i18n="acc.category">Kategoriya</label>
           <select id="exp-cat">
-            <option value="mahsulot">🛒 Mahsulot</option>
-            <option value="maosh">👨‍🍳 Maosh</option>
-            <option value="kommunal">💡 Kommunal</option>
-            <option value="ijarа">🏠 Ijara</option>
-            <option value="boshqa">📋 Boshqa</option>
+            <option value="mahsulot" data-i18n="exp.product">🛒 Mahsulot</option>
+            <option value="maosh" data-i18n="exp.salary">👨‍🍳 Maosh</option>
+            <option value="kommunal" data-i18n="exp.utility">💡 Kommunal</option>
+            <option value="ijara" data-i18n="exp.rent">🏠 Ijara</option>
+            <option value="boshqa" data-i18n="exp.other">📋 Boshqa</option>
           </select>
         </div>
-        <div class="form-group"><label>Tavsif</label><input type="text" id="exp-desc" placeholder="Nimaga sarflandi" /></div>
-        <div class="form-group"><label>Summa (so'm)</label><input type="number" id="exp-amount" placeholder="0" /></div>
-        <div class="form-group"><label>Sana</label><input type="date" id="exp-date" /></div>
-        <button class="btn-primary" onclick="addExpense()" style="width:100%;">Qo'shish</button>
+        <div class="form-group"><label data-i18n="th.desc">Tavsif</label><input type="text" id="exp-desc" data-i18n-ph="acc.desc_ph" placeholder="Nimaga sarflandi" /></div>
+        <div class="form-group"><label data-i18n="acc.amount">Summa (so'm)</label><input type="number" id="exp-amount" placeholder="0" /></div>
+        <div class="form-group"><label data-i18n="res.date">Sana</label><input type="date" id="exp-date" /></div>
+        <button class="btn-primary" onclick="addExpense()" style="width:100%;" data-i18n="acc.add_btn">Qo'shish</button>
       </div>
       <!-- Kategoriya bo'yicha chiqimlar -->
       <div class="table-wrap" style="padding:20px;">
-        <h3 style="color:var(--gold);margin-bottom:14px;font-size:0.9rem;letter-spacing:2px;">XARAJATLAR BO'YICHA</h3>
+        <h3 style="color:var(--gold);margin-bottom:14px;font-size:0.9rem;letter-spacing:2px;" data-i18n="acc.by_category">XARAJATLAR BO'YICHA</h3>
         <div id="acc-exp-cats"></div>
       </div>
     </div>
@@ -842,10 +842,10 @@
     <!-- Chiqimlar jadvali -->
     <div class="table-wrap" style="margin-bottom:24px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 0;">
-        <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;">CHIQIMLAR</h3>
+        <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;" data-i18n="acc.expenses_title">CHIQIMLAR</h3>
       </div>
       <table class="data-table">
-        <thead><tr><th>#</th><th>Kategoriya</th><th>Tavsif</th><th>Summa</th><th>Sana</th><th>Amal</th></tr></thead>
+        <thead><tr><th>#</th><th data-i18n="acc.category">Kategoriya</th><th data-i18n="th.desc">Tavsif</th><th data-i18n="th.amount">Summa</th><th data-i18n="res.date">Sana</th><th data-i18n="th.action">Amal</th></tr></thead>
         <tbody id="acc-exp-body"></tbody>
       </table>
     </div>
@@ -853,8 +853,8 @@
     <!-- Ombor -->
     <div class="table-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 0;">
-        <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;">OMBOR</h3>
-        <button class="btn-primary" onclick="showInvModal()">+ Qo'shish</button>
+        <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;" data-i18n="acc.warehouse">OMBOR</h3>
+        <button class="btn-primary" onclick="showInvModal()" data-i18n="btn.add">+ Qo'shish</button>
       </div>
       <table class="data-table">
         <thead><tr><th>#</th><th>Mahsulot</th><th>Birlik</th><th>Miqdor</th><th>Min. zaxira</th><th>Narx/birlik</th><th>Holat</th><th>Amal</th></tr></thead>
