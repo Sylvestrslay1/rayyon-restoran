@@ -13,8 +13,11 @@ app = Flask(__name__)
 # Secret key muhit o'zgaruvchisidan olinadi (deploy da majburiy)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
 
-CORS(app, supports_credentials=True,
-     origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","))
+_cors_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
+_origins = _cors_origins.split(",") if _cors_origins else ["*"]
+CORS(app, supports_credentials=True, origins=_origins,
+     allow_headers=["Content-Type", "X-Admin-Token", "X-Kitchen-Token", "X-Session-Token"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # ===== RATE LIMITER =====
 limiter = Limiter(
@@ -1168,18 +1171,62 @@ def shift_close(shift_id):
     if not shift_rows:
         conn.close()
         return jsonify({"ok": False, "error": "Smena topilmadi yoki allaqachon yopilgan"}), 404
-    # Smena davrida qilingan to'lovlar summasi
-    cur2 = db_exec(conn, "SELECT COALESCE(SUM(amount),0) AS total, COUNT(DISTINCT session_id) AS sess FROM payments WHERE shift_id=?", (shift_id,))
+
+    # Aktiv sessiyalar tekshiruvi
+    force = d.get("force", False)
+    active_cur = db_exec(conn, "SELECT COUNT(*) FROM sessions WHERE shift_id=? AND status='active'", (shift_id,))
+    active_row = active_cur.fetchone()
+    active_cnt = int(active_row[0] if USE_PG else (active_row[0] or 0))
+    if active_cnt > 0 and not force:
+        conn.close()
+        return jsonify({
+            "ok": False,
+            "error": f"{active_cnt} ta ochiq stol bor. Barchasini yoping yoki force=true yuboring.",
+            "active_sessions": active_cnt
+        }), 409
+
+    # Smena davrida qilingan to'lovlar summasi + usullar bo'yicha
+    cur2 = db_exec(conn,
+        "SELECT COALESCE(SUM(amount),0) AS total, COUNT(DISTINCT session_id) AS sess FROM payments WHERE shift_id=?",
+        (shift_id,))
     row2 = cur2.fetchone()
     total = int(row2[0] if USE_PG else (row2["total"] or 0))
     sess_cnt = int(row2[1] if USE_PG else (row2["sess"] or 0))
+
+    # To'lov usullari breakdown
+    meth_cur = db_exec(conn,
+        "SELECT method, COALESCE(SUM(amount),0) AS s FROM payments WHERE shift_id=? GROUP BY method",
+        (shift_id,))
+    methods = rows_to_list(meth_cur)
+    methods_summary = {(r["method"] if USE_PG else r["method"]): int(r["s"] if USE_PG else r["s"]) for r in methods}
+
+    # Chiqimlar summasi (smena ochildi vaqtidan buyon)
+    shift_opened = shift_rows[0].get("opened_at") or shift_rows[0].get("created_at") or ""
+    exp_cur = db_exec(conn,
+        "SELECT COALESCE(SUM(amount),0) FROM expenses WHERE created_at >= ?", (shift_opened,))
+    exp_row = exp_cur.fetchone()
+    expenses = int(exp_row[0] if USE_PG else (exp_row[0] or 0)) if exp_row else 0
+    net = total - expenses
+
     notes = d.get("notes", "")
-    db_exec(conn, "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=?, total_revenue=? WHERE id=?",
-            (total, sess_cnt, notes, total, shift_id))
+    db_exec(conn,
+        "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=?, total_revenue=? WHERE id=?",
+        (total, sess_cnt, notes, total, shift_id))
     conn.commit(); conn.close()
+
     cashier_name = staff["name"] if staff else shift_rows[0].get("cashier_name", "")
-    tg_send(f"🔒 <b>Smena yopildi</b>\n👤 Kassir: {cashier_name}\n💰 Jami: {total:,} so'm\n🧾 Sessiya: {sess_cnt} ta")
-    return jsonify({"ok": True, "total_collected": total, "sessions_count": sess_cnt})
+    meth_lines = "\n".join(f"  {k}: {v:,} so'm" for k, v in methods_summary.items())
+    tg_send(f"🔒 <b>Smena yopildi</b>\n👤 Kassir: {cashier_name}\n"
+            f"💰 Jami: {total:,} so'm\n📋 Chiqim: {expenses:,} so'm\n"
+            f"✅ Sof: {net:,} so'm\n🧾 Sessiya: {sess_cnt} ta\n{meth_lines}")
+    return jsonify({
+        "ok": True,
+        "total_collected": total,
+        "sessions_count": sess_cnt,
+        "expenses": expenses,
+        "net": net,
+        "by_method": methods_summary,
+    })
 
 
 @app.route("/api/shift/<int:shift_id>/report", methods=["POST"])

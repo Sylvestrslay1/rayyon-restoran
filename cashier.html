@@ -701,11 +701,17 @@ async function openShiftReport() {
   } catch(e) { showToast('Hisobot yuklanmadi','error'); }
 }
 function renderReport(data) {
-  const byM = (data.by_method||[]);
-  const methodRows = byM.map(m=>`<div class="method-row"><span>${esc(m.method||m[0])}</span><span><b>${fmt(m.total||m[1])} so'm</b> (${m.cnt||m[2]} ta)</span></div>`).join('');
+  const byM = data.by_method || {};
+  const methodRows = typeof byM === 'object' && !Array.isArray(byM)
+    ? Object.entries(byM).map(([m, s]) => `<div class="method-row"><span>${esc(m)}</span><span><b>${fmt(s)} so'm</b></span></div>`).join('')
+    : (byM||[]).map(m=>`<div class="method-row"><span>${esc(m.method||m[0])}</span><span><b>${fmt(m.total||m[1])} so'm</b></span></div>`).join('');
+  const exp = data.expenses || 0;
+  const net = data.net != null ? data.net : (data.total_collected||0);
   document.getElementById('report-content').innerHTML = `
     <div class="report-stats">
       <div class="stat-card"><div class="stat-label">Jami yig'ilgan</div><div class="stat-val">${fmt(data.total_collected||0)} so'm</div></div>
+      <div class="stat-card"><div class="stat-label">Chiqimlar</div><div class="stat-val" style="color:#f87171">${fmt(exp)} so'm</div></div>
+      <div class="stat-card"><div class="stat-label">Sof daromad</div><div class="stat-val" style="color:#4ade80">${fmt(net)} so'm</div></div>
       <div class="stat-card"><div class="stat-label">Sessiyalar</div><div class="stat-val">${data.sessions_count||0} ta</div></div>
       <div class="stat-card"><div class="stat-label">Holat</div><div class="stat-val" style="font-size:14px">${data.status==='open'?'🟢 Ochiq':'🔴 Yopiq'}</div></div>
       <div class="stat-card"><div class="stat-label">Ochildi</div><div class="stat-val" style="font-size:14px">${data.opened_at ? new Date(data.opened_at).toLocaleTimeString('uz') : '—'}</div></div>
@@ -719,17 +725,22 @@ function closeShiftConfirm() {
   document.getElementById('close-notes').value = '';
   document.getElementById('close-shift-modal').classList.remove('hidden');
 }
-async function doCloseShift() {
+async function doCloseShift(force=false) {
   const notes = document.getElementById('close-notes').value.trim();
   try {
     const r = await fetch(`${API}/api/shift/${SHIFT_ID}/close`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({pin: PIN, notes})
+      body: JSON.stringify({pin: PIN, notes, force})
     });
     const data = await r.json();
+    if (r.status === 409 && data.active_sessions) {
+      const ok = confirm(`${data.active_sessions} ta ochiq stol bor. Baribir smena yopilsinmi?`);
+      if (ok) doCloseShift(true);
+      return;
+    }
     if (!r.ok) { showToast(data.error||'Xato','error'); return; }
     closeModal('close-shift-modal');
-    showToast(`Smena yopildi. Jami: ${fmt(data.total_collected)} so'm`, 'success');
+    showToast(`Smena yopildi. Sof: ${fmt(data.net||data.total_collected)} so'm`, 'success');
     setTimeout(logout, 2000);
   } catch(e) { showToast('Xato','error'); }
 }
