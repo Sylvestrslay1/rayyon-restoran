@@ -8,16 +8,20 @@ USE_PG = bool(DATABASE_URL)
 
 if USE_PG:
     import pg8000.dbapi
+    import ssl
     from urllib.parse import urlparse
 
     _u = urlparse(DATABASE_URL)
+    _ssl = ssl.create_default_context()
+    _ssl.check_hostname = False
+    _ssl.verify_mode = ssl.CERT_NONE
     PG_PARAMS = dict(
         host=_u.hostname,
         port=_u.port or 5432,
         database=_u.path.lstrip("/"),
         user=_u.username,
         password=_u.password,
-        ssl_context=True,
+        ssl_context=_ssl,
     )
 
 
