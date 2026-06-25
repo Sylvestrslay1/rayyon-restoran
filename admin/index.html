@@ -418,54 +418,54 @@
     </svg>
   </div>
   <nav class="nav">
-    <button class="nav-item active" data-page="dashboard">
+    <button class="nav-item active" data-page="dashboard" data-roles="admin,director,accountant,manager,chef">
       <span class="n-icon">◈</span> <span data-i18n="adm.dashboard">Dashboard</span>
     </button>
-    <button class="nav-item" data-page="orders">
+    <button class="nav-item" data-page="orders" data-roles="admin,director,manager">
       <span class="n-icon">◇</span> <span data-i18n="adm.orders">Buyurtmalar</span>
       <span class="nav-badge" id="ordersCount" style="display:none">0</span>
     </button>
-    <button class="nav-item" data-page="reservations">
+    <button class="nav-item" data-page="reservations" data-roles="admin,director,manager">
       <span class="n-icon">◆</span> <span data-i18n="adm.reservations">Bronlar</span>
       <span class="nav-badge" id="resBadge" style="display:none">0</span>
     </button>
-    <button class="nav-item" data-page="menu">
+    <button class="nav-item" data-page="menu" data-roles="admin,director,chef">
       <span class="n-icon">⬡</span> <span data-i18n="adm.menu">Menyu</span>
     </button>
-    <button class="nav-item" data-page="news">
+    <button class="nav-item" data-page="news" data-roles="admin,director,manager">
       <span class="n-icon">◉</span> <span data-i18n="adm.news">Yangiliklar</span>
     </button>
-    <button class="nav-item" data-page="tables">
+    <button class="nav-item" data-page="tables" data-roles="admin,director,manager">
       <span class="n-icon">⊞</span> <span>Stollar</span>
     </button>
-    <button class="nav-item" data-page="staff">
+    <button class="nav-item" data-page="staff" data-roles="admin,director,accountant">
       <span class="n-icon">👤</span> <span>Xodimlar</span>
     </button>
-    <button class="nav-item" data-page="gallery">
+    <button class="nav-item" data-page="gallery" data-roles="admin,director,manager">
       <span class="n-icon">🖼</span> <span>Galereya</span>
     </button>
-    <button class="nav-item" data-page="promos">
+    <button class="nav-item" data-page="promos" data-roles="admin,director,manager,chef">
       <span class="n-icon">🎁</span> <span>Aksiyalar</span>
     </button>
-    <button class="nav-item" data-page="accounting">
+    <button class="nav-item" data-page="accounting" data-roles="admin,director,accountant,manager">
       <span class="n-icon">₿</span> <span>Buxgalteriya</span>
     </button>
-    <button class="nav-item" data-page="recipes">
+    <button class="nav-item" data-page="recipes" data-roles="admin,director,chef">
       <span class="n-icon">📋</span> <span>Retseptlar</span>
     </button>
-    <button class="nav-item" data-page="inventory">
+    <button class="nav-item" data-page="inventory" data-roles="admin,director,chef,accountant">
       <span class="n-icon">📦</span> <span>Inventar</span>
     </button>
-    <button class="nav-item" data-page="loyalty">
+    <button class="nav-item" data-page="loyalty" data-roles="admin,director,accountant,manager">
       <span class="n-icon">💳</span> <span>Loyalty</span>
     </button>
-    <button class="nav-item" data-page="analytics">
+    <button class="nav-item" data-page="analytics" data-roles="admin,director,accountant,manager">
       <span class="n-icon">📊</span> <span>Tahlil</span>
     </button>
-    <button class="nav-item" data-page="shifts">
+    <button class="nav-item" data-page="shifts" data-roles="admin,director,accountant,manager">
       <span class="n-icon">💼</span> <span>Smenalar</span>
     </button>
-    <button class="nav-item" data-page="settings">
+    <button class="nav-item" data-page="settings" data-roles="admin,director">
       <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
     </button>
   </nav>
@@ -648,9 +648,11 @@
       <h2>Xodimlar boshqaruvi</h2>
       <p>Xodimlar, lavozimlar, PIN va davomot</p>
     </div>
-    <div style="display:flex;gap:10px;margin-bottom:20px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
       <button class="btn-primary" onclick="showStaffModal()">+ Xodim qo'shish</button>
-      <button class="btn-secondary" onclick="loadAttendance()" style="margin-left:auto;">📋 Bugungi davomot</button>
+      <button class="btn-secondary" onclick="loadAttendance()">📋 Bugungi davomot</button>
+      <button class="btn-secondary" onclick="loadPayroll()" style="margin-left:auto;">💰 Maosh hisoblash</button>
+      <a class="btn-secondary" href="/api/export/staff" style="text-decoration:none;display:inline-flex;align-items:center;">⬇ CSV</a>
     </div>
     <div class="table-wrap" style="margin-bottom:20px;">
       <table class="data-table">
@@ -665,6 +667,16 @@
         <tbody id="att-body"></tbody>
       </table>
     </div>
+    <div class="table-wrap" id="payroll-wrap" style="display:none;">
+      <div style="padding:14px 20px 0;display:flex;align-items:center;gap:12px;">
+        <h3 style="color:var(--cyan);font-size:0.85rem;letter-spacing:2px;">MAOSH HISOBLASH</h3>
+        <input type="month" id="payroll-month" style="background:#0d1520;border:1px solid #1e3a5f;color:#e8dcc8;padding:4px 8px;border-radius:4px;" onchange="loadPayroll()"/>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Xodim</th><th>Lavozim</th><th>Maosh turi</th><th>Ishlagan soat</th><th>Hisoblangan maosh</th></tr></thead>
+        <tbody id="payroll-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Xodim modal -->
@@ -676,14 +688,18 @@
         <div class="form-group"><label>Ism Familiya</label><input type="text" id="staff-name" placeholder="Abdullayev Jasur"/></div>
         <div class="form-group"><label>Lavozim</label>
           <select id="staff-role">
-            <option value="waiter">Ofitsiant</option>
-            <option value="cook">Oshpaz</option>
-            <option value="cashier">Kassir</option>
+            <option value="director">Direktor</option>
+            <option value="accountant">Buxgalter</option>
             <option value="manager">Menejer</option>
+            <option value="chef">Bosh oshpaz</option>
+            <option value="cashier">Kassir</option>
+            <option value="waiter">Ofitsiant</option>
+            <option value="kitchen">Oshxona (KDS)</option>
+            <option value="cook">Oshpaz</option>
             <option value="cleaner">Tozalovchi</option>
           </select>
         </div>
-        <div class="form-group"><label>PIN kod (4 raqam)</label><input type="password" id="staff-pin" placeholder="****" maxlength="4"/></div>
+        <div class="form-group"><label>PIN kod (4-8 raqam)</label><input type="password" id="staff-pin" placeholder="****" maxlength="8"/></div>
         <div class="form-group"><label>Telefon</label><input type="text" id="staff-phone" placeholder="+998 90 000 00 00"/></div>
         <div class="form-group"><label>Maosh turi</label>
           <select id="staff-salary-type">
@@ -782,10 +798,13 @@
       <p data-i18n="adm.acc.sub">Daromad, chiqim va ombor boshqaruvi</p>
     </div>
     <!-- Period tanlash -->
-    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
       <button class="acc-period-btn active" data-period="daily">Bugun</button>
       <button class="acc-period-btn" data-period="weekly">Hafta</button>
       <button class="acc-period-btn" data-period="monthly">Oy</button>
+      <span style="flex:1"></span>
+      <a class="btn-secondary" id="export-payments-link" href="#" onclick="exportPayments(event)" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ To'lovlar CSV</a>
+      <a class="btn-secondary" href="/api/export/sessions" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Sessiyalar CSV</a>
     </div>
     <!-- Statistika kartalar -->
     <div class="stats-grid" style="margin-bottom:24px;">
@@ -974,10 +993,12 @@
       <h2>Tahlil & Hisobotlar</h2>
       <p>Sessiyalar asosida real daromad, top taomlar, xodimlar samaradorligi</p>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;flex-wrap:wrap;">
       <button class="acc-period-btn active" data-period="daily" onclick="setAnalyticsPeriod('daily',this)">Bugun</button>
       <button class="acc-period-btn" data-period="weekly" onclick="setAnalyticsPeriod('weekly',this)">Hafta</button>
       <button class="acc-period-btn" data-period="monthly" onclick="setAnalyticsPeriod('monthly',this)">Oy</button>
+      <span style="flex:1"></span>
+      <a class="btn-secondary" href="/api/export/inventory" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Inventar CSV</a>
     </div>
 
     <!-- KPI kartalar -->
@@ -1217,6 +1238,50 @@ function statusSelect(id, cur, type) {
   return `<select class="${type}-sel" data-id="${id}" style="padding:5px 8px;background:rgba(0,212,255,0.05);border:1px solid var(--border-cyan);border-radius:3px;color:#fff;font-size:0.72rem;font-family:'Rajdhani',sans-serif;outline:none;">
     ${opts.map(v=>`<option value="${v}" ${cur===v?'selected':''}>${typeof t==='function'?t(keys[v]):v}</option>`).join('')}
   </select>`;
+}
+
+// ===== ROL ASOSIDA NAV FILTER =====
+function applyRoleFilter() {
+  const urlRole = new URLSearchParams(window.location.search).get('role');
+  const lsRole  = localStorage.getItem('staff_role');
+  const staffName = localStorage.getItem('staff_name');
+  const role = urlRole || lsRole || 'admin';
+
+  // admin va director uchun hech narsani yashirmaymiz
+  if (role === 'admin' || role === 'director') return;
+
+  // Sidebar sarlavhasini yangilash
+  const roleLabel = {
+    accountant: '📒 Buxgalter',
+    manager:    '📋 Menejer',
+    chef:       '👨‍🍳 Bosh oshpaz',
+  };
+  const panelSubtitle = document.querySelector('.sidebar-logo p');
+  if (panelSubtitle && roleLabel[role]) {
+    panelSubtitle.textContent = roleLabel[role] + (staffName ? ` — ${staffName}` : '');
+  }
+
+  // Ruxsatsiz nav itemlarni yashirish
+  let firstVisible = null;
+  document.querySelectorAll('.nav-item[data-roles]').forEach(btn => {
+    const allowed = btn.dataset.roles.split(',');
+    if (!allowed.includes(role)) {
+      btn.style.display = 'none';
+    } else if (!firstVisible) {
+      firstVisible = btn;
+    }
+  });
+
+  // Birinchi ko'rinadigan tabni ochish (dashboard dan boshqasi bo'lsa)
+  if (firstVisible && firstVisible.dataset.page !== 'dashboard') {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    firstVisible.classList.add('active');
+    const pg = firstVisible.dataset.page;
+    const pageEl = document.getElementById('page-' + pg);
+    if (pageEl) pageEl.classList.add('active');
+    loadPage(pg);
+  }
 }
 
 // NAV
@@ -1732,7 +1797,11 @@ let editingStaffId = null;
 async function loadStaff() {
   const res = await fetch(`${API}/api/staff`, { headers: H() });
   const list = await res.json();
-  const roleNames = {waiter:'Ofitsiant',cook:'Oshpaz',cashier:'Kassir',manager:'Menejer',cleaner:'Tozalovchi'};
+  const roleNames = {
+    director:'Direktor', accountant:'Buxgalter', manager:'Menejer',
+    chef:'Bosh oshpaz', cashier:'Kassir', waiter:'Ofitsiant',
+    kitchen:'Oshxona (KDS)', cook:'Oshpaz', cleaner:'Tozalovchi'
+  };
   const tbody = document.getElementById('staff-body');
   tbody.innerHTML = list.length ? list.map(s=>`<tr>
     <td style="color:var(--cyan)">#${s.id}</td>
@@ -1761,6 +1830,30 @@ async function loadAttendance() {
     <td style="color:var(--gold)">${a.hours_worked ? a.hours_worked + ' soat' : '—'}</td>
   </tr>`).join('') : '<tr class="empty-row"><td colspan="4">Bugun hech kim kelmagan</td></tr>';
   wrap.style.display = 'block';
+}
+
+async function loadPayroll() {
+  const monthEl = document.getElementById('payroll-month');
+  if (!monthEl.value) monthEl.value = new Date().toISOString().slice(0,7);
+  const month = monthEl.value;
+  const wrap  = document.getElementById('payroll-wrap');
+  const tbody = document.getElementById('payroll-body');
+  const typeLabel = {monthly:'Oylik',hourly:'Soatlik',percent:'Foizli'};
+  const res  = await fetch(`${API}/api/staff/payroll?month=${month}`, {headers:H()});
+  const list = await res.json();
+  const total = list.reduce((s,r)=>s+r.earned,0);
+  tbody.innerHTML = list.length ? list.map(r=>`<tr>
+    <td style="font-weight:600">${esc(r.name)}</td>
+    <td><span style="background:rgba(0,212,255,0.1);color:var(--cyan);padding:2px 8px;border-radius:3px;font-size:0.75rem;">${esc(roleNames[r.role]||r.role)}</span></td>
+    <td style="color:#aaa">${typeLabel[r.salary_type]||r.salary_type}</td>
+    <td style="color:var(--cyan)">${r.hours_worked} soat</td>
+    <td style="color:var(--gold);font-weight:600">${priceFmt(r.earned)}</td>
+  </tr>`).join('')+`<tr style="border-top:1px solid #1e3a5f">
+    <td colspan="4" style="text-align:right;font-weight:600;color:#aaa">Jami:</td>
+    <td style="color:var(--gold);font-weight:700">${priceFmt(total)}</td>
+  </tr>` : '<tr class="empty-row"><td colspan="5">Ma\'lumot yo\'q</td></tr>';
+  wrap.style.display = 'block';
+  document.getElementById('attendance-wrap').style.display = 'none';
 }
 
 function showStaffModal() {
@@ -1964,6 +2057,12 @@ document.querySelectorAll('.acc-period-btn').forEach(btn => {
     loadAccounting();
   });
 });
+
+function exportPayments(e) {
+  e.preventDefault();
+  const month = new Date().toISOString().slice(0,7);
+  window.location.href = `/api/export/payments?month=${month}`;
+}
 
 async function loadAccounting() {
   const [repRes, expRes, invRes] = await Promise.all([
@@ -2320,6 +2419,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 // INIT
 loadDashboard();
 loadMenu();
+applyRoleFilter();
 setInterval(loadDashboard, 30000);
 
 // ===== BRONLAR AUTO-REFRESH =====

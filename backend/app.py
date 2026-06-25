@@ -1,9 +1,9 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
-import threading, datetime
+import threading, datetime, csv, io
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -44,6 +44,42 @@ ALLOWED_PERIODS = {"daily", "weekly", "monthly"}
 # Multi-worker (Gunicorn) uchun Redis ishlatish tavsiya etiladi
 _tokens_lock = threading.Lock()
 ACTIVE_TOKENS: dict = {}  # token -> {"created": datetime, "ip": str}
+
+# ===== ROL VA RUXSATLAR =====
+# "all" - to'liq kirish; boshqalar - faqat belgilangan imkoniyatlar
+ROLE_PERMISSIONS: dict = {
+    "admin":      {"all"},
+    "director":   {"all"},
+    "accountant": {"hr", "salary", "attendance", "finance", "inventory_view", "customer", "report"},
+    "manager":    {"promo", "price", "order_view", "payment_view", "kitchen_view",
+                   "discount", "void", "report", "table", "order"},
+    "chef":       {"menu", "recipe", "inventory", "promo"},
+    "cashier":    {"table", "order", "payment", "discount", "void", "customer", "receipt"},
+    "waiter":     {"table", "order", "receipt"},
+    "kitchen":    {"kitchen"},
+    "cook":       {"kitchen"},
+    "cleaner":    set(),
+}
+
+VALID_ROLES = set(ROLE_PERMISSIONS.keys())
+
+def has_role(staff, *allowed_roles) -> bool:
+    """Xodim kerakli rollardan birida ekanligini tekshiradi.
+    admin/director har doim True qaytaradi."""
+    if staff is None:
+        return False
+    role = staff.get("role", "")
+    if role in ("admin", "director"):
+        return True
+    return role in allowed_roles
+
+def staff_has_perm(staff, perm: str) -> bool:
+    """Xodimda berilgan ruxsat borligini tekshiradi."""
+    if staff is None:
+        return False
+    role = staff.get("role", "")
+    perms = ROLE_PERMISSIONS.get(role, set())
+    return "all" in perms or perm in perms
 
 def _prune_expired_tokens():
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
@@ -304,6 +340,55 @@ def auth_check():
     return jsonify({"ok": check_auth()})
 
 
+@app.route("/api/staff/login", methods=["POST"])
+@limiter.limit("5 per minute; 30 per hour")
+def staff_login():
+    """PIN bilan xodim tizimga kirishi — rol bo'yicha yo'naltiradi.
+    Qaytaradi: {ok, name, role, id, redirect}
+    redirect: cashier | waiter | kitchen | chef | manager | accountant | director
+    """
+    d = request.json or {}
+    pin = str(d.get("pin", "")).strip()
+    if not pin:
+        return jsonify({"ok": False, "error": "PIN kiritilmadi"}), 400
+
+    staff = check_staff_pin(pin)
+    if not staff:
+        time.sleep(0.3)
+        return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
+
+    role = staff.get("role", "waiter")
+    redirect_map = {
+        "admin":      "admin",
+        "director":   "director",
+        "accountant": "accountant",
+        "manager":    "manager",
+        "chef":       "chef",
+        "cashier":    "cashier",
+        "waiter":     "waiter",
+        "kitchen":    "kitchen",
+    }
+    redirect = redirect_map.get(role, "waiter")
+
+    # Panel rollar uchun admin token ham beramiz (admin panelga kirish uchun)
+    panel_roles = {"admin", "director", "accountant", "manager", "chef"}
+    token = None
+    if role in panel_roles:
+        ip = get_remote_address()
+        token = create_admin_token(ip)
+
+    resp = {
+        "ok": True,
+        "id": staff["id"],
+        "name": staff["name"],
+        "role": role,
+        "redirect": redirect,
+    }
+    if token:
+        resp["token"] = token
+    return jsonify(resp)
+
+
 # ===== MENU =====
 @app.route("/api/menu", methods=["GET"])
 def get_menu():
@@ -447,9 +532,27 @@ def add_reservation():
 @app.route("/api/reservations/<int:res_id>", methods=["PUT"])
 def update_reservation(res_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    d = request.json or {}
-    conn = get_conn()
-    db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (d.get("status"), res_id))
+    d      = request.json or {}
+    status = d.get("status")
+    conn   = get_conn()
+    db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (status, res_id))
+    # Tasdiqlanganda va stol_id berilgan bo'lsa — stolni band qilish
+    table_id = d.get("table_id")
+    if status == "confirmed" and table_id:
+        cur = db_exec(conn, "SELECT status FROM tables WHERE id=?", (table_id,))
+        row = cur.fetchone()
+        tbl_status = (row[0] if USE_PG else row["status"]) if row else None
+        if tbl_status == "free":
+            db_exec(conn, "UPDATE tables SET status='reserved' WHERE id=?", (table_id,))
+            db_exec(conn, "UPDATE reservations SET table_id=? WHERE id=?", (table_id, res_id))
+    # Bekor qilinganda stol bo'shatish
+    elif status == "cancelled":
+        cur2 = db_exec(conn, "SELECT table_id FROM reservations WHERE id=?", (res_id,))
+        row2 = cur2.fetchone()
+        if row2:
+            tid = row2[0] if USE_PG else row2["table_id"]
+            if tid:
+                db_exec(conn, "UPDATE tables SET status='free' WHERE id=? AND status='reserved'", (tid,))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -675,6 +778,8 @@ def open_session():
     staff = check_staff_pin(d.get("waiter_pin")) if d.get("waiter_pin") else None
     if not check_auth() and not staff:
         return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "waiter", "cashier", "manager"):
+        return jsonify({"error": "Faqat ofitsiant yoki kassir stol ocha oladi"}), 403
     if staff and not d.get("waiter_name"):
         d["waiter_name"] = staff["name"]
     table_id = d.get("table_id")
@@ -762,6 +867,8 @@ def add_order_item(sid):
     staff = check_staff_pin(body.get("waiter_pin"), conn) if body.get("waiter_pin") else None
     if s["token"] != token and not check_auth() and not staff:
         conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "waiter", "cashier", "manager"):
+        conn.close(); return jsonify({"error": "Faqat ofitsiant yoki kassir buyurtma bera oladi"}), 403
     items = body.get("items", [])
     if not items: conn.close(); return jsonify({"error": "Buyurtma bo'sh"}), 400
     # Input validatsiyasi
@@ -872,6 +979,8 @@ def close_session(sid):
     staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
     if not check_auth() and not staff:
         return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "cashier", "manager"):
+        return jsonify({"error": "Faqat kassir to'lov qabul qila oladi"}), 403
     conn = get_conn()
     cur  = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     rows = rows_to_list(cur)
@@ -932,6 +1041,8 @@ def set_discount(sid):
     staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
     if not check_auth() and not staff:
         return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "cashier", "manager"):
+        return jsonify({"error": "Faqat kassir yoki menejer chegirma qo'ya oladi"}), 403
     conn = get_conn()
     db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
         (d.get("discount",0), d.get("service_charge",0), sid))
@@ -997,6 +1108,8 @@ def shift_close(shift_id):
     staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
     if not check_auth() and not staff:
         return jsonify({"ok": False, "error": "PIN yoki admin token kerak"}), 401
+    if staff and not has_role(staff, "cashier", "manager"):
+        return jsonify({"ok": False, "error": "Faqat kassir smena yopa oladi"}), 403
     cashier_id = staff["id"] if staff else None
     conn = get_conn()
     if cashier_id:
@@ -1029,6 +1142,8 @@ def shift_report(shift_id):
     staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
     if not check_auth() and not staff:
         return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "cashier", "manager", "accountant"):
+        return jsonify({"error": "Faqat kassir, menejer yoki buxgalter hisobotni ko'ra oladi"}), 403
     conn = get_conn()
     cur = db_exec(conn, "SELECT * FROM shifts WHERE id=?", (shift_id,))
     shifts = rows_to_list(cur)
@@ -1061,6 +1176,8 @@ def void_item(sid, iid):
     staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
     if not check_auth() and not staff:
         return jsonify({"error": "Kassir PIN yoki admin token kerak"}), 403
+    if staff and not has_role(staff, "cashier", "manager"):
+        return jsonify({"error": "Faqat kassir yoki menejer void qila oladi"}), 403
     reason = d.get("reason", "Kassir tomonidan bekor qilindi")
     try:
         _validate_str(reason, 200, "Sabab")
@@ -1080,6 +1197,13 @@ def void_item(sid, iid):
     db_exec(conn, """UPDATE order_items SET status='cancelled', void_by=?, void_reason=?,
         voided_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?""",
         (voider, reason, iid, sid))
+    # Cooking bosqichida bo'lgan bo'lsa — inventarni qaytarish
+    if item.get("status") in ("cooking", "ready", "served"):
+        try:
+            restore_inventory(item.get("menu_item_id"), item.get("quantity", 1), conn,
+                              f"Void: {item.get('item_name')} — {reason}")
+        except Exception as e:
+            log.warning("restore_inventory xato: %s", e)
     # Sessiya summasini qayta hisoblash
     cur2 = db_exec(conn, "SELECT COALESCE(SUM(total_price),0) FROM order_items WHERE session_id=? AND status!='cancelled'", (sid,))
     row2 = cur2.fetchone()
@@ -1369,6 +1493,55 @@ def delete_promotion(pid):
     return jsonify({"ok": True})
 
 
+# ===== MAOSH HISOBLASH =====
+@app.route("/api/staff/payroll", methods=["GET"])
+def staff_payroll():
+    """Xodimlar maosh hisoboti: davomat soatlari × stavka yoki oylik."""
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
+    conn  = get_conn()
+    cur   = db_exec(conn, "SELECT * FROM staff WHERE active=1 ORDER BY name")
+    staff_list = rows_to_list(cur)
+    result = []
+    for s in staff_list:
+        sid = s["id"]
+        # Davomat soatlari
+        if USE_PG:
+            att_cur = db_exec(conn,
+                "SELECT COALESCE(SUM(hours_worked),0) FROM attendance WHERE staff_id=%s AND to_char(date::date,'YYYY-MM')=%s",
+                (sid, month))
+        else:
+            att_cur = db_exec(conn,
+                "SELECT COALESCE(SUM(hours_worked),0) FROM attendance WHERE staff_id=? AND strftime('%Y-%m',date)=?",
+                (sid, month))
+        hours = float(att_cur.fetchone()[0] or 0)
+        salary_type   = s.get("salary_type", "monthly")
+        salary_amount = float(s.get("salary_amount") or 0)
+        if salary_type == "hourly":
+            earned = round(hours * salary_amount)
+        elif salary_type == "percent":
+            # Bu oyda sessiyalardan tushum × foiz
+            if USE_PG:
+                rev_cur = db_exec(conn,
+                    "SELECT COALESCE(SUM(total_amount),0) FROM sessions WHERE waiter_id=%s AND status='closed' AND to_char(closed_at,'YYYY-MM')=%s",
+                    (sid, month))
+            else:
+                rev_cur = db_exec(conn,
+                    "SELECT COALESCE(SUM(total_amount),0) FROM sessions WHERE waiter_id=? AND status='closed' AND strftime('%Y-%m',closed_at)=?",
+                    (sid, month))
+            revenue = float(rev_cur.fetchone()[0] or 0)
+            earned  = round(revenue * salary_amount / 100)
+        else:
+            earned = round(salary_amount)
+        result.append({
+            "id": sid, "name": s["name"], "role": s["role"],
+            "salary_type": salary_type, "salary_amount": salary_amount,
+            "hours_worked": hours, "earned": earned, "month": month,
+        })
+    conn.close()
+    return jsonify(result)
+
+
 # ===== BUXGALTERIYA: HISOBOTLAR =====
 @app.route("/api/accounting/report", methods=["GET"])
 def accounting_report():
@@ -1635,13 +1808,35 @@ def deduct_inventory(menu_item_id, quantity, conn, note=""):
             _inv_update(conn, needed,           inv_id, "AND unit='ml'")
         else:
             _inv_update(conn, needed, inv_id)
-        # Log
         inv_cur = db_exec(conn, "SELECT name FROM inventory WHERE id=?", (r["inventory_id"],))
         inv_row = inv_cur.fetchone()
         inv_name = inv_row[0] if USE_PG else (inv_row["name"] if inv_row else "?")
         db_exec(conn,
             "INSERT INTO inventory_log (item_id, item_name, type, quantity, note) VALUES (?,?,?,?,?)",
             (r["inventory_id"], inv_name, "expense", needed, note or "Auto chiqim"))
+
+
+def restore_inventory(menu_item_id, quantity, conn, note=""):
+    """Void/cancel bo'lganda inventarni qaytarish (deduct_inventory teskarisi)"""
+    cur = db_exec(conn, "SELECT * FROM recipes WHERE menu_item_id=?", (menu_item_id,))
+    recipes = rows_to_list(cur)
+    for r in recipes:
+        needed = r["quantity"] * quantity
+        inv_id = r["inventory_id"]
+        if r["unit"] == "g":
+            db_exec(conn, "UPDATE inventory SET quantity=quantity+? WHERE id=? AND unit='kg'", (needed/1000.0, inv_id))
+            db_exec(conn, "UPDATE inventory SET quantity=quantity+? WHERE id=? AND unit='g'",  (needed, inv_id))
+        elif r["unit"] == "ml":
+            db_exec(conn, "UPDATE inventory SET quantity=quantity+? WHERE id=? AND unit='l'",  (needed/1000.0, inv_id))
+            db_exec(conn, "UPDATE inventory SET quantity=quantity+? WHERE id=? AND unit='ml'", (needed, inv_id))
+        else:
+            db_exec(conn, "UPDATE inventory SET quantity=quantity+? WHERE id=?", (needed, inv_id))
+        inv_cur = db_exec(conn, "SELECT name FROM inventory WHERE id=?", (inv_id,))
+        inv_row = inv_cur.fetchone()
+        inv_name = inv_row[0] if USE_PG else (inv_row["name"] if inv_row else "?")
+        db_exec(conn,
+            "INSERT INTO inventory_log (item_id, item_name, type, quantity, note) VALUES (?,?,?,?,?)",
+            (inv_id, inv_name, "kirim", needed, note or "Void/bekor — qaytarildi"))
 
 
 # ===== SMENALAR RO'YXATI =====
@@ -1793,9 +1988,7 @@ def analytics_summary():
 
 @app.route("/api/payments", methods=["GET"])
 def get_payments():
-    # Admin token yoki shift_id parametri bilan ruxsat
-    shift_id_arg = request.args.get("shift_id")
-    if not check_auth() and not shift_id_arg:
+    if not check_auth():
         return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     date = request.args.get("date")
@@ -1894,8 +2087,66 @@ def serve_static(path):
     return send_from_directory(base, path)
 
 
+# ===== CSV EKSPORT =====
+def _csv_response(rows, filename):
+    """rows — list of dicts. CSV Response qaytaradi."""
+    if not rows:
+        return Response("", mimetype="text/csv",
+                        headers={"Content-Disposition": f"attachment; filename={filename}"})
+    out = io.StringIO()
+    w = csv.DictWriter(out, fieldnames=rows[0].keys())
+    w.writeheader(); w.writerows(rows)
+    bom = "﻿"  # Excel UTF-8 BOM
+    return Response(bom + out.getvalue(), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@app.route("/api/export/payments", methods=["GET"])
+def export_payments():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
+    conn  = get_conn()
+    if USE_PG:
+        cur = db_exec(conn, "SELECT * FROM payments WHERE to_char(created_at,'YYYY-MM')=%s ORDER BY created_at DESC", (month,))
+    else:
+        cur = db_exec(conn, "SELECT * FROM payments WHERE strftime('%Y-%m',created_at)=? ORDER BY created_at DESC", (month,))
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, f"payments_{month}.csv")
+
+
+@app.route("/api/export/sessions", methods=["GET"])
+def export_sessions():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
+    conn  = get_conn()
+    if USE_PG:
+        cur = db_exec(conn, "SELECT id,table_number,waiter_name,status,total_amount,discount,service_charge,opened_at,closed_at FROM sessions WHERE to_char(opened_at,'YYYY-MM')=%s ORDER BY opened_at DESC", (month,))
+    else:
+        cur = db_exec(conn, "SELECT id,table_number,waiter_name,status,total_amount,discount,service_charge,opened_at,closed_at FROM sessions WHERE strftime('%Y-%m',opened_at)=? ORDER BY opened_at DESC", (month,))
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, f"sessions_{month}.csv")
+
+
+@app.route("/api/export/staff", methods=["GET"])
+def export_staff():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT id,name,role,phone,salary_type,salary_amount,active,created_at FROM staff ORDER BY name")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "staff.csv")
+
+
+@app.route("/api/export/inventory", methods=["GET"])
+def export_inventory():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM inventory ORDER BY name")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "inventory.csv")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") != "production"
-    print(f"✅ Rayyon backend ishga tushdi: http://localhost:{port}")
+    print(f"Rayyon backend ishga tushdi: http://localhost:{port}")
     app.run(host="0.0.0.0", debug=debug, port=port)

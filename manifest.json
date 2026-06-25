@@ -1,0 +1,20 @@
+{
+  "name": "Rayyon Restoran",
+  "short_name": "Rayyon",
+  "description": "Rayyon Restoran boshqaruv tizimi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#d4af37",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "Kassir", "url": "/cashier.html", "description": "Kassir paneli" },
+    { "name": "Ofitsiant", "url": "/waiter.html", "description": "Ofitsiant paneli" },
+    { "name": "Oshxona", "url": "/kitchen.html", "description": "Oshxona KDS" },
+    { "name": "Admin", "url": "/admin/login.html", "description": "Admin panel" }
+  ]
+}

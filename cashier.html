@@ -2,6 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kassir — Rayyon Restoran</title>
 <style>
@@ -364,10 +366,25 @@ function logout() {
   if (!confirm('Tizimdan chiqmoqchimisiz?')) return;
   PIN = ''; CASHIER = null; SHIFT_ID = null; CASHIER_ID = null;
   renderPinDisplay();
+  localStorage.removeItem('staff_pin');
+  localStorage.removeItem('staff_role');
+  localStorage.removeItem('staff_name');
+  localStorage.removeItem('staff_id');
   document.getElementById('pin-error').textContent = '';
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('pin-screen').style.display = 'flex';
 }
+
+// staff-login.html dan kelganda PIN ni avtomatik yuborish
+(function autoLoginFromStaffPortal() {
+  const savedPin  = localStorage.getItem('staff_pin');
+  const savedRole = localStorage.getItem('staff_role');
+  if (savedPin && savedRole === 'cashier') {
+    PIN = savedPin;
+    renderPinDisplay();
+    setTimeout(pinEnter, 400);
+  }
+})();
 
 // ===== TABLES =====
 let tablesData = [];

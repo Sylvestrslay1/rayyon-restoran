@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xodim Kirish — Rayyon Restoran</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --card: #111827;
+    --border: #1e2d45;
+    --gold: #d4af37;
+    --gold2: #f0d060;
+    --text: #e8dcc8;
+    --muted: #8899aa;
+    --red: #e53e3e;
+    --green: #38a169;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .logo .emoji { font-size: 48px; display: block; }
+  .logo h1 { font-size: 22px; color: var(--gold); margin-top: 8px; }
+  .logo p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .pin-display {
+    background: #0d1520;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    font-size: 28px;
+    letter-spacing: 8px;
+    color: var(--gold);
+    margin-bottom: 20px;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s;
+  }
+  .pin-display.active { border-color: var(--gold); }
+
+  .numpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .numpad button {
+    background: #1a2535;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 600;
+    padding: 18px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .numpad button:hover { background: #223045; }
+  .numpad button:active { transform: scale(0.94); background: #2a3a52; }
+  .numpad button.btn-del {
+    font-size: 18px;
+    color: var(--muted);
+  }
+  .numpad button.btn-ok {
+    background: var(--gold);
+    color: #0a0e1a;
+    font-size: 16px;
+    font-weight: 700;
+    border-color: var(--gold);
+  }
+  .numpad button.btn-ok:hover { background: var(--gold2); }
+
+  #msg {
+    text-align: center;
+    font-size: 14px;
+    min-height: 22px;
+    margin-bottom: 12px;
+    transition: opacity 0.3s;
+  }
+  #msg.err { color: var(--red); }
+  #msg.ok  { color: var(--green); }
+
+  .role-links {
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .role-links a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #0d1520;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .role-links a:hover { background: #1a2535; color: var(--text); }
+  .role-links a .icon { font-size: 18px; }
+
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <span class="emoji">🍽️</span>
+    <h1>Rayyon Restoran</h1>
+    <p>Xodim kirish tizimi</p>
+  </div>
+
+  <div class="pin-display" id="pinDisplay">
+    <span id="pinDots">————</span>
+  </div>
+
+  <div id="msg"></div>
+
+  <div class="numpad">
+    <button onclick="numPress('1')">1</button>
+    <button onclick="numPress('2')">2</button>
+    <button onclick="numPress('3')">3</button>
+    <button onclick="numPress('4')">4</button>
+    <button onclick="numPress('5')">5</button>
+    <button onclick="numPress('6')">6</button>
+    <button onclick="numPress('7')">7</button>
+    <button onclick="numPress('8')">8</button>
+    <button onclick="numPress('9')">9</button>
+    <button class="btn-del" onclick="numDel()">⌫</button>
+    <button onclick="numPress('0')">0</button>
+    <button class="btn-ok" onclick="doLogin()" id="btnOk">Kirish</button>
+  </div>
+
+  <div class="role-links">
+    <a href="admin/index.html">
+      <span class="icon">🔑</span>
+      <span>Admin panel (parol bilan)</span>
+    </a>
+    <a href="kitchen.html">
+      <span class="icon">🍳</span>
+      <span>Oshxona ekrani (KDS)</span>
+    </a>
+  </div>
+</div>
+
+<script>
+const API = '';
+let pin = '';
+const MAX_PIN = 8;
+
+function updateDisplay() {
+  const el = document.getElementById('pinDots');
+  const disp = document.getElementById('pinDisplay');
+  if (pin.length === 0) {
+    el.textContent = '————';
+    disp.classList.remove('active');
+  } else {
+    el.textContent = '●'.repeat(pin.length) + '—'.repeat(Math.max(0, 4 - pin.length));
+    disp.classList.add('active');
+  }
+}
+
+function numPress(d) {
+  if (pin.length >= MAX_PIN) return;
+  pin += d;
+  updateDisplay();
+  setMsg('');
+  if (pin.length >= 4) autoLogin();
+}
+
+function numDel() {
+  pin = pin.slice(0, -1);
+  updateDisplay();
+  setMsg('');
+}
+
+function setMsg(text, type='') {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = type;
+}
+
+let autoTimer = null;
+function autoLogin() {
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(doLogin, 600);
+}
+
+async function doLogin() {
+  clearTimeout(autoTimer);
+  if (pin.length < 4) { setMsg('PIN kamida 4 ta raqam', 'err'); return; }
+  const btn = document.getElementById('btnOk');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  setMsg('');
+
+  try {
+    const r = await fetch(`${API}/api/staff/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      setMsg(d.error || 'PIN noto\'g\'ri', 'err');
+      pin = '';
+      updateDisplay();
+      btn.disabled = false;
+      btn.textContent = 'Kirish';
+      return;
+    }
+    setMsg(`Xush kelibsiz, ${d.name}! ✅`, 'ok');
+
+    // Role bo'yicha yo'naltirish
+    const routes = {
+      admin:      'admin/index.html',
+      director:   'admin/index.html',
+      accountant: 'admin/index.html?role=accountant',
+      manager:    'admin/index.html?role=manager',
+      chef:       'admin/index.html?role=chef',
+      cashier:    'cashier.html',
+      waiter:     'waiter.html',
+      kitchen:    'kitchen.html',
+    };
+
+    // Xodim ma'lumotlarini saqlaymiz
+    localStorage.setItem('staff_id',   d.id);
+    localStorage.setItem('staff_name', d.name);
+    localStorage.setItem('staff_role', d.role);
+    localStorage.setItem('staff_pin',  pin);
+
+    // Panel rollar uchun admin token sessionStorage ga
+    if (d.token) {
+      sessionStorage.setItem('admin_token', d.token);
+    }
+
+    const dest = routes[d.redirect] || routes[d.role] || 'waiter.html';
+    setTimeout(() => { window.location.href = dest; }, 800);
+  } catch(e) {
+    setMsg('Server bilan bog\'lanib bo\'lmadi', 'err');
+    pin = '';
+    updateDisplay();
+    btn.disabled = false;
+    btn.textContent = 'Kirish';
+  }
+}
+
+// Klaviatura qo'llab-quvvatlash
+document.addEventListener('keydown', e => {
+  if (e.key >= '0' && e.key <= '9') numPress(e.key);
+  else if (e.key === 'Backspace') numDel();
+  else if (e.key === 'Enter') doLogin();
+});
+</script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8"/>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>Ofitsiant — Rayyon</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
@@ -249,23 +251,22 @@ async function safeFetch(url, opts={}) {
 
 async function kpOk() {
   if (pin.length<4) return;
-  const res = await safeFetch(API+'/api/staff/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  const res = await safeFetch(API+'/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
   if (!res) { pin=''; updDots(); return; }
   const data = await res.json();
   if (data.ok) {
-    waiter = {name: data.name, role: data.role, action: data.action, hours: data.hours};
-    if (data.action==='checkin') waiterPin = pin;
-    document.getElementById('pinErr').textContent='';
-    if (data.action==='checkout') {
-      document.getElementById('pinErr').style.color='var(--orange)';
-      document.getElementById('pinErr').textContent = 'Xayr, '+data.name+'! '+data.hours+' soat.';
-      pin=''; updDots();
-      setTimeout(()=>document.getElementById('pinErr').textContent='',3000);
-    } else {
-      startApp();
+    if (data.role !== 'waiter') {
+      document.getElementById('pinErr').textContent = 'Bu sahifa faqat ofitsiantlar uchun!';
+      pin=''; updDots(); return;
     }
+    waiter = {name: data.name, role: data.role, id: data.id};
+    waiterPin = pin;
+    document.getElementById('pinErr').textContent='';
+    // Attendance checkin parallel yuboramiz (natijani kutmaymiz)
+    fetch(API+'/api/staff/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})}).catch(()=>{});
+    startApp();
   } else {
-    document.getElementById('pinErr').textContent="PIN noto'g'ri!";
+    document.getElementById('pinErr').textContent = data.error || "PIN noto'g'ri!";
     pin=''; updDots();
   }
 }
@@ -283,9 +284,24 @@ function startApp() {
 }
 function logout() {
   waiter=null; pin=''; waiterPin=''; updDots();
+  localStorage.removeItem('staff_pin');
+  localStorage.removeItem('staff_role');
+  localStorage.removeItem('staff_name');
+  localStorage.removeItem('staff_id');
   document.getElementById('app').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
 }
+
+// staff-login.html dan kelganda PIN ni avtomatik yuborish
+(function autoLoginFromStaffPortal() {
+  const savedPin  = localStorage.getItem('staff_pin');
+  const savedRole = localStorage.getItem('staff_role');
+  if (savedPin && savedRole === 'waiter') {
+    pin = savedPin;
+    updDots();
+    setTimeout(kpOk, 400);
+  }
+})();
 
 // ===== TABS =====
 function switchTab(t) {
@@ -456,11 +472,17 @@ function renderMenuView(cat) {
         ${cats.map(c=>`<button class="mcat ${activeMenuCat===c?'active':''}" onclick="renderMenuView('${c}')">${names[c]}</button>`).join('')}
       </div>
       <div class="menu-grid">
-        ${items.filter(i=>i.available).map(item=>`
+        ${items.map(item=> item.available ? `
           <div class="m-item" onclick="addToWCart(${Number(item.id)})">
             <div class="m-emoji">${wEsc(item.emoji)||'🍽'}</div>
             <div class="m-name">${wEsc(item.name)}</div>
             <div class="m-price">${Number(item.price).toLocaleString()} so'm</div>
+          </div>` : `
+          <div class="m-item" style="opacity:0.4;cursor:not-allowed;position:relative;">
+            <div style="position:absolute;top:4px;right:4px;background:#e53e3e;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;">STOP</div>
+            <div class="m-emoji" style="filter:grayscale(1)">${wEsc(item.emoji)||'🍽'}</div>
+            <div class="m-name">${wEsc(item.name)}</div>
+            <div class="m-price" style="color:#666">To'xtatilgan</div>
           </div>`).join('')}
       </div>
     </div>`;

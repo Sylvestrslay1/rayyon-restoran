@@ -255,6 +255,11 @@
           sessionStorage.setItem('admin_token', data.token);
           sessionStorage.removeItem('login_attempts');
           sessionStorage.removeItem('login_locked_until');
+          // Eski staff sessiya ma'lumotlarini tozalash (rol filtri noto'g'ri ishlamasin)
+          localStorage.removeItem('staff_role');
+          localStorage.removeItem('staff_name');
+          localStorage.removeItem('staff_id');
+          localStorage.removeItem('staff_pin');
           window.location.href = 'index.html';
         } else {
           attempts++;

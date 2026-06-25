@@ -2,6 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8"/>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Oshxona Ekrani — Rayyon KDS</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -100,9 +102,16 @@ function kEsc(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 const API = '';
-// KITCHEN_TOKEN — URL dan o'qiladi: kitchen.html?kitchen_token=xxxx
-// Render da KITCHEN_TOKEN env o'rnatilgandan so'ng, kitchen URL ga token qo'shing.
 const KITCHEN_TOKEN = new URLSearchParams(window.location.search).get('kitchen_token') || '';
+
+// Auth tekshiruv — faqat kitchen/cook/admin/director roli kirishi mumkin
+(function checkKitchenAuth() {
+  const role = localStorage.getItem('staff_role');
+  const allowed = ['kitchen', 'cook', 'admin', 'director', 'manager'];
+  if (!role || !allowed.includes(role)) {
+    window.location.href = '/staff-login.html';
+  }
+})();
 function kitchenHeaders() {
   const h = {'Content-Type':'application/json'};
   if (KITCHEN_TOKEN) h['X-Kitchen-Token'] = KITCHEN_TOKEN;
