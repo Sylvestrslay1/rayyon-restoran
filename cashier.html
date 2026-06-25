@@ -267,6 +267,7 @@
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn btn-outline btn-sm" onclick="printShiftReport()">🖨 Chop etish</button>
         <button class="btn btn-outline btn-sm" onclick="exportShiftPDF()">📄 PDF</button>
+        <button class="btn btn-outline btn-sm" onclick="emailShiftReport()">📧 Email</button>
         <button class="close-btn" onclick="closeModal('report-modal')">✕</button>
       </div>
     </div>
@@ -831,6 +832,24 @@ async function doCloseShift(force=false) {
     showToast(`Smena yopildi. Sof: ${fmt(data.net||data.total_collected)} so'm`, 'success');
     setTimeout(logout, 2000);
   } catch(e) { showToast('Xato','error'); }
+}
+
+// ===== EMAIL HISOBOT =====
+async function emailShiftReport() {
+  if (!SHIFT_ID) return;
+  const email = prompt('Hisobot yuboriladigan email manzil:');
+  if (!email || !email.includes('@')) return;
+  showToast('Yuborilmoqda...', 'info');
+  try {
+    const r = await fetch(`${API}/api/shift/${SHIFT_ID}/email-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': localStorage.getItem('admin_token') || '' },
+      body: JSON.stringify({ pin: PIN, email })
+    });
+    const d = await r.json();
+    if (r.ok) showToast(`✅ ${d.sent_to} ga yuborildi`, 'success');
+    else showToast(d.error || 'Xato', 'error');
+  } catch(e) { showToast('Ulanishda xato', 'error'); }
 }
 
 // ===== UTILS =====

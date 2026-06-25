@@ -52,15 +52,65 @@ body{min-height:100vh;background:linear-gradient(135deg,#0a0a0f 0%,#1a0a2e 50%,#
     <div class="logo-sub">Restoran</div>
     <div id="card-body"><div class="error-box"><p>Yuklanmoqda...</p></div></div>
   </div>
+  <div style="display:flex;justify-content:center;gap:8px;margin-top:10px;">
+    <a id="lang-uz" href="?id=0&lang=uz" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">UZ</a>
+    <a id="lang-ru" href="?id=0&lang=ru" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">RU</a>
+    <a id="lang-en" href="?id=0&lang=en" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">EN</a>
+  </div>
   <button class="share-btn" id="share-btn" style="display:none" onclick="shareCard()">📤 Do'stlarga ulashish</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
-const cid = parseInt(params.get('id') || '0');
+const cid  = parseInt(params.get('id') || '0');
+const LANG = params.get('lang') || navigator.language.slice(0,2) || 'uz';
+
+const I18N = {
+  uz: {
+    ballar:'BALLAR', tashrif:'TASHRIF', xarid:'XARID', daraja:'Daraja',
+    chegirma:'Faol chegirma', share:'📤 Do\'stlarga ulashish',
+    loading:'Yuklanmoqda...', err_id:'Karta ID ko\'rsatilmagan',
+    err_notfound:'Mijoz topilmadi', err_conn:'Ulanishda xato',
+    next_max:'Maksimal daraja', next_500:'500 ballga Platinum',
+    next_200:'200 ballga Gold', next_100:'100 ballga Silver', next_1:'1 ballga Bronze',
+    qr_hint:'QR kodni kassirga ko\'rsating — chegirma avtomatik qo\'llaniladi.',
+    qr_warn:'Karta shaxsiy va boshqalarga berilmaydi',
+    copied:'Havola nusxalandi!', copy_prompt:'Havolani nusxalang:',
+    share_title:'Rayyon Loyalty Karta', share_text:'Mening loyalty kartam',
+  },
+  ru: {
+    ballar:'БАЛЛЫ', tashrif:'ВИЗИТЫ', xarid:'ПОКУПКИ', daraja:'Уровень',
+    chegirma:'Активная скидка', share:'📤 Поделиться с друзьями',
+    loading:'Загрузка...', err_id:'ID карты не указан',
+    err_notfound:'Клиент не найден', err_conn:'Ошибка соединения',
+    next_max:'Максимальный уровень', next_500:'500 баллов до Platinum',
+    next_200:'200 баллов до Gold', next_100:'100 баллов до Silver', next_1:'1 балл до Bronze',
+    qr_hint:'Покажите QR-код кассиру — скидка применится автоматически.',
+    qr_warn:'Карта личная и не передаётся другим',
+    copied:'Ссылка скопирована!', copy_prompt:'Скопируйте ссылку:',
+    share_title:'Rayyon Loyalty Card', share_text:'Моя карта лояльности',
+  },
+  en: {
+    ballar:'POINTS', tashrif:'VISITS', xarid:'SPENT', daraja:'Level',
+    chegirma:'Active discount', share:'📤 Share with friends',
+    loading:'Loading...', err_id:'Card ID not provided',
+    err_notfound:'Customer not found', err_conn:'Connection error',
+    next_max:'Maximum level reached', next_500:'500 pts to Platinum',
+    next_200:'200 pts to Gold', next_100:'100 pts to Silver', next_1:'1 pt to Bronze',
+    qr_hint:'Show QR to the cashier — discount applied automatically.',
+    qr_warn:'Card is personal and non-transferable',
+    copied:'Link copied!', copy_prompt:'Copy the link:',
+    share_title:'Rayyon Loyalty Card', share_text:'My loyalty card',
+  },
+};
+const L = I18N[LANG] || I18N.uz;
+
 const TIER_ICONS = { Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉', Yangi:'🌱' };
-const TIER_NEXT_LABELS = { Platinum:'Maksimal daraja', Gold:'500 ballga Platinum', Silver:'200 ballga Gold', Bronze:'100 ballga Silver', Yangi:'1 ballga Bronze' };
+const TIER_NEXT_LABELS = {
+  Platinum: L.next_max, Gold: L.next_500,
+  Silver: L.next_200, Bronze: L.next_100, Yangi: L.next_1,
+};
 
 function tierProgress(pts) {
   if (pts >= 500) return 100;
@@ -70,13 +120,14 @@ function tierProgress(pts) {
 }
 
 async function load() {
-  if (!cid) { showErr('Karta ID ko\'rsatilmagan'); return; }
+  if (!cid) { showErr(L.err_id); return; }
+  document.getElementById('card-body').innerHTML = `<div class="error-box"><p>${L.loading}</p></div>`;
   try {
     const r = await fetch(`/api/loyalty-card/${cid}`);
-    if (!r.ok) { showErr('Mijoz topilmadi'); return; }
+    if (!r.ok) { showErr(L.err_notfound); return; }
     const c = await r.json();
     render(c);
-  } catch(e) { showErr('Ulanishda xato'); }
+  } catch(e) { showErr(L.err_conn); }
 }
 
 function showErr(msg) {
@@ -98,26 +149,26 @@ function render(c) {
     <div class="member-name">${c.name}</div>
     <div class="member-phone">${c.phone}</div>
     <div class="stats-row">
-      <div class="stat"><div class="stat-val">${pts}</div><div class="stat-lbl">BALLAR</div></div>
-      <div class="stat"><div class="stat-val">${c.visits}</div><div class="stat-lbl">TASHRIF</div></div>
-      <div class="stat"><div class="stat-val">${fmt(Math.round(c.total_spent/1000))}K</div><div class="stat-lbl">XARID</div></div>
+      <div class="stat"><div class="stat-val">${pts}</div><div class="stat-lbl">${L.ballar}</div></div>
+      <div class="stat"><div class="stat-val">${c.visits}</div><div class="stat-lbl">${L.tashrif}</div></div>
+      <div class="stat"><div class="stat-val">${fmt(Math.round(c.total_spent/1000))}K</div><div class="stat-lbl">${L.xarid}</div></div>
     </div>
     <div class="points-bar">
-      <div class="points-bar-top"><span>Daraja</span><span>${pts} ball</span></div>
+      <div class="points-bar-top"><span>${L.daraja}</span><span>${pts}</span></div>
       <div class="bar-track"><div class="bar-fill" id="bar-fill" style="width:0%"></div></div>
       <div class="next-tier">${nextLabel}</div>
     </div>
     ${c.discount_pct > 0 ? `
     <div class="discount-box">
-      <div><div class="discount-lbl">Faol chegirma</div></div>
+      <div><div class="discount-lbl">${L.chegirma}</div></div>
       <div class="discount-val">${c.discount_pct}%</div>
     </div>` : ''}
     <div class="qr-section">
       <div class="qr-box" id="qr-canvas"></div>
       <div class="qr-info">
-        <b>Karta #${c.id}</b>
-        QR kodni kassirga ko'rsating — chegirma avtomatik qo'llaniladi.<br>
-        <span style="color:rgba(255,255,255,0.2);font-size:10px">Karta shaxsiy va boshqalarga berilmaydi</span>
+        <b>#${c.id}</b>
+        ${L.qr_hint}<br>
+        <span style="color:rgba(255,255,255,0.2);font-size:10px">${L.qr_warn}</span>
       </div>
     </div>`;
 
@@ -130,19 +181,31 @@ function render(c) {
     });
   }, 100);
 
+  document.getElementById('share-btn').textContent = L.share;
   document.getElementById('share-btn').style.display = 'block';
+  // Til havolalarini to'g'irlash va aktiv tilni belgilash
+  ['uz','ru','en'].forEach(l => {
+    const a = document.getElementById('lang-'+l);
+    if (!a) return;
+    a.href = `?id=${cid}&lang=${l}`;
+    if (l === LANG) {
+      a.style.color = '#d4af37';
+      a.style.borderColor = 'rgba(212,175,55,0.5)';
+      a.style.fontWeight = '600';
+    }
+  });
 }
 
 async function shareCard() {
   const url = location.href;
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'Rayyon Loyalty Karta', text: 'Mening loyalty kartam', url });
+      await navigator.share({ title: L.share_title, text: L.share_text, url });
       return;
     } catch(_) {}
   }
-  try { await navigator.clipboard.writeText(url); alert('Havola nusxalandi!'); }
-  catch(_) { prompt('Havolani nusxalang:', url); }
+  try { await navigator.clipboard.writeText(url); alert(L.copied); }
+  catch(_) { prompt(L.copy_prompt, url); }
 }
 
 load();

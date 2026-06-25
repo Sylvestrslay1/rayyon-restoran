@@ -1085,6 +1085,14 @@
         <div class="form-group"><label data-i18n="set.telegram">Telegram bot</label><input type="text" id="set-telegram" /></div>
         <div class="form-group"><label data-i18n="set.password">Yangi parol</label><input type="password" id="set-password" data-i18n-ph="set.pass.ph" placeholder="O'zgartirmoqchi bo'lsangiz kiriting" /></div>
       </div>
+      <div class="cyber-divider"><span>Email sozlamalari (SMTP)</span></div>
+      <div class="settings-grid">
+        <div class="form-group"><label>SMTP Server</label><input type="text" id="set-smtp-host" placeholder="smtp.gmail.com" /></div>
+        <div class="form-group"><label>SMTP Port</label><input type="number" id="set-smtp-port" placeholder="587" /></div>
+        <div class="form-group"><label>Email (login)</label><input type="email" id="set-smtp-user" placeholder="restoran@gmail.com" /></div>
+        <div class="form-group"><label>Parol / App Password</label><input type="password" id="set-smtp-pass" placeholder="••••••••" /></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Gmail uchun: <b>App Password</b> yarating (2FA yoqilgan holda). Smena hisobotlari shu email orqali yuboriladi.</p>
       <div class="cyber-divider"><span></span></div>
       <button class="btn btn-cyan" id="saveSettings" data-i18n="set.save">Saqlash</button>
     </div>
@@ -1568,13 +1576,28 @@ async function loadSettings() {
   document.getElementById('set-phone').value    = d.phone || '';
   document.getElementById('set-address').value  = d.address || '';
   document.getElementById('set-hours').value    = d.working_hours || '';
-  document.getElementById('set-telegram').value = d.telegram_bot || '';
-  document.getElementById('set-password').value = '';
+  document.getElementById('set-telegram').value    = d.telegram_bot || '';
+  document.getElementById('set-password').value    = '';
+  document.getElementById('set-smtp-host').value   = d.smtp_host || '';
+  document.getElementById('set-smtp-port').value   = d.smtp_port || '587';
+  document.getElementById('set-smtp-user').value   = d.smtp_user || '';
+  document.getElementById('set-smtp-pass').value   = '';
 }
 document.getElementById('saveSettings').addEventListener('click', async () => {
-  const payload = { restaurant_name: document.getElementById('set-name').value, phone: document.getElementById('set-phone').value, address: document.getElementById('set-address').value, working_hours: document.getElementById('set-hours').value, telegram_bot: document.getElementById('set-telegram').value };
-  const pw = document.getElementById('set-password').value;
-  if (pw) payload.admin_password = pw;
+  const payload = {
+    restaurant_name: document.getElementById('set-name').value,
+    phone:           document.getElementById('set-phone').value,
+    address:         document.getElementById('set-address').value,
+    working_hours:   document.getElementById('set-hours').value,
+    telegram_bot:    document.getElementById('set-telegram').value,
+    smtp_host:       document.getElementById('set-smtp-host').value,
+    smtp_port:       document.getElementById('set-smtp-port').value,
+    smtp_user:       document.getElementById('set-smtp-user').value,
+  };
+  const pw   = document.getElementById('set-password').value;
+  const smpw = document.getElementById('set-smtp-pass').value;
+  if (pw)   payload.admin_password = pw;
+  if (smpw) payload.smtp_pass = smpw;
   const r = await fetch(`${API}/api/settings`, { method:'PUT', headers:H(), body:JSON.stringify(payload) });
   if ((await r.json()).ok) toast(t('toast.saved'));
   else toast(t('toast.error'), false);

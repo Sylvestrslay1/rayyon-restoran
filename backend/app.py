@@ -4,6 +4,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
 import threading, datetime, csv, io, logging
+import smtplib, email.mime.text, email.mime.multipart
 
 log = logging.getLogger(__name__)
 from database import get_conn, init_db, rows_to_list, USE_PG
@@ -2185,6 +2186,98 @@ def delete_customer(cid):
     db_exec(conn, "DELETE FROM customers WHERE id=?", (cid,))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
+
+
+# ===== EMAIL YUBORISH =====
+def send_email(to: str, subject: str, html_body: str) -> bool:
+    """SMTP orqali email yuborish. DB sozlamalari yoki env: SMTP_HOST/PORT/USER/PASS"""
+    host   = get_setting("smtp_host")   or os.environ.get("SMTP_HOST", "")
+    port   = int(get_setting("smtp_port") or os.environ.get("SMTP_PORT", "587"))
+    user   = get_setting("smtp_user")   or os.environ.get("SMTP_USER", "")
+    passwd = get_setting("smtp_pass")   or os.environ.get("SMTP_PASS", "")
+    from_addr = user
+    if not host or not user or not passwd:
+        log.warning("Email konfiguratsiya yo'q (SMTP_HOST/USER/PASS)")
+        return False
+    try:
+        msg = email.mime.multipart.MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to
+        msg.attach(email.mime.text.MIMEText(html_body, "html", "utf-8"))
+        with smtplib.SMTP(host, port, timeout=10) as s:
+            s.ehlo()
+            s.starttls()
+            s.login(user, passwd)
+            s.sendmail(from_addr, [to], msg.as_string())
+        return True
+    except Exception as e:
+        log.warning("Email xatosi: %s", e)
+        return False
+
+
+@app.route("/api/shift/<int:shift_id>/email-report", methods=["POST"])
+def email_shift_report(shift_id):
+    """Smena hisobotini emailga yuborish."""
+    if not check_auth():
+        d = request.json or {}
+        staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+        if not staff or not has_role(staff, "cashier", "manager"):
+            return jsonify({"error": "Ruxsat yo'q"}), 403
+    d = request.json or {}
+    to_email = d.get("email", "").strip()
+    if not to_email or "@" not in to_email:
+        return jsonify({"error": "Email manzil kiritilmadi"}), 400
+
+    conn = get_conn()
+    cur = db_exec(conn, "SELECT * FROM shifts WHERE id=?", (shift_id,))
+    rows = rows_to_list(cur)
+    if not rows:
+        conn.close()
+        return jsonify({"error": "Smena topilmadi"}), 404
+    s = rows[0]
+
+    cur2 = db_exec(conn, "SELECT method, COALESCE(SUM(amount),0) AS total FROM payments WHERE shift_id=? GROUP BY method", (shift_id,))
+    methods = rows_to_list(cur2)
+    cur3 = db_exec(conn, "SELECT COALESCE(SUM(amount),0) FROM payments WHERE shift_id=?", (shift_id,))
+    total_pay = int((cur3.fetchone() or [0])[0] or 0)
+    cur4 = db_exec(conn, "SELECT COUNT(DISTINCT session_id) FROM payments WHERE shift_id=?", (shift_id,))
+    sess_cnt = int((cur4.fetchone() or [0])[0] or 0)
+    conn.close()
+
+    opened = str(s.get("opened_at") or "")[:16]
+    closed = str(s.get("closed_at") or "")[:16]
+    cashier = str(s.get("cashier_name") or "")
+    meth_rows = "".join(
+        f"<tr><td style='padding:6px 12px'>{r.get('method','')}</td>"
+        f"<td style='padding:6px 12px;text-align:right'><b>{int(r.get('total') or 0):,} so'm</b></td></tr>"
+        for r in methods
+    )
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#f8f8f8;padding:24px;border-radius:12px">
+      <div style="background:#0f0f1a;border-radius:8px;padding:20px;text-align:center;margin-bottom:20px">
+        <h1 style="color:#d4af37;font-size:22px;margin:0;letter-spacing:2px">RAYYON RESTORAN</h1>
+        <p style="color:rgba(255,255,255,0.5);margin:4px 0 0;font-size:13px">Smena #{shift_id} hisoboti</p>
+      </div>
+      <table style="width:100%;background:#fff;border-radius:8px;border-collapse:collapse;margin-bottom:16px">
+        <tr><td style="padding:10px 16px;color:#555">Kassir</td><td style="padding:10px 16px;text-align:right;font-weight:600">{cashier}</td></tr>
+        <tr style="background:#f9f9f9"><td style="padding:10px 16px;color:#555">Ochildi</td><td style="padding:10px 16px;text-align:right">{opened}</td></tr>
+        <tr><td style="padding:10px 16px;color:#555">Yopildi</td><td style="padding:10px 16px;text-align:right">{closed}</td></tr>
+        <tr style="background:#f9f9f9"><td style="padding:10px 16px;color:#555">Sessiyalar</td><td style="padding:10px 16px;text-align:right">{sess_cnt} ta</td></tr>
+        <tr style="background:#e8f5e9"><td style="padding:10px 16px;font-weight:700">Jami daromad</td><td style="padding:10px 16px;text-align:right;font-weight:700;color:#2e7d32;font-size:18px">{total_pay:,} so'm</td></tr>
+      </table>
+      <h3 style="font-size:14px;color:#333;margin:0 0 8px">To'lov usullari:</h3>
+      <table style="width:100%;background:#fff;border-radius:8px;border-collapse:collapse;margin-bottom:20px">
+        {meth_rows or "<tr><td style='padding:10px 16px;color:#999'>To'lovlar yo'q</td></tr>"}
+      </table>
+      <p style="text-align:center;font-size:11px;color:#aaa">Rayyon Restoran Boshqaruv Tizimi &mdash; {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+    """
+    ok = send_email(to_email, f"Smena #{shift_id} hisoboti — Rayyon Restoran", html)
+    if ok:
+        return jsonify({"ok": True, "sent_to": to_email})
+    return jsonify({"error": "Email yuborishda xato. SMTP sozlamalarini tekshiring."}), 500
 
 
 # ===== LOYALTY KARTA (public) =====
