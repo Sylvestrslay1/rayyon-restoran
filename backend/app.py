@@ -422,35 +422,47 @@ def login():
     if not password:
         return jsonify({"ok": False, "error": "Parol kiritilmadi"}), 400
 
-    stored_hash = get_setting("admin_password_hash")
-    stored_salt = get_setting("admin_password_salt")
+    stored_hash  = get_setting("admin_password_hash")
+    stored_salt  = get_setting("admin_password_salt")
     stored_plain = get_setting("admin_password")
-    # Env var dan yoki hardcoded default (faqat DB da hech narsa yo'q bo'lsa)
-    fallback_plain = os.environ.get("ADMIN_PASSWORD", "rayyon2024")
+    env_password = os.environ.get("ADMIN_PASSWORD", "")  # Render env var
 
     authenticated = False
-    if stored_hash and stored_salt:
-        authenticated = verify_password(password, stored_hash, stored_salt)
-    else:
-        # Plaintext tekshirish: DB dagi yoki env var default
-        candidate = stored_plain or fallback_plain
-        if hmac.compare_digest(password, candidate):
-            authenticated = True
-            # Zudlik bilan pbkdf2 hash ga o'tkazish
-            new_hash, new_salt = hash_password(password)
-            conn2 = get_conn()
+
+    # 1) Env var o'rnatilgan bo'lsa — HAR DOIM ustunlik qiladi
+    if env_password and hmac.compare_digest(password, env_password):
+        authenticated = True
+        # DB dagi eski hashni yangi env var paroli bilan yangilash
+        new_hash, new_salt = hash_password(password)
+        conn2 = get_conn()
+        try:
             if USE_PG:
                 for k, v in [("admin_password_hash", new_hash), ("admin_password_salt", new_salt)]:
                     db_exec(conn2,
                         "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
                         (k, v))
-                # Plaintext ni bazadan o'chirish
                 db_exec(conn2, "DELETE FROM settings WHERE key=%s", ("admin_password",))
             else:
                 db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
                 db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
                 db_exec(conn2, "DELETE FROM settings WHERE key=?", ("admin_password",))
-            conn2.commit(); conn2.close()
+            conn2.commit()
+        except Exception as _e:
+            log.warning("Parol hash yangilash xato: %s", _e)
+        finally:
+            conn2.close()
+
+    # 2) DB dagi hash bilan tekshirish (env var yo'q yoki mos kelmasa)
+    elif stored_hash and stored_salt:
+        authenticated = verify_password(password, stored_hash, stored_salt)
+
+    # 3) DB dagi plaintext (eski tizim)
+    elif stored_plain and hmac.compare_digest(password, stored_plain):
+        authenticated = True
+
+    # 4) Default fallback (env var ham, DB ham bo'sh)
+    elif not env_password and hmac.compare_digest(password, "rayyon2024"):
+        authenticated = True
 
     if not authenticated:
         time.sleep(0.3)  # Vaqt hujumiga qarshi kechiktirish
