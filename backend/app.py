@@ -205,14 +205,13 @@ def check_image_mime(file_stream) -> bool:
 
 
 def check_kitchen_auth() -> bool:
-    """Oshxona endpointlari uchun autentifikatsiya.
-    KITCHEN_TOKEN o'rnatilgan bo'lsa — headerni tekshiradi.
-    O'rnatilmagan bo'lsa — faqat admin token qabul qilinadi.
-    """
+    """Oshxona endpointlari uchun autentifikatsiya."""
     if check_auth():
         return True
     if not KITCHEN_TOKEN:
-        return True  # Token sozlanmagan — ochiq kirish (dev mode)
+        # Production da KITCHEN_TOKEN majburiy — xavfsizlik ogohlantirishini loglash
+        log.warning("KITCHEN_TOKEN o'rnatilmagan — oshxona endpoint himoyasiz! ENV var qo'shing.")
+        return False
     provided = (request.headers.get("X-Kitchen-Token", "")
                 or request.args.get("kitchen_token", ""))
     if not provided:
@@ -636,12 +635,16 @@ def add_news():
         _validate_str(d.get("content"), 2000, "Matn")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn,
-        "INSERT INTO news (title, content, image, active) VALUES (?,?,?,?)",
-        (d.get("title"), d.get("content"), d.get("image"), d.get("active", 1))
-    )
-    conn.commit(); conn.close()
+    try:
+        conn = get_conn()
+        db_exec(conn,
+            "INSERT INTO news (title, content, image, active) VALUES (?,?,?,?)",
+            (d.get("title"), d.get("content"), d.get("image"), d.get("active", 1))
+        )
+        conn.commit(); conn.close()
+    except Exception as e:
+        log.error("add_news DB xato: %s", e)
+        return jsonify({"error": f"DB xato: {e}"}), 500
     return jsonify({"ok": True})
 
 
@@ -967,7 +970,14 @@ def update_item_status(sid, iid):
     status = d.get("status")
     valid  = ["pending","cooking","ready","served","cancelled"]
     if status not in valid: return jsonify({"error": "Noto'g'ri status"}), 400
-    # Cancel uchun admin token kerak
+
+    # Autentifikatsiya: admin token YOKI PIN YOKI kitchen token
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    is_authed = check_auth() or check_kitchen_auth() or (staff is not None)
+    if not is_authed:
+        return jsonify({"error": "Ruxsat yo'q — PIN yoki token kerak"}), 403
+
+    # Cancel uchun faqat admin
     if status == "cancelled" and not check_auth():
         return jsonify({"error": "Bekor qilish uchun admin ruxsati kerak"}), 403
     conn = get_conn()
@@ -1068,40 +1078,45 @@ def close_session(sid):
     cashier_id   = d.get("cashier_id")   or (staff["id"]   if staff else None)
     shift_id     = d.get("shift_id")
 
-    for p in payments:
+    try:
+        for p in payments:
+            db_exec(conn,
+                "INSERT INTO payments (session_id, table_number, amount, method, notes, cashier_name, cashier_id, shift_id, verified) VALUES (?,?,?,?,?,?,?,?,1)",
+                (sid, s["table_number"], p.get("amount", 0),
+                 p.get("method", "cash"), p.get("notes", ""),
+                 cashier_name, cashier_id, shift_id))
+
         db_exec(conn,
-            "INSERT INTO payments (session_id, table_number, amount, method, notes, cashier_name, cashier_id, shift_id, verified) VALUES (?,?,?,?,?,?,?,?,1)",
-            (sid, s["table_number"], p.get("amount", 0),
-             p.get("method", "cash"), p.get("notes", ""),
-             cashier_name, cashier_id, shift_id))
+            "UPDATE sessions SET status='closed', closed_at=CURRENT_TIMESTAMP, total_amount=?, cashier_name=?, cashier_id=?, shift_id=? WHERE id=?",
+            (server_total, cashier_name, cashier_id, shift_id, sid))
+        db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
 
-    db_exec(conn,
-        "UPDATE sessions SET status='closed', closed_at=CURRENT_TIMESTAMP, total_amount=?, cashier_name=?, cashier_id=? WHERE id=?",
-        (server_total, cashier_name, cashier_id, sid))
-    db_exec(conn, "UPDATE tables SET status='free', current_session_id=NULL WHERE id=?", (s["table_id"],))
+        # Loyalty: mijoz bo'lsa — total_spent va visits yangilash
+        customer_phone = d.get("customer_phone", "") or s.get("customer_phone", "")
+        customer_name_d = d.get("customer_name", "") or s.get("customer_name", "")
+        if customer_phone:
+            earned_points = int(server_total // 1000)
+            cur_c = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (customer_phone,))
+            crows = rows_to_list(cur_c)
+            if crows:
+                db_exec(conn,
+                    "UPDATE customers SET total_spent=total_spent+?, visits=visits+1, loyalty_points=loyalty_points+? WHERE phone=?",
+                    (server_total, earned_points, customer_phone))
+                new_points = (crows[0].get("loyalty_points") or 0) + earned_points
+                auto_disc = 15 if new_points >= 500 else (10 if new_points >= 200 else (5 if new_points >= 100 else 0))
+                if auto_disc > 0:
+                    db_exec(conn, "UPDATE customers SET discount_pct=? WHERE phone=?", (auto_disc, customer_phone))
+            else:
+                db_exec(conn,
+                    "INSERT INTO customers (name, phone, total_spent, visits, loyalty_points) VALUES (?,?,?,1,?)",
+                    (customer_name_d, customer_phone, server_total, earned_points))
 
-    # Loyalty: mijoz bo'lsa — total_spent va visits yangilash
-    customer_phone = d.get("customer_phone", "") or s.get("customer_phone", "")
-    customer_name_d = d.get("customer_name", "") or s.get("customer_name", "")
-    if customer_phone:
-        # 1000 so'm = 1 ball; 100 ball = 5% chegirma, 200 ball = 10%, 500 ball = 15%
-        earned_points = int(server_total // 1000)
-        cur_c = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (customer_phone,))
-        crows = rows_to_list(cur_c)
-        if crows:
-            db_exec(conn,
-                "UPDATE customers SET total_spent=total_spent+?, visits=visits+1, loyalty_points=loyalty_points+? WHERE phone=?",
-                (server_total, earned_points, customer_phone))
-            # Ball asosida chegirmani avtomatik yangilash
-            new_points = (crows[0].get("loyalty_points") or 0) + earned_points
-            auto_disc = 15 if new_points >= 500 else (10 if new_points >= 200 else (5 if new_points >= 100 else 0))
-            if auto_disc > 0:
-                db_exec(conn, "UPDATE customers SET discount_pct=? WHERE phone=?", (auto_disc, customer_phone))
-        else:
-            db_exec(conn,
-                "INSERT INTO customers (name, phone, total_spent, visits, loyalty_points) VALUES (?,?,?,1,?)",
-                (customer_name_d, customer_phone, server_total, earned_points))
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        log.error("close_session xato (sid=%s): %s", sid, e)
+        return jsonify({"error": f"To'lov saqlanmadi: {e}"}), 500
 
     conn.close()
     return jsonify({"ok": True, "total": server_total})
@@ -1695,25 +1710,25 @@ def accounting_report():
         row = cur.fetchone()
         return row[0] if row else 0
 
-    revenue   = val(f"SELECT COALESCE(SUM(total_price),0) FROM orders WHERE status='done' AND {date_filter}")
-    orders_ct = val(f"SELECT COUNT(*) FROM orders WHERE {date_filter}")
+    revenue   = val(f"SELECT COALESCE(SUM(amount),0) FROM payments WHERE {date_filter}")
+    orders_ct = val(f"SELECT COUNT(DISTINCT session_id) FROM payments WHERE {date_filter}")
     expenses  = val(f"SELECT COALESCE(SUM(amount),0) FROM expenses WHERE {exp_filter}")
 
     # Kunlik daromad grafigi (oxirgi 7 kun)
     if USE_PG:
         chart_sql = """
             SELECT date_trunc('day', created_at)::date::text AS day,
-                   COALESCE(SUM(total_price),0) AS rev
-            FROM orders WHERE status='done'
-              AND created_at >= CURRENT_DATE - INTERVAL '6 days'
+                   COALESCE(SUM(amount),0) AS rev
+            FROM payments
+              WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
             GROUP BY 1 ORDER BY 1
         """
     else:
         chart_sql = """
             SELECT date(created_at,'localtime') AS day,
-                   COALESCE(SUM(total_price),0) AS rev
-            FROM orders WHERE status='done'
-              AND date(created_at,'localtime') >= date('now','localtime','-6 days')
+                   COALESCE(SUM(amount),0) AS rev
+            FROM payments
+              WHERE date(created_at,'localtime') >= date('now','localtime','-6 days')
             GROUP BY 1 ORDER BY 1
         """
     cur2 = conn.cursor()
@@ -2293,7 +2308,12 @@ def loyalty_card(cid):
     c = rows[0]
     pts = c.get("loyalty_points") or 0
     tier = ("Platinum" if pts >= 500 else "Gold" if pts >= 200 else "Silver" if pts >= 100 else "Bronze" if pts >= 1 else "Yangi")
-    next_tier_pts = (500 if pts < 500 else (200 if pts < 200 else (100 if pts < 100 else 0)))
+    # Keyingi darajaga kerakli ball chegarasi
+    if pts < 1:    next_tier_pts = 1    # Yangi → Bronze
+    elif pts < 100: next_tier_pts = 100  # Bronze → Silver
+    elif pts < 200: next_tier_pts = 200  # Silver → Gold
+    elif pts < 500: next_tier_pts = 500  # Gold → Platinum
+    else:           next_tier_pts = pts  # Platinum — maksimal
     return jsonify({
         "id": c["id"], "name": c["name"] or "Mijoz",
         "phone": str(c["phone"])[:4] + "****" + str(c["phone"])[-2:],

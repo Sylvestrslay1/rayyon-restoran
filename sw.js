@@ -73,8 +73,8 @@ self.addEventListener('fetch', e => {
   // SSE uzilmaydi
   if (url.pathname === '/api/events') return;
 
-  // POST /api/session/*/items — offline uchun saqlash
-  if (e.request.method === 'POST' && url.pathname.match(/\/api\/session\/\d+\/items/)) {
+  // POST /api/session/*/order — offline uchun saqlash
+  if (e.request.method === 'POST' && url.pathname.match(/\/api\/session\/\d+\/order/)) {
     e.respondWith(
       fetch(e.request.clone()).catch(async () => {
         const body = await e.request.clone().json().catch(() => null);
