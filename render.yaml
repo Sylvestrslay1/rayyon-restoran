@@ -5,6 +5,7 @@ services:
     buildCommand: pip install -r backend/requirements.txt
     startCommand: gunicorn --chdir backend app:app --workers 1 --timeout 120 --keep-alive 5 --log-level info
     autoDeploy: true
+    healthCheckPath: /api/health
     envVars:
       - key: FLASK_ENV
         value: production
@@ -14,12 +15,30 @@ services:
         generateValue: true
       - key: ALLOWED_ORIGINS
         value: "https://rayyon-restoran.onrender.com"
+      # MAJBURIY: Render dashboard > Environment da qo'lda o'rnating!
+      # Default 'rayyon2024' paroli xavfli — kuchli parol kiriting.
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
           name: rayyon-db
           property: connectionString
+      # Redis (ixtiyoriy) — multi-worker rejimi uchun. Qo'shish: Render Redis xizmati ulaning
+      # - key: REDIS_URL
+      #   fromService:
+      #     name: rayyon-redis
+      #     type: redis
+      #     property: connectionString
+      # VAPID kalitlari (Push Notifications uchun ixtiyoriy)
+      # pywebpush --gen-keys buyrug'i bilan yarating
+      # - key: VAPID_PRIVATE_KEY
+      #   value: "..."
+      # - key: VAPID_PUBLIC_KEY
+      #   value: "..."
+      # - key: VAPID_EMAIL
+      #   value: "admin@rayyon.uz"
 
 databases:
   - name: rayyon-db

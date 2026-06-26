@@ -68,10 +68,6 @@ audio{display:none;}
 </style>
 </head>
 <body>
-<audio id="orderSound" preload="auto">
-  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" type="audio/wav"/>
-</audio>
-
 <div class="new-order-toast" id="newOrderToast">🔔 YANGI BUYURTMA!</div>
 
 <header>
@@ -114,8 +110,23 @@ const KITCHEN_TOKEN = new URLSearchParams(window.location.search).get('kitchen_t
 })();
 function kitchenHeaders() {
   const h = {'Content-Type':'application/json'};
-  if (KITCHEN_TOKEN) h['X-Kitchen-Token'] = KITCHEN_TOKEN;
+  if (KITCHEN_TOKEN) {
+    h['X-Kitchen-Token'] = KITCHEN_TOKEN;
+  } else {
+    const adminToken = sessionStorage.getItem('admin_token');
+    if (adminToken) {
+      h['X-Admin-Token'] = adminToken;
+    } else {
+      // Xodim PIN bilan autentifikatsiya (kitchen/cook/manager/chef)
+      const staffPin = sessionStorage.getItem('staff_pin');
+      if (staffPin) h['X-Staff-Pin'] = staffPin;
+    }
+  }
   return h;
+}
+// Token ogohlantirish
+if (!KITCHEN_TOKEN && !sessionStorage.getItem('admin_token')) {
+  console.warn('KITCHEN_TOKEN yo\'q va admin token ham yo\'q. Oshxona endpoint himoyasiz ishlashi mumkin.');
 }
 let currentCat = '';
 let prevIds = new Set();
@@ -167,20 +178,49 @@ function timerColor(dateStr) {
 }
 
 async function updateItemStatus(sessionId, itemId, status) {
-  await fetch(`${API}/api/session/${sessionId}/item/${itemId}/status`, {
-    method: 'PUT',
-    headers: kitchenHeaders(),
-    body: JSON.stringify({status})
-  });
+  try {
+    const r = await fetch(`${API}/api/session/${sessionId}/item/${itemId}/status`, {
+      method: 'PUT',
+      headers: kitchenHeaders(),
+      body: JSON.stringify({status})
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(()=>({}));
+      showKAlert(d.error || 'Holat o\'zgartirilmadi (' + r.status + ')');
+      return;
+    }
+  } catch(e) {
+    showKAlert('Tarmoq xatosi: ' + e.message);
+    return;
+  }
   load();
+}
+
+function showKAlert(msg) {
+  const t = document.getElementById('newOrderToast');
+  t.textContent = '⚠ ' + msg;
+  t.style.background = '#ff4444';
+  t.classList.add('show');
+  setTimeout(() => { t.classList.remove('show'); t.style.background=''; t.textContent='🔔 YANGI BUYURTMA!'; }, 3500);
 }
 
 async function load() {
   const url = currentCat ? `${API}/api/kitchen?category=${currentCat}` : `${API}/api/kitchen`;
-  const [kitchenRes, readyRes] = await Promise.all([
-    fetch(url, { headers: kitchenHeaders() }),
-    fetch(`${API}/api/kitchen/ready`, { headers: kitchenHeaders() })
-  ]);
+  let kitchenRes, readyRes;
+  try {
+    [kitchenRes, readyRes] = await Promise.all([
+      fetch(url, { headers: kitchenHeaders() }),
+      fetch(`${API}/api/kitchen/ready`, { headers: kitchenHeaders() })
+    ]);
+  } catch(e) {
+    document.getElementById('lastUpdate').textContent = '⚠ Ulanish yo\'q';
+    return;
+  }
+  if (!kitchenRes.ok || !readyRes.ok) {
+    const status = !kitchenRes.ok ? kitchenRes.status : readyRes.status;
+    document.getElementById('lastUpdate').textContent = `⚠ Server xatosi (${status})`;
+    return;
+  }
   const groups = await kitchenRes.json();
   const ready  = await readyRes.json();
 
@@ -230,7 +270,7 @@ async function load() {
           <div class="item-name">${kEsc(item.item_name)}</div>
           <div class="item-qty">× ${item.quantity}</div>
           ${item.comment ? `<div class="item-comment">💬 ${kEsc(item.comment)}</div>` : ''}
-          <div class="item-timer" style="${timerColor(item.created_at)}">⏱ ${timeSince(item.created_at)}</div>
+          <div class="item-timer" data-created="${kEsc(item.created_at||'')}" style="${timerColor(item.created_at)}">⏱ ${timeSince(item.created_at)}</div>
         </div>
         <span class="status-badge ${isCooking?'badge-cooking':'badge-pending'}">${isCooking?'PISHMOQDA':'KUTMOQDA'}</span>
         <div class="item-actions">
@@ -274,28 +314,57 @@ async function load() {
   grid.innerHTML = html;
 }
 
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch(e) {}
+}
+
 function showNewOrderToast() {
   const t = document.getElementById('newOrderToast');
+  t.textContent = '🔔 YANGI BUYURTMA!';
+  t.style.background = '';
   t.classList.add('show');
-  // Ovoz
-  try { new Audio('data:audio/wav;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGDgYtAgAyN+QWaAAihwMWm4G8QQRDiMcCBcH3Cc+CDv/7xA4Tvh9Rz/y8QADBwMWgQAZG/ILNAARQ4GLTcDeIIIhxGOBAuD7hOfBB3/94gcJ3w+o5/5eIAIAAAVwWgQAVQ2ORaIQwEMAJiDg95G4nQL7mQVWI6GwRcfsZAcsKkJvxgxEjzFUgfHoSQ9Qq7KNwqHwuB13MA4a1q/DmBrHgPcmjiGoh//EwC5nGPEmS4RcfkVKOhJf+WOgoxJclFz3kgn//dBA+ya1GhurNn8zb//9NNutNuhz31f////9vt///z+IdAEAAAK4LQIAKobHItEIYCGAExBwe8jcToF9zIKrEdDYIuP2MgOWFSE34wYiR5iqQPj0JIeoVdlG4VD4XA67mAcNa1fhzA1jwHuTRxDUQ//iYBczjHiTJcIuPyKlHQkv/LHQUYkuSi57yQT//uggfZNajQ3Vmz+Zt//+mm3Wm3Q576v////+32///5/EOgAAADVghQAAAAA//uQZAUAB1WI0PZugAAAAAoQwAAAEk3nRd2qAAAAACiDgAAAAAAAWaaaHAAAAANisgAAAAAElZAmAAAAAAXNsc2MAAAAAOkMSxgAAAAAAAnhY//8= AAA==').play(); } catch(e) {}
+  playBeep();
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// SSE — real-time yangilanish
+// SSE — real-time yangilanish (fallback timer bir martadan yaratiladi)
 load();
+let _kFallbackTimer = null;
+function startKFallback() {
+  if (!_kFallbackTimer) _kFallbackTimer = setInterval(load, 5000);
+}
+
 const _es = new EventSource('/api/events');
 _es.addEventListener('new_order', e => {
   load();
   try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(_) {}
 });
 _es.addEventListener('item_cooking', () => load());
+_es.addEventListener('item_ready',   () => load());
 _es.onerror = () => {
-  // SSE uzilsa — 5 soniyada polling ga qaytamiz
-  if (_es.readyState === EventSource.CLOSED) setInterval(load, 5000);
+  if (_es.readyState === EventSource.CLOSED) { _es.close(); startKFallback(); }
 };
-// Fallback polling (agar SSE ishlamasa)
-setTimeout(() => { if (_es.readyState !== EventSource.OPEN) setInterval(load, 5000); }, 3000);
+setTimeout(() => { if (_es.readyState !== EventSource.OPEN) startKFallback(); }, 5000);
+
+// Timer real-time yangilanishi — kartadagi vaqtlarni har daqiqada qayta hisoblaydi
+setInterval(() => {
+  document.querySelectorAll('.item-timer[data-created]').forEach(el => {
+    const created = el.dataset.created;
+    el.textContent = '⏱ ' + timeSince(created);
+    el.style.cssText = timerColor(created);
+  });
+}, 30000);
 </script>
 </body>
 </html>

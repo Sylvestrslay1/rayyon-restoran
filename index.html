@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Rayyon — Neo-Sharq Restoran</title>
@@ -363,11 +364,11 @@
         <div class="form-row">
           <div class="form-group">
             <label data-i18n="res.name">Ism Familiya</label>
-            <input type="text" id="resName" data-i18n-ph="res.name.ph" placeholder="Ism Familiya" required />
+            <input type="text" id="resName" data-i18n-ph="res.name.ph" placeholder="Ism Familiya" maxlength="100" required />
           </div>
           <div class="form-group">
             <label data-i18n="res.phone">Telefon raqam</label>
-            <input type="tel" id="resPhone" data-i18n-ph="res.phone.ph" placeholder="+998 90 000 00 00" required />
+            <input type="tel" id="resPhone" data-i18n-ph="res.phone.ph" placeholder="+998 90 000 00 00" maxlength="20" required />
           </div>
         </div>
         <div class="form-row">
@@ -392,7 +393,7 @@
         </div>
         <div class="form-group">
           <label data-i18n="res.note">Qo'shimcha izoh</label>
-          <textarea id="resNote" data-i18n-ph="res.note.ph" placeholder="Maxsus xohishlar, tug'ilgan kun va h.k." rows="3"></textarea>
+          <textarea id="resNote" data-i18n-ph="res.note.ph" placeholder="Maxsus xohishlar, tug'ilgan kun va h.k." rows="3" maxlength="500"></textarea>
         </div>
         <button type="submit" class="btn btn-cyan btn-full">
           <svg class="btn-icon-bodom" viewBox="0 0 24 24"><path d="M12 2C8 2 5 5.5 5 10c0 5 4 9 7 11 3-2 7-6 7-11 0-4.5-3-8-7-8z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -516,7 +517,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <p data-i18n="footer.copy">&copy; 2024 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li</p>
+      <p data-i18n="footer.copy">&copy; 2025 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li</p>
     </div>
   </footer>
 
@@ -536,11 +537,11 @@
       </div>
       <div class="form-group">
         <label data-i18n="order.name">Ism</label>
-        <input type="text" id="orderName" data-i18n-ph="order.name.ph" placeholder="Ismingiz" />
+        <input type="text" id="orderName" data-i18n-ph="order.name.ph" placeholder="Ismingiz" maxlength="100" />
       </div>
       <div class="form-group">
         <label data-i18n="order.phone">Telefon</label>
-        <input type="tel" id="orderPhone" placeholder="+998 90 000 00 00" />
+        <input type="tel" id="orderPhone" placeholder="+998 90 000 00 00" maxlength="20" />
       </div>
       <p class="order-total" id="orderTotal"></p>
       <button class="btn btn-cyan btn-full" id="confirmOrder">

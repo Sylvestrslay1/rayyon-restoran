@@ -74,7 +74,7 @@ const TRANSLATIONS = {
     "map.label":        "Toshkent · Yunusobod",
     // FOOTER
     "footer.brand":     "Buyuk Ipak Yo'lining ta'mlari",
-    "footer.copy":      "© 2024 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li",
+    "footer.copy":      "© 2025 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li",
     // GALLERY
     "gallery.label": "Bizning",
     "gallery.title": "Galereya",
@@ -362,7 +362,7 @@ const TRANSLATIONS = {
     "contact.telegram": "Telegram бот",
     "map.label":        "Ташкент · Юнусабад",
     "footer.brand":     "Вкусы Великого Шёлкового пути",
-    "footer.copy":      "© 2024 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li",
+    "footer.copy":      "© 2025 Rayyon Restoran · Neo-Sharq · Kiber-Ipak Yo'li",
     // GALLERY
     "gallery.label": "Наша",
     "gallery.title": "Галерея",
@@ -610,7 +610,7 @@ const TRANSLATIONS = {
     "contact.telegram": "Telegram bot",
     "map.label":        "Tashkent · Yunusabad",
     "footer.brand":     "Flavors of the Great Silk Road",
-    "footer.copy":      "© 2024 Rayyon Restaurant · Neo-Sharq · Cyber Silk Road",
+    "footer.copy":      "© 2025 Rayyon Restaurant · Neo-Sharq · Cyber Silk Road",
     // GALLERY
     "gallery.label": "Our",
     "gallery.title": "Gallery",

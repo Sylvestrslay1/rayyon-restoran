@@ -129,7 +129,9 @@ function formatPrice(p) {
 async function loadMenuFromAPI() {
   try {
     const res  = await fetch(`${API_BASE}/api/menu`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('Not array');
     menuItems  = data.filter(i => i.available).map(i => ({
       id: i.id, name: i.name, category: i.category,
       emoji: i.emoji || '🍽', desc: i.description || '',
@@ -201,6 +203,7 @@ async function loadGallery() {
   if (!grid) return;
   try {
     const res   = await fetch(`${API_BASE}/api/gallery?active=1`);
+    if (!res.ok) return;
     const items = await res.json();
     if (!Array.isArray(items) || !items.length) return;
     const colors = ['#0a1628,#1a3a6e','#0d1f3c,#0a2463','#050d20,#0a1628','#0a2463,#0d1f3c','#030810,#0a1628','#0d1629,#1a3a6e'];
@@ -231,6 +234,7 @@ async function loadPromos() {
   if (!grid) return;
   try {
     const res   = await fetch(`${API_BASE}/api/promotions?active=1`);
+    if (!res.ok) return;
     const items = await res.json();
     if (!Array.isArray(items) || !items.length) return;
     grid.innerHTML = items.map(p => `
@@ -264,7 +268,7 @@ async function initTableSession() {
   // Token tekshirish
   if (token) {
     try {
-      const res  = await fetch(`${API_BASE}/api/session/validate?token=${token}`);
+      const res  = await fetch(`${API_BASE}/api/session/validate?token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (data.valid) {
         tableSession = { table_number: data.table_number, session_id: data.session_id, token };
@@ -289,7 +293,7 @@ function showTableBanner(num) {
     padding:10px 24px;font-family:'Rajdhani',sans-serif;font-weight:700;
     letter-spacing:2px;font-size:0.85rem;color:#fff;z-index:900;
     display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,212,255,0.3);`;
-  banner.innerHTML = `<span style="color:var(--cyan,#00d4ff);">⊞ STOL #${num}</span>
+  banner.innerHTML = `<span style="color:var(--cyan,#00d4ff);">⊞ STOL #${esc(String(num))}</span>
     <span style="opacity:0.6">|</span>
     <span id="cartCount" style="color:#fff;">Savatcha bo'sh</span>
     <button onclick="openCart()" style="background:rgba(255,255,255,0.15);border:none;
@@ -349,7 +353,7 @@ function createCartModal() {
     <div id="cartItems"></div>
     <div id="cartTotal" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);"></div>
     <div style="margin-top:8px;">
-      <input id="cartNote" type="text" placeholder="Umumiy izoh (masalan: piyozsiz)"
+      <input id="cartNote" type="text" placeholder="Umumiy izoh (masalan: piyozsiz)" maxlength="300"
         style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);
         border-radius:8px;color:#fff;padding:10px 14px;font-family:inherit;font-size:0.9rem;margin-bottom:14px;"/>
       <button onclick="submitCart()" style="width:100%;background:linear-gradient(135deg,#005577,#0099cc);
@@ -381,11 +385,11 @@ function renderCart() {
   el.innerHTML = cart.map((c,i) => `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
         border-bottom:1px solid rgba(255,255,255,0.06);">
-      <span style="font-size:1.8rem;">${c.item.emoji||'🍽'}</span>
+      <span style="font-size:1.8rem;">${esc(c.item.emoji)||'🍽'}</span>
       <div style="flex:1;">
-        <div style="font-weight:600;font-size:0.95rem;">${c.item.name}</div>
+        <div style="font-weight:600;font-size:0.95rem;">${esc(c.item.name)}</div>
         <div style="color:#c8a96e;font-size:0.85rem;">${Number(c.item.price).toLocaleString()} so'm</div>
-        <input type="text" placeholder="Izoh (piyozsiz...)" value="${c.comment}"
+        <input type="text" placeholder="Izoh (piyozsiz...)" value="${esc(c.comment)}"
           onchange="cart[${i}].comment=this.value"
           style="margin-top:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
           border-radius:6px;color:#fff;padding:4px 10px;font-size:0.78rem;width:100%;font-family:inherit;"/>
@@ -449,7 +453,7 @@ function showSuccessModal() {
   div.innerHTML = `<div style="text-align:center;padding:40px;">
     <div style="font-size:4rem;margin-bottom:16px;">✅</div>
     <h2 style="font-family:'Cinzel',serif;color:#00d4ff;letter-spacing:3px;margin-bottom:8px;">BUYURTMA QABUL QILINDI!</h2>
-    <p style="color:rgba(255,255,255,0.5);margin-bottom:24px;">Stol #${tableSession.table_number} · Oshxona tayyorlab beradi</p>
+    <p style="color:rgba(255,255,255,0.5);margin-bottom:24px;">Stol #${esc(String(tableSession.table_number))} · Oshxona tayyorlab beradi</p>
     <button onclick="this.parentElement.parentElement.remove()"
       style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.3);
       color:#00d4ff;padding:12px 32px;border-radius:8px;font-family:'Rajdhani',sans-serif;
@@ -533,10 +537,10 @@ function openOrderModal(id) {
   document.getElementById('orderItemInfo').innerHTML = `
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:14px;
                 background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:8px;">
-      <span style="font-size:2.2rem">${currentItem.emoji}</span>
+      <span style="font-size:2.2rem">${esc(currentItem.emoji)}</span>
       <div>
-        <strong style="font-size:1rem;font-family:'Rajdhani',sans-serif;letter-spacing:1px;">${currentItem.name}</strong>
-        <p style="color:rgba(255,255,255,0.45);font-size:0.82rem;margin-top:2px">${currentItem.desc}</p>
+        <strong style="font-size:1rem;font-family:'Rajdhani',sans-serif;letter-spacing:1px;">${esc(currentItem.name)}</strong>
+        <p style="color:rgba(255,255,255,0.45);font-size:0.82rem;margin-top:2px">${esc(currentItem.desc)}</p>
       </div>
     </div>
   `;

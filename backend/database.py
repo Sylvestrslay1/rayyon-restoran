@@ -13,6 +13,8 @@ if USE_PG:
 
     _u = urlparse(DATABASE_URL)
     _ssl = ssl.create_default_context()
+    # Render.com va Railway kabi cloud provayderlar o'z sertifikatlarini ishlatadi;
+    # CERT_NONE — bu muhitlarda kerak (self-signed sertifikatlar).
     _ssl.check_hostname = False
     _ssl.verify_mode = ssl.CERT_NONE
     PG_PARAMS = dict(
@@ -41,7 +43,10 @@ def execute(conn, sql, params=()):
         # PostgreSQL ? -> %s
         sql = sql.replace("?", "%s")
         sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-        sql = sql.replace("INSERT OR IGNORE", "INSERT")
+        # INSERT OR IGNORE -> INSERT ... ON CONFLICT DO NOTHING
+        if "INSERT OR IGNORE" in sql:
+            sql = sql.replace("INSERT OR IGNORE", "INSERT")
+            sql = sql.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
         sql = sql.replace("INSERT OR REPLACE", "INSERT")
     cur = conn.cursor()
     cur.execute(sql, params)
@@ -59,6 +64,13 @@ def rows_to_list(cur):
 
 def init_db():
     conn = get_conn()
+    try:
+        _init_db_inner(conn)
+    finally:
+        conn.close()
+
+
+def _init_db_inner(conn):
     cur = conn.cursor()
 
     if USE_PG:
@@ -568,7 +580,7 @@ def init_db():
     ]
     # Jadval bo'sh bo'lsagina default taomlarni qo'shamiz
     cur.execute("SELECT COUNT(*) FROM menu")
-    count = cur.fetchone()[0] if USE_PG else cur.fetchone()[0]
+    count = cur.fetchone()[0]
     if count == 0:
         for item in menu_defaults:
             if USE_PG:
@@ -649,6 +661,52 @@ def init_db():
             )
         """)
 
+    # ===== PUSH NOTIFICATIONS =====
+    if USE_PG:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id SERIAL PRIMARY KEY,
+                endpoint TEXT UNIQUE NOT NULL,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                action TEXT NOT NULL,
+                entity TEXT,
+                entity_id INTEGER,
+                user_name TEXT,
+                user_ip TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                endpoint TEXT UNIQUE NOT NULL,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                entity TEXT,
+                entity_id INTEGER,
+                user_name TEXT,
+                user_ip TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
     # ===== MIGRATION: mavjud jadvalga yangi ustunlar qo'shish =====
     migrations = [
         "ALTER TABLE staff ADD COLUMN pin_salt TEXT",
@@ -683,6 +741,29 @@ def init_db():
         except Exception:
             pass  # Ustun allaqachon mavjud
 
+    # ===== PERFORMANCE INDEXES =====
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_order_items_session ON order_items(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_status  ON order_items(status)",
+        "CREATE INDEX IF NOT EXISTS idx_payments_session    ON payments(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_status     ON sessions(status)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_staff    ON attendance(staff_id)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_date     ON attendance(date)",
+        "CREATE INDEX IF NOT EXISTS idx_inv_log_item        ON inventory_log(item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_inv_log_created     ON inventory_log(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_orders_status       ON orders(status)",
+        "CREATE INDEX IF NOT EXISTS idx_reservations_date   ON reservations(date)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_action        ON audit_log(action)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_created       ON audit_log(created_at)",
+    ]
+    for idx_sql in indexes:
+        try:
+            if USE_PG:
+                cur.execute(idx_sql.replace("?", "%s"))
+            else:
+                cur.execute(idx_sql)
+        except Exception:
+            pass
+
     conn.commit()
     cur.close()
-    conn.close()

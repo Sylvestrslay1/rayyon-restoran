@@ -1,6 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Panel — Rayyon</title>
@@ -338,7 +339,86 @@
 
     /* SETTINGS */
     .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 640px) { .settings-grid, .form-row { grid-template-columns: 1fr; } }
+
+    /* ===== MOBILE HAMBURGER ===== */
+    .mob-header {
+      display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(8,15,30,0.98); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-cyan);
+      padding: 12px 16px; align-items: center; gap: 12px;
+    }
+    .mob-header h2 {
+      font-family: 'Cinzel', serif; font-size: 1rem; font-weight: 900;
+      letter-spacing: 3px; flex: 1;
+    }
+    .mob-logo-ray { color: var(--cyan); }
+    .mob-logo-yon { color: var(--gold); }
+    .hamburger-btn {
+      background: none; border: 1px solid var(--border-cyan); color: var(--cyan);
+      width: 36px; height: 36px; border-radius: 4px; cursor: pointer;
+      font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
+    }
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      z-index: 149; backdrop-filter: blur(2px);
+    }
+    .sidebar-overlay.open { display: block; }
+
+    /* ===== RESPONSIVE BREAKPOINTS ===== */
+    @media (max-width: 900px) {
+      .sidebar { width: 200px; }
+      .main { margin-left: 200px; padding: 24px 16px; }
+    }
+
+    @media (max-width: 640px) {
+      /* Sidebar — overlay mode */
+      .sidebar {
+        left: -260px; transition: left 0.28s cubic-bezier(.4,0,.2,1);
+        width: 240px; z-index: 150;
+      }
+      .sidebar.mob-open { left: 0; }
+      .mob-header { display: flex; }
+      .main { margin-left: 0; padding: 72px 12px 16px; }
+
+      /* Tables — horizontal scroll */
+      .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .data-table { min-width: 520px; }
+
+      /* Stats grid — 2 cols on mobile */
+      .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .s-value { font-size: 1.4rem; }
+
+      /* Settings */
+      .settings-grid, .form-row { grid-template-columns: 1fr; }
+
+      /* Modal — full screen on mobile */
+      .modal-box {
+        max-width: 100% !important; width: 100% !important;
+        max-height: 92vh; border-radius: 16px 16px 0 0;
+        position: fixed; bottom: 0; left: 0; right: 0;
+      }
+      .modal-overlay { align-items: flex-end; }
+
+      /* Page header */
+      .page-header h2 { font-size: 1.1rem; }
+
+      /* Button groups wrap */
+      .page-header ~ div, [style*="display:flex"][style*="gap"] { flex-wrap: wrap; }
+
+      /* Accounting page buttons */
+      #page-accounting .acc-period-btn { font-size: 0.75rem; padding: 6px 10px; }
+
+      /* QR grid */
+      #qr-all-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+
+      /* Audit table columns — hide IP on mobile */
+      #audit-body td:nth-child(5), #page-audit thead th:nth-child(5) { display: none; }
+    }
+
+    @media (max-width: 400px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .main { padding: 68px 10px 12px; }
+    }
 
     /* SECTION DIVIDER */
     .cyber-divider {
@@ -400,8 +480,16 @@
 </head>
 <body>
 
+<!-- MOBIL HEADER -->
+<div class="mob-header" id="mobHeader">
+  <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Menyu">☰</button>
+  <h2><span class="mob-logo-ray">RAY</span><span class="mob-logo-yon">YON</span></h2>
+  <span id="mob-page-title" style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;"></span>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
 <!-- SIDEBAR -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebarEl">
   <div class="sidebar-logo">
     <h1><span class="logo-ray">RAY</span><span class="logo-yon">YON</span></h1>
     <p>Admin panel</p>
@@ -464,6 +552,9 @@
     </button>
     <button class="nav-item" data-page="shifts" data-roles="admin,director,accountant,manager">
       <span class="n-icon">💼</span> <span data-i18n="adm.shifts">Smenalar</span>
+    </button>
+    <button class="nav-item" data-page="audit" data-roles="admin,director">
+      <span class="n-icon">📔</span> <span>Audit Log</span>
     </button>
     <button class="nav-item" data-page="settings" data-roles="admin,director">
       <span class="n-icon">⬢</span> <span data-i18n="adm.settings">Sozlamalar</span>
@@ -546,13 +637,26 @@
 
   <!-- RESERVATIONS -->
   <div class="page" id="page-reservations">
-    <div class="page-header">
-      <h2 data-i18n="adm.res.title">Bronlar</h2>
-      <p data-i18n="adm.res.sub">Stol bronlarini boshqarish</p>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><h2 data-i18n="adm.res.title">Bronlar</h2><p data-i18n="adm.res.sub">Stol bronlarini boshqarish</p></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" id="resViewToggle" onclick="toggleResView()">📅 Kalendar</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <!-- Kalendar ko'rinishi -->
+    <div id="res-calendar" style="display:none;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <button class="btn btn-outline btn-sm" onclick="calNav(-1)">◀</button>
+        <span id="cal-title" style="font-size:16px;font-weight:700;color:var(--cyan);min-width:160px;text-align:center;"></span>
+        <button class="btn btn-outline btn-sm" onclick="calNav(1)">▶</button>
+      </div>
+      <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+    </div>
+    <!-- Jadval ko'rinishi -->
+    <div id="res-table-wrap" class="table-wrap">
+      <div id="cal-day-title" style="display:none;margin-bottom:8px;color:var(--gold);font-weight:700;font-size:15px;"></div>
       <table>
-        <thead><tr><th data-i18n="th.id">#</th><th data-i18n="th.name">Ism</th><th data-i18n="th.phone">Telefon</th><th data-i18n="th.date">Sana</th><th data-i18n="th.time">Vaqt</th><th data-i18n="th.guests">Mehmon</th><th data-i18n="th.status">Status</th><th data-i18n="th.action">Amal</th></tr></thead>
+        <thead><tr><th>#</th><th>Ism</th><th>Telefon</th><th>Sana</th><th>Vaqt</th><th>Mehmon</th><th>Status</th><th>Amal</th></tr></thead>
         <tbody id="reservationsBody"></tbody>
       </table>
     </div>
@@ -595,6 +699,7 @@
     </div>
     <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
       <button class="btn-primary" onclick="showTableModal()" data-i18n="adm.tables.add">+ Stol qo'shish</button>
+      <button class="btn-secondary" onclick="showQRModal()">🔲 QR Kodlar</button>
       <div style="display:flex;gap:16px;margin-left:auto;">
         <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#00e676;display:inline-block;"></span><span data-i18n="tbl.free">Bo'sh</span></span>
         <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;"><span style="width:12px;height:12px;border-radius:3px;background:#ff9800;display:inline-block;"></span><span data-i18n="tbl.occupied">Band</span></span>
@@ -642,6 +747,28 @@
     </div>
   </div>
 
+  <!-- BARCHA STOLLAR QR MODAL -->
+  <div class="modal-overlay" id="qrAllModal">
+    <div class="modal-box" style="max-width:860px;width:95vw;">
+      <div class="modal-header">
+        <h3>🔲 Barcha Stollar — QR Kodlar</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-secondary" onclick="printAllQR()" style="font-size:0.8rem;">🖨 Chop etish</button>
+          <button onclick="document.getElementById('qrAllModal').classList.remove('open')">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--muted);font-size:0.82rem;margin-bottom:16px;">
+          Har bir QR kod skanerdan o'tkazilganda stol menyu sahifasiga yo'naltiradi.
+          Jismoniy stollarga yopishtirib qo'ying.
+        </p>
+        <div id="qr-all-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px;">
+          <div style="color:var(--muted);text-align:center;padding:40px;grid-column:1/-1;">Yuklanmoqda…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- XODIMLAR PAGE -->
   <div class="page" id="page-staff">
     <div class="page-header">
@@ -652,7 +779,8 @@
       <button class="btn-primary" onclick="showStaffModal()" data-i18n="adm.staff.add">+ Xodim qo'shish</button>
       <button class="btn-secondary" onclick="loadAttendance()" data-i18n="adm.staff.attend">📋 Bugungi davomot</button>
       <button class="btn-secondary" onclick="loadPayroll()" style="margin-left:auto;" data-i18n="adm.staff.payroll">💰 Maosh hisoblash</button>
-      <a class="btn-secondary" href="/api/export/staff" style="text-decoration:none;display:inline-flex;align-items:center;" data-i18n="btn.csv">⬇ CSV</a>
+      <a class="btn-secondary" href="/api/export/staff" style="text-decoration:none;display:inline-flex;align-items:center;">⬇ Xodimlar CSV</a>
+      <a class="btn-secondary" href="/api/export/attendance" style="text-decoration:none;display:inline-flex;align-items:center;">⬇ Davomot CSV</a>
     </div>
     <div class="table-wrap" style="margin-bottom:20px;">
       <table class="data-table">
@@ -803,8 +931,10 @@
       <button class="acc-period-btn" data-period="weekly" data-i18n="period.week">Hafta</button>
       <button class="acc-period-btn" data-period="monthly" data-i18n="period.month">Oy</button>
       <span style="flex:1"></span>
-      <a class="btn-secondary" id="export-payments-link" href="#" onclick="exportPayments(event)" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;" data-i18n="acc.csv.payments">⬇ To'lovlar CSV</a>
-      <a class="btn-secondary" href="/api/export/sessions" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;" data-i18n="acc.csv.sessions">⬇ Sessiyalar CSV</a>
+      <a class="btn-secondary" id="export-payments-link" href="#" onclick="exportPayments(event)" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ To'lovlar CSV</a>
+      <a class="btn-secondary" href="/api/export/sessions" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Sessiyalar CSV</a>
+      <a class="btn-secondary" href="/api/export/expenses" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Chiqimlar CSV</a>
+      <a class="btn-secondary" href="/api/export/orders" style="text-decoration:none;display:inline-flex;align-items:center;font-size:0.8rem;">⬇ Buyurtmalar CSV</a>
     </div>
     <!-- Statistika kartalar -->
     <div class="stats-grid" style="margin-bottom:24px;">
@@ -1074,6 +1204,57 @@
     </div>
   </div>
 
+  <!-- ===== AUDIT LOG ===== -->
+  <div class="page" id="page-audit">
+    <div class="page-header">
+      <h2>📔 Audit Log</h2>
+      <p>Barcha muhim amallar tarixi — kim, qachon, nima qildi</p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+      <select id="audit-filter-action" style="background:var(--card);color:#fff;border:1px solid var(--border);padding:8px 12px;border-radius:6px;font-size:0.85rem;">
+        <option value="">Barcha amallar</option>
+        <option value="login">Kirish</option>
+        <option value="logout">Chiqish</option>
+        <option value="payment">To'lov</option>
+        <option value="void">Void</option>
+        <option value="menu_add">Menu qo'shish</option>
+        <option value="menu_update">Menu yangilash</option>
+        <option value="menu_delete">Menu o'chirish</option>
+        <option value="staff_add">Xodim qo'shish</option>
+        <option value="staff_update">Xodim yangilash</option>
+        <option value="staff_delete">Xodim o'chirish</option>
+        <option value="expense_add">Chiqim qo'shish</option>
+        <option value="expense_delete">Chiqim o'chirish</option>
+      </select>
+      <button class="btn-secondary" onclick="loadAuditLog()">🔄 Yangilash</button>
+      <a class="btn-secondary" href="/api/export/audit" style="text-decoration:none;display:inline-flex;align-items:center;">⬇ CSV eksport</a>
+      <span id="audit-count" style="color:var(--muted);font-size:0.8rem;margin-left:auto;"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Amal</th>
+            <th>Ob'ekt</th>
+            <th>Foydalanuvchi</th>
+            <th>IP</th>
+            <th>Tafsilot</th>
+            <th>Vaqt</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body">
+          <tr class="empty-row"><td colspan="7">Yuklanmoqda…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+      <button class="btn-secondary" id="audit-prev" onclick="auditPage(-1)" disabled>‹ Oldingi</button>
+      <span id="audit-page-info" style="color:var(--muted);font-size:0.85rem;padding:0 8px;"></span>
+      <button class="btn-secondary" id="audit-next" onclick="auditPage(1)">Keyingi ›</button>
+    </div>
+  </div>
+
   <div class="page" id="page-settings">
     <div class="page-header"><h2 data-i18n="adm.set.title">Sozlamalar</h2><p data-i18n="adm.set.sub">Restoran ma'lumotlari va xavfsizlik</p></div>
     <div class="table-wrap" style="padding:28px;">
@@ -1216,6 +1397,8 @@ setInterval(checkTokenValidity, 15 * 60 * 1000); // 15 daqiqada bir
 
 function priceFmt(p) { return Number(p).toLocaleString('uz-UZ') + " so'm"; }
 function timeFmt(s)  { if (!s) return '—'; return s.slice(0,16).replace('T',' '); }
+// showToast — toast() ning taxallusi (stollar va boshqa sahifalar uchun)
+function showToast(msg, isError=false) { toast(msg, !isError); }
 // XSS himoya: barcha user ma'lumotlari innerHTML ga kirishdan oldin esc() orqali o'tkazilishi shart
 function esc(s) {
   return String(s == null ? '' : s)
@@ -1293,12 +1476,30 @@ function applyRoleFilter() {
 }
 
 // NAV
+// ===== MOBIL SIDEBAR =====
+function toggleSidebar() {
+  const sb = document.getElementById('sidebarEl');
+  const ov = document.getElementById('sidebarOverlay');
+  const open = sb.classList.toggle('mob-open');
+  ov.classList.toggle('open', open);
+  document.getElementById('hamburgerBtn').textContent = open ? '✕' : '☰';
+}
+function closeSidebar() {
+  document.getElementById('sidebarEl').classList.remove('mob-open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+  document.getElementById('hamburgerBtn').textContent = '☰';
+}
+
 document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    // Mobilda sidebar yopiladi
+    const titleEl = document.getElementById('mob-page-title');
+    if (titleEl) titleEl.textContent = btn.querySelector('span:last-child')?.textContent || '';
+    closeSidebar();
     loadPage(btn.dataset.page);
   });
 });
@@ -1308,6 +1509,7 @@ function loadPage(p) {
   else if (p==='reservations') loadReservations();
   else if (p==='menu')   { if (allMenuItems.length) renderMenuGrid(); loadMenu(); }
   else if (p==='news')   loadNews();
+  else if (p==='audit')    loadAuditLog();
   else if (p==='settings') loadSettings();
   else if (p==='tables')     loadTables();
   else if (p==='staff')      loadStaff();
@@ -1355,7 +1557,9 @@ async function loadOrders() {
   const status = document.getElementById('orderFilter').value;
   const url = status ? `${API}/api/orders?status=${status}` : `${API}/api/orders`;
   const r = await fetch(url, { headers: H() });
-  const orders = await r.json();
+  if (!r.ok) { toast('Buyurtmalar yuklanmadi', false); return; }
+  const json = await r.json();
+  const orders = Array.isArray(json) ? json : (json.data || []);
   const tbody = document.getElementById('ordersBody');
   if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${t('empty.orders')}</td></tr>`; return; }
   tbody.innerHTML = orders.map(o => `<tr>
@@ -1377,11 +1581,27 @@ async function loadOrders() {
 document.getElementById('orderFilter').addEventListener('change', loadOrders);
 
 // RESERVATIONS
+let _allReservations = [];
+let _calDate = new Date();
+let _resCalMode = false;
+
 async function loadReservations() {
   const r = await fetch(`${API}/api/reservations`, { headers: H() });
-  const rows = await r.json();
+  if (!r.ok) { toast('Bronlar yuklanmadi', false); return; }
+  const resJson = await r.json();
+  _allReservations = Array.isArray(resJson) ? resJson : (resJson.data || []);
+  if (_resCalMode) {
+    renderCalendar();
+  } else {
+    renderResTable(_allReservations);
+  }
+}
+
+function renderResTable(rows, dayTitle) {
   const tbody = document.getElementById('reservationsBody');
-  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">${t('empty.res')}</td></tr>`; return; }
+  const titleEl = document.getElementById('cal-day-title');
+  if (titleEl) { titleEl.style.display = dayTitle ? 'block' : 'none'; if (dayTitle) titleEl.textContent = dayTitle; }
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">Bronlar yo'q</td></tr>`; return; }
   tbody.innerHTML = rows.map(row => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${row.id}</td>
     <td>${esc(row.customer_name)}</td><td>${esc(row.customer_phone)}</td>
@@ -1395,6 +1615,82 @@ async function loadReservations() {
       toast(t('toast.updated'));
     });
   });
+}
+
+function toggleResView() {
+  _resCalMode = !_resCalMode;
+  const btn = document.getElementById('resViewToggle');
+  const cal = document.getElementById('res-calendar');
+  if (_resCalMode) {
+    cal.style.display = 'block';
+    btn.textContent = '☰ Jadval';
+    renderCalendar();
+  } else {
+    cal.style.display = 'none';
+    btn.textContent = '📅 Kalendar';
+    renderResTable(_allReservations);
+  }
+}
+
+function calNav(dir) {
+  _calDate = new Date(_calDate.getFullYear(), _calDate.getMonth() + dir, 1);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const y = _calDate.getFullYear(), m = _calDate.getMonth();
+  const months = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+  document.getElementById('cal-title').textContent = `${months[m]} ${y}`;
+
+  // Bu oyga tegishli bronlarni sana bo'yicha guruhlash
+  const byDay = {};
+  _allReservations.forEach(r => {
+    if (!r.date) return;
+    const d = r.date.slice(0, 10);
+    const [ry, rm] = d.split('-').map(Number);
+    if (ry === y && rm === m + 1) {
+      (byDay[d] = byDay[d] || []).push(r);
+    }
+  });
+
+  const firstDow = new Date(y, m, 1).getDay(); // 0=Yak
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const days = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
+
+  let html = days.map(d => `<div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.5);padding:4px;">${d}</div>`).join('');
+  // Boshlang'ich bo'sh kataklar
+  const startOffset = (firstDow + 6) % 7; // Dushanba = 0
+  for (let i = 0; i < startOffset; i++) html += '<div></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const recs = byDay[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const hasBron = recs.length > 0;
+    html += `<div onclick="calDayClick('${dateStr}',${recs.length})" style="
+      cursor:${hasBron?'pointer':'default'};
+      border-radius:8px;padding:6px 4px;text-align:center;font-size:13px;
+      background:${hasBron?'rgba(0,212,255,0.15)':'rgba(255,255,255,0.03)'};
+      border:1px solid ${isToday?'var(--gold)':hasBron?'var(--cyan)':'rgba(255,255,255,0.07)'};
+      color:${isToday?'var(--gold)':hasBron?'var(--cyan)':'rgba(255,255,255,0.7)'};
+      font-weight:${isToday||hasBron?'700':'400'};
+      min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    ">
+      <span>${d}</span>
+      ${hasBron?`<span style="font-size:10px;background:var(--cyan);color:#000;border-radius:10px;padding:0 5px;">${recs.length}</span>`:''}
+    </div>`;
+  }
+  document.getElementById('cal-grid').innerHTML = html;
+  // Jadvalda barcha bronlarni ko'rsatamiz
+  renderResTable(_allReservations);
+}
+
+function calDayClick(dateStr, count) {
+  if (!count) return;
+  const dayRecs = _allReservations.filter(r => r.date && r.date.slice(0,10) === dateStr);
+  const [y, m, d] = dateStr.split('-');
+  renderResTable(dayRecs, `${d}.${m}.${y} — ${count} ta bron`);
 }
 
 // MENU
@@ -1495,11 +1791,12 @@ document.getElementById('menuModalSave').addEventListener('click', async () => {
     description: document.getElementById('mDesc').value, available: document.getElementById('mAvailable').checked ? 1 : 0,
     image: prev.style.display !== 'none' ? (prev.dataset.url || null) : null,
   };
-  const r = await fetch(id ? `${API}/api/menu/${id}` : `${API}/api/menu`,
-    { method: id ? 'PUT' : 'POST', headers: H(), body: JSON.stringify(payload) });
+  const r = await apiFetch(id ? `${API}/api/menu/${id}` : `${API}/api/menu`,
+    { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+  if (!r) return;
   const d = await r.json();
   if (d.ok) { toast(t(id ? 'toast.saved' : 'toast.added')); document.getElementById('menuModal').classList.remove('open'); loadMenu(); }
-  else toast(t('toast.error'), false);
+  else toast(d.error || t('toast.error'), false);
 });
 async function deleteMenu(id, name) {
   if (!confirm(`"${name}" o'chirasizmi?`)) return;
@@ -1559,13 +1856,18 @@ document.getElementById('newsImageFile').addEventListener('change', async e => {
 document.getElementById('newsModalSave').addEventListener('click', async () => {
   const id = document.getElementById('newsId').value;
   const payload = { title: document.getElementById('nTitle').value, content: document.getElementById('nContent').value, active: document.getElementById('nActive').checked?1:0, image: newsImageUrl };
-  const r = await fetch(id ? `${API}/api/news/${id}` : `${API}/api/news`, { method:id?'PUT':'POST', headers:H(), body:JSON.stringify(payload) });
-  if ((await r.json()).ok) { toast(t(id?'toast.saved':'toast.added')); document.getElementById('newsModal').classList.remove('open'); loadNews(); }
-  else toast(t('toast.error'), false);
+  const r = await apiFetch(id ? `${API}/api/news/${id}` : `${API}/api/news`, { method:id?'PUT':'POST', body:JSON.stringify(payload) });
+  if (!r) return;
+  const d = await r.json();
+  if (d.ok) { toast(t(id?'toast.saved':'toast.added')); document.getElementById('newsModal').classList.remove('open'); loadNews(); }
+  else toast(d.error || t('toast.error'), false);
 });
 async function deleteNews(id) {
   if (!confirm('Bu yangilikni o\'chirasizmi?')) return;
-  if ((await (await fetch(`${API}/api/news/${id}`,{method:'DELETE',headers:H()})).json()).ok) { toast(t('toast.deleted')); loadNews(); }
+  const r = await fetch(`${API}/api/news/${id}`, { method:'DELETE', headers:H() });
+  const d = await r.json().catch(()=>({}));
+  if (d.ok) { toast(t('toast.deleted')); loadNews(); }
+  else toast(d.error || t('toast.error'), false);
 }
 
 // SETTINGS
@@ -1737,11 +2039,14 @@ async function applyDiscount(sid) {
 async function closeSession(sid, tableId) {
   const amount = parseInt(document.getElementById('tsm-amount').value)||0;
   const method = document.getElementById('tsm-method').value;
-  await fetch(`${API}/api/session/${sid}/close`, {
+  const adminName = localStorage.getItem('staff_name') || 'Admin';
+  const r = await fetch(`${API}/api/session/${sid}/close`, {
     method:'POST', headers:H(),
-    body:JSON.stringify({payments:[{amount, method}]})
+    body:JSON.stringify({payments:[{amount, method}], cashier_name: adminName})
   });
-  closeTSM(); showToast('Sessiya yopildi ✓'); loadTables();
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { toast(d.error || 'Yopishda xato', false); return; }
+  closeTSM(); toast('Sessiya yopildi ✓'); loadTables();
 }
 
 function closeTSM() { document.getElementById('tableSessionModal').classList.remove('open'); }
@@ -1816,17 +2121,78 @@ function downloadQR() {
   a.click();
 }
 
+async function showQRModal() {
+  document.getElementById('qrAllModal').classList.add('open');
+  const grid = document.getElementById('qr-all-grid');
+  grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px;grid-column:1/-1;">Yuklanmoqda…</div>';
+
+  const r = await fetch(`${API}/api/tables`, { headers: H() });
+  if (!r.ok) { grid.innerHTML = '<div style="color:#ff5757;text-align:center;grid-column:1/-1;">Xato: stollar yuklanmadi</div>'; return; }
+  const tables = await r.json();
+  if (!tables.length) {
+    grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px;grid-column:1/-1;">Stollar yo\'q. Avval stol qo\'shing.</div>';
+    return;
+  }
+
+  grid.innerHTML = tables.map(t => {
+    const url = `${SITE_URL}/?table=${t.number}`;
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=000000&margin=10`;
+    const statusColor = t.status === 'free' ? '#00e676' : t.status === 'occupied' ? '#ff9800' : '#ff4444';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+      <div style="background:#fff;padding:6px;border-radius:6px;display:inline-block;margin-bottom:8px;">
+        <img src="${qrSrc}" width="130" height="130" alt="QR Stol #${t.number}" loading="lazy"
+             style="display:block;" data-url="${url}" data-num="${t.number}"/>
+      </div>
+      <div style="font-weight:700;color:#fff;font-size:1rem;margin-bottom:2px;">Stol #${t.number}</div>
+      ${t.name ? `<div style="color:var(--muted);font-size:0.78rem;margin-bottom:4px;">${esc(t.name)}</div>` : ''}
+      <div style="font-size:0.72rem;margin-bottom:8px;">
+        <span style="background:${statusColor}22;color:${statusColor};padding:2px 8px;border-radius:4px;">${t.status==='free'?'Bo\'sh':t.status==='occupied'?'Band':'Hisob'}</span>
+      </div>
+      <button class="btn-secondary" style="width:100%;font-size:0.75rem;padding:5px;"
+        onclick="(function(){const a=document.createElement('a');a.href='${qrSrc}';a.download='stol-${t.number}-qr.png';a.click();})()">
+        ⬇ Yuklab olish
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function printAllQR() {
+  const tables = document.querySelectorAll('#qr-all-grid img');
+  if (!tables.length) return;
+  const rows = Array.from(tables).map(img => {
+    const num = img.dataset.num;
+    const url = img.dataset.url;
+    return `<div style="display:inline-block;text-align:center;margin:12px;padding:16px;border:2px solid #000;border-radius:8px;width:160px;">
+      <img src="${img.src}" width="140" height="140" style="display:block;margin:0 auto 8px;"/>
+      <div style="font-size:1.1rem;font-weight:bold;">Stol #${num}</div>
+      <div style="font-size:0.6rem;word-break:break-all;color:#555;margin-top:4px;">${url}</div>
+    </div>`;
+  }).join('');
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>QR Kodlar</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;} @media print{button{display:none!important}}</style>
+    </head><body>
+    <div style="text-align:center;margin-bottom:20px;">
+      <h2 style="margin:0;">Rayyon Restoran — Stol QR Kodlar</h2>
+      <p style="color:#666;font-size:0.85rem;">Har bir kartochkani qirqib, stolingizga yopishtirib qo'ying</p>
+      <button onclick="window.print()" style="padding:8px 20px;font-size:1rem;cursor:pointer;margin-top:8px;">🖨 Chop etish</button>
+    </div>
+    <div style="text-align:center;">${rows}</div>
+    </body></html>`);
+  win.document.close();
+}
+
 // ===== XODIMLAR =====
 let editingStaffId = null;
+const roleNames = {
+  director:'Direktor', accountant:'Buxgalter', manager:'Menejer',
+  chef:'Bosh oshpaz', cashier:'Kassir', waiter:'Ofitsiant',
+  kitchen:'Oshxona (KDS)', cook:'Oshpaz', cleaner:'Tozalovchi'
+};
 
 async function loadStaff() {
   const res = await fetch(`${API}/api/staff`, { headers: H() });
   const list = await res.json();
-  const roleNames = {
-    director:'Direktor', accountant:'Buxgalter', manager:'Menejer',
-    chef:'Bosh oshpaz', cashier:'Kassir', waiter:'Ofitsiant',
-    kitchen:'Oshxona (KDS)', cook:'Oshpaz', cleaner:'Tozalovchi'
-  };
   const tbody = document.getElementById('staff-body');
   tbody.innerHTML = list.length ? list.map(s=>`<tr>
     <td style="color:var(--cyan)">#${s.id}</td>
@@ -1845,7 +2211,8 @@ async function loadStaff() {
 async function loadAttendance() {
   const wrap = document.getElementById('attendance-wrap');
   const res  = await fetch(`${API}/api/attendance?date=${new Date().toISOString().slice(0,10)}`, {headers:H()});
-  const list = await res.json();
+  const attJson = await res.json();
+  const list = Array.isArray(attJson) ? attJson : (attJson.data || []);
   const tbody = document.getElementById('att-body');
   const fmt   = dt => dt ? new Date(dt).toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'}) : '—';
   tbody.innerHTML = list.length ? list.map(a=>`<tr>
@@ -1912,8 +2279,9 @@ async function saveStaff() {
     salary_amount: parseInt(document.getElementById('staff-salary').value)||0,
     active: 1,
   };
-  if (!data.name) { showToast('Ism kiriting!',true); return; }
-  if (!editingStaffId && !data.pin) { showToast('PIN kiriting!',true); return; }
+  if (!data.name) { toast('Ism kiriting!', false); return; }
+  if (!editingStaffId && !data.pin) { toast('PIN kiriting!', false); return; }
+  if (data.pin && data.pin.length < 4) { toast('PIN kamida 4 raqam bo\'lishi kerak!', false); return; }
   if (editingStaffId) {
     await fetch(`${API}/api/staff/${editingStaffId}`,{method:'PUT',headers:H(),body:JSON.stringify(data)});
   } else {
@@ -1993,9 +2361,10 @@ async function saveGallery() {
 }
 async function deleteGallery(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/gallery/${id}`, { method:'DELETE', headers:H() });
-  showToast('O\'chirildi');
-  loadGalleryAdmin();
+  const r = await fetch(`${API}/api/gallery/${id}`, { method:'DELETE', headers:H() });
+  const d = await r.json().catch(()=>({}));
+  if (d.ok) { toast('O\'chirildi'); loadGalleryAdmin(); }
+  else toast(d.error || t('toast.error'), false);
 }
 
 // ===== AKSIYALAR ADMIN =====
@@ -2066,17 +2435,18 @@ async function savePromo() {
 }
 async function deletePromo(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/promotions/${id}`, { method:'DELETE', headers:H() });
-  showToast('O\'chirildi');
-  loadPromosAdmin();
+  const r = await fetch(`${API}/api/promotions/${id}`, { method:'DELETE', headers:H() });
+  const d = await r.json().catch(()=>({}));
+  if (d.ok) { toast('O\'chirildi'); loadPromosAdmin(); }
+  else toast(d.error || t('toast.error'), false);
 }
 
 // ===== BUXGALTERIYA =====
 let accPeriod = 'daily';
 
-document.querySelectorAll('.acc-period-btn').forEach(btn => {
+document.querySelectorAll('#page-accounting .acc-period-btn').forEach(btn => {
   btn.addEventListener('click', function() {
-    document.querySelectorAll('.acc-period-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#page-accounting .acc-period-btn').forEach(b => b.classList.remove('active'));
     this.classList.add('active');
     accPeriod = this.dataset.period;
     loadAccounting();
@@ -2096,8 +2466,10 @@ async function loadAccounting() {
     fetch(`${API}/api/inventory`, { headers: H() }),
   ]);
   const rep = await repRes.json();
-  const expenses = await expRes.json();
-  const inventory = await invRes.json();
+  const expJson = await expRes.json();
+  const invJson = await invRes.json();
+  const expenses  = Array.isArray(expJson) ? expJson : (expJson.data || []);
+  const inventory = Array.isArray(invJson) ? invJson : (invJson.data || []);
 
   document.getElementById('acc-revenue').textContent  = priceFmt(rep.revenue || 0);
   document.getElementById('acc-expenses').textContent = priceFmt(rep.expenses || 0);
@@ -2248,7 +2620,8 @@ async function loadRecipesPage() {
     fetch(`${API}/api/recipes`, { headers: H() })
   ]);
   recipeMenuItems = await menuRes.json();
-  allInventoryItems = await invRes.json();
+  const recInvJson = await invRes.json();
+  allInventoryItems = Array.isArray(recInvJson) ? recInvJson : (recInvJson.data || []);
   const allRecipes = await recRes.json();
   renderRecipeMenuList();
   renderAllRecipes(allRecipes);
@@ -2445,7 +2818,14 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 loadDashboard();
 loadMenu();
 applyRoleFilter();
-setInterval(loadDashboard, 30000);
+// Dashboard fallback refresh — SSE ishlamasa ham yangilanib turadi
+let _dashTimer = null;
+function startDashTimer() {
+  if (!_dashTimer) _dashTimer = setInterval(() => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
+  }, 30000);
+}
+startDashTimer();
 
 // ===== BRONLAR AUTO-REFRESH =====
 let lastResCount = 0;
@@ -2469,6 +2849,77 @@ async function autoRefreshReservations() {
   } catch(e) {}
 }
 setInterval(autoRefreshReservations, 15000);
+
+// ===== AUDIT LOG =====
+let _auditOffset = 0;
+const _auditLimit = 50;
+let _auditLastCount = 0;
+
+async function loadAuditLog(resetPage = true) {
+  if (resetPage) _auditOffset = 0;
+  const action = document.getElementById('audit-filter-action').value;
+  let url = `${API}/api/audit?limit=${_auditLimit}&offset=${_auditOffset}`;
+  if (action) url += `&action=${encodeURIComponent(action)}`;
+  const r = await fetch(url, { headers: H() });
+  if (!r.ok) { toast('Audit log yuklanmadi', false); return; }
+  const json = await r.json();
+  const rows = json.data || [];
+  _auditLastCount = json.count || rows.length;
+
+  const actionLabels = {
+    login:'🔑 Kirish', logout:'🚪 Chiqish', payment:'💳 To\'lov', void:'🚫 Void',
+    menu_add:'➕ Menu', menu_update:'✏ Menu', menu_delete:'🗑 Menu',
+    staff_add:'👤➕ Xodim', staff_update:'👤✏ Xodim', staff_delete:'👤🗑 Xodim',
+    expense_add:'💸➕ Chiqim', expense_delete:'💸🗑 Chiqim',
+  };
+  const actionColors = {
+    login:'var(--cyan)', logout:'var(--muted)', payment:'var(--gold)',
+    void:'#ff5757', menu_add:'#00c48c', menu_update:'var(--gold)', menu_delete:'#ff5757',
+    staff_add:'#00c48c', staff_update:'var(--gold)', staff_delete:'#ff5757',
+    expense_add:'#ff8c42', expense_delete:'#ff5757',
+  };
+
+  const tbody = document.getElementById('audit-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Yozuvlar yo\'q</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map(row => {
+      let details = '';
+      if (row.details) {
+        try {
+          const d = JSON.parse(row.details);
+          details = Object.entries(d).map(([k,v]) =>
+            `<span style="color:var(--muted);font-size:0.78rem">${k}:</span> <b>${esc(String(v))}</b>`
+          ).join(' · ');
+        } catch { details = esc(row.details); }
+      }
+      const label = actionLabels[row.action] || row.action;
+      const color = actionColors[row.action] || '#fff';
+      return `<tr>
+        <td style="color:var(--muted);font-size:0.8rem">#${row.id}</td>
+        <td><span style="color:${color};font-weight:600;font-size:0.85rem">${label}</span></td>
+        <td style="color:#aaa;font-size:0.82rem">${esc(row.entity||'—')}${row.entity_id ? ' #'+row.entity_id : ''}</td>
+        <td style="color:var(--cyan);font-size:0.85rem">${esc(row.user_name||'—')}</td>
+        <td style="color:var(--muted);font-size:0.75rem">${esc(row.user_ip||'—')}</td>
+        <td style="font-size:0.8rem">${details||'—'}</td>
+        <td style="color:var(--muted);font-size:0.78rem">${timeFmt(row.created_at)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const page = Math.floor(_auditOffset / _auditLimit) + 1;
+  document.getElementById('audit-count').textContent = `${_auditOffset+1}–${_auditOffset+rows.length} yozuv`;
+  document.getElementById('audit-page-info').textContent = `Sahifa ${page}`;
+  document.getElementById('audit-prev').disabled = _auditOffset === 0;
+  document.getElementById('audit-next').disabled = rows.length < _auditLimit;
+}
+
+function auditPage(dir) {
+  _auditOffset = Math.max(0, _auditOffset + dir * _auditLimit);
+  loadAuditLog(false);
+}
+
+document.getElementById('audit-filter-action').addEventListener('change', () => loadAuditLog(true));
 
 // ===== SMENALAR =====
 async function loadShifts(statusFilter, btnEl) {
@@ -2506,7 +2957,8 @@ async function loadShifts(statusFilter, btnEl) {
 let inventoryData = [];
 async function loadInventoryPage() {
   const r = await fetch(`${API}/api/inventory`, { headers: H() });
-  const items = await r.json();
+  const invPageJson = await r.json();
+  const items = Array.isArray(invPageJson) ? invPageJson : (invPageJson.data || []);
   inventoryData = items;
   const tbody = document.getElementById('inv-body');
   const lowDiv = document.getElementById('inv-low-stock');
@@ -2671,9 +3123,12 @@ window.addEventListener('langchange', () => {
   if (typeof renderTables === 'function' && tablesData && tablesData.length) renderTables();
 });
 
-// SSE — admin panelda real-time yangilanish
-(function initAdminSSE() {
+// SSE — admin panelda real-time yangilanish (reconnect da eski ulanish yopiladi)
+let _adminSSE = null;
+function initAdminSSE() {
+  if (_adminSSE) { _adminSSE.close(); _adminSSE = null; }
   const es = new EventSource('/api/events');
+  _adminSSE = es;
   es.addEventListener('new_order', () => {
     if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
     if (document.getElementById('page-tables').classList.contains('active')) loadTables();
@@ -2684,7 +3139,8 @@ window.addEventListener('langchange', () => {
   es.onerror = () => {
     if (es.readyState === EventSource.CLOSED) setTimeout(initAdminSSE, 5000);
   };
-})();
+}
+initAdminSSE();
 </script>
 </body>
 </html>

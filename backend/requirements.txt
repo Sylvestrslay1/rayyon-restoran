@@ -4,3 +4,5 @@ flask-limiter==3.5.0
 werkzeug==3.0.1
 gunicorn==21.2.0
 pg8000==1.30.5
+redis==5.0.8
+pywebpush==2.0.3

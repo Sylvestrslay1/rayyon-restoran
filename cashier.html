@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#d4af37">
@@ -252,6 +253,7 @@
       🧾 Chek
       <div style="display:flex;gap:8px">
         <button class="btn btn-outline btn-sm" onclick="printReceipt()">🖨 Chop etish</button>
+        <button class="btn btn-outline btn-sm" onclick="printThermal()" id="thermal-btn" title="ESC/POS termal printer">🖨 Termal</button>
         <button class="close-btn" onclick="closeModal('receipt-modal')">✕</button>
       </div>
     </div>
@@ -365,20 +367,24 @@ function showMain() {
   document.getElementById('cashier-name-lbl').textContent = CASHIER;
   document.getElementById('shift-badge').textContent = `Smena #${SHIFT_ID}`;
   loadTables();
-  // SSE — real-time stol yangilash
+  // SSE — real-time stol yangilash (fallback: setInterval faqat SSE ishlamasa)
+  let _fallbackTimer = null;
   const _ces = new EventSource('/api/events');
   _ces.addEventListener('new_order', () => loadTables());
   _ces.addEventListener('item_ready', () => loadTables());
-  _ces.onerror = () => {
-    if (_ces.readyState === EventSource.CLOSED) setInterval(loadTables, 30000);
+  const _startFallback = () => {
+    if (!_fallbackTimer) _fallbackTimer = setInterval(loadTables, 30000);
   };
-  setTimeout(() => { if (_ces.readyState !== EventSource.OPEN) setInterval(loadTables, 30000); }, 3000);
+  _ces.onerror = () => {
+    if (_ces.readyState === EventSource.CLOSED) { _ces.close(); _startFallback(); }
+  };
+  setTimeout(() => { if (_ces.readyState !== EventSource.OPEN) _startFallback(); }, 5000);
 }
 function logout() {
   if (!confirm('Tizimdan chiqmoqchimisiz?')) return;
   PIN = ''; CASHIER = null; SHIFT_ID = null; CASHIER_ID = null;
   renderPinDisplay();
-  localStorage.removeItem('staff_pin');
+  sessionStorage.removeItem('staff_pin');
   localStorage.removeItem('staff_role');
   localStorage.removeItem('staff_name');
   localStorage.removeItem('staff_id');
@@ -389,7 +395,7 @@ function logout() {
 
 // staff-login.html dan kelganda PIN ni avtomatik yuborish
 (function autoLoginFromStaffPortal() {
-  const savedPin  = localStorage.getItem('staff_pin');
+  const savedPin  = sessionStorage.getItem('staff_pin');
   const savedRole = localStorage.getItem('staff_role');
   if (savedPin && savedRole === 'cashier') {
     PIN = savedPin;
@@ -441,7 +447,7 @@ let voidItemName = '';
 async function openTable(tableNum, sessionId) {
   if (!sessionId) { showToast('Bu stol bo\'sh'); return; }
   try {
-    const r = await fetch(`${API}/api/receipt/${sessionId}?pin=${encodeURIComponent(PIN)}`);
+    const r = await fetch(`${API}/api/receipt/${sessionId}`, { headers: {'X-Staff-Pin': PIN} });
     const data = await r.json();
     if (!r.ok) { showToast(data.error || 'Xato', 'error'); return; }
     currentSession = data.session;
@@ -548,7 +554,12 @@ function getGrand() {
 }
 
 let customerDisc = 0;
-async function lookupCustomer(phone) {
+let _custLookupTimer = null;
+function lookupCustomer(phone) {
+  clearTimeout(_custLookupTimer);
+  _custLookupTimer = setTimeout(() => _doLookupCustomer(phone), 400);
+}
+async function _doLookupCustomer(phone) {
   const info = document.getElementById('m-cust-info');
   if (!phone || phone.length < 9) { info.textContent=''; customerDisc=0; return; }
   try {
@@ -589,6 +600,7 @@ async function submitPayment() {
     if (cash+card < grand) { showToast('Jami summa yetarli emas', 'error'); reEnable(); return; }
     body.cash_amount = cash; body.card_amount = card; body.amount = cash + card;
   } else if (payMethod === 'card') {
+    if (grand < 1000) { showToast('Karta bilan minimal to\'lov: 1 000 so\'m', 'error'); reEnable(); return; }
     body.amount = grand;
   } else {
     const cash = parseFloat(document.getElementById('pay-cash')?.value)||0;
@@ -653,7 +665,7 @@ async function confirmVoid() {
 async function openReceipt() {
   if (!currentSession) return;
   try {
-    const r = await fetch(`${API}/api/receipt/${currentSession.id}?pin=${encodeURIComponent(PIN)}`);
+    const r = await fetch(`${API}/api/receipt/${currentSession.id}`, { headers: {'X-Staff-Pin': PIN} });
     const data = await r.json();
     if (!r.ok) { showToast(data.error||'Xato', 'error'); return; }
     renderReceipt(data);
@@ -691,11 +703,84 @@ function renderReceipt(data) {
 }
 function printReceipt() {
   const w = window.open('','_blank');
-  w.document.write('<html><head><title>Chek</title><style>body{font-family:monospace;font-size:13px}.receipt-row{display:flex;justify-content:space-between}</style></head><body>');
+  w.document.write('<html><head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico"><title>Chek</title><style>body{font-family:monospace;font-size:13px}.receipt-row{display:flex;justify-content:space-between}</style></head><body>');
   w.document.write(document.getElementById('receipt-content').innerHTML);
   w.document.write('</body></html>');
   w.document.close();
   w.print();
+}
+
+// ===== ESC/POS TERMAL PRINTER (Web Serial API) =====
+let _thermalPort = null;
+
+async function printThermal() {
+  const content = document.getElementById('receipt-content');
+  if (!content || !content.innerText.trim()) {
+    showToast('Chek ma\'lumoti yo\'q', 'error'); return;
+  }
+  if (!('serial' in navigator)) {
+    showToast('Bu brauzer Web Serial API ni qo\'llamaydi (Chrome kerak)', 'error'); return;
+  }
+  try {
+    if (!_thermalPort) {
+      _thermalPort = await navigator.serial.requestPort();
+      await _thermalPort.open({ baudRate: 9600 });
+    }
+    const data = _buildEscPos(content);
+    const writer = _thermalPort.writable.getWriter();
+    await writer.write(data);
+    writer.releaseLock();
+    showToast('Chek termal printega yuborildi ✓', 'success');
+  } catch (e) {
+    if (e.name !== 'NotFoundError') showToast('Printer xatosi: ' + e.message, 'error');
+    _thermalPort = null;
+  }
+}
+
+function _buildEscPos(el) {
+  const ESC = 0x1B, GS = 0x1D;
+  const cmds = [];
+  const push = (...bytes) => bytes.forEach(b => cmds.push(b));
+  const text = (str) => { for (const c of str) cmds.push(c.charCodeAt(0) & 0xFF); };
+  const lf = () => cmds.push(0x0A);
+
+  // Init
+  push(ESC, 0x40);
+  // Markazlashtirish
+  push(ESC, 0x61, 0x01);
+  // Bold + kattalashtirish
+  push(ESC, 0x21, 0x30);
+  const restName = document.querySelector('.receipt-center b')?.textContent || 'Rayyon Restoran';
+  text(restName); lf();
+  // Normal
+  push(ESC, 0x21, 0x00);
+  text('================================'); lf();
+
+  // Chap hizalama
+  push(ESC, 0x61, 0x00);
+  // Qatorlarni parse qilish
+  const rows = el.querySelectorAll('.receipt-row');
+  rows.forEach(row => {
+    const spans = row.querySelectorAll('span, b');
+    if (spans.length >= 2) {
+      const left  = spans[0].textContent.trim();
+      const right = spans[spans.length-1].textContent.trim();
+      const total = 32;
+      const pad   = Math.max(1, total - left.length - right.length);
+      text(left + ' '.repeat(pad) + right); lf();
+    } else {
+      text(row.textContent.trim()); lf();
+    }
+  });
+
+  push(ESC, 0x61, 0x01);
+  text('================================'); lf();
+  text('Rahmat! Yana keling'); lf(); lf(); lf();
+  // Qog'oz kesish
+  push(GS, 0x56, 0x42, 0x00);
+
+  return new Uint8Array(cmds);
 }
 
 // ===== SHIFT REPORT =====
@@ -740,7 +825,10 @@ function _buildReportHTML(data, forPrint=false) {
   const d = data || _lastReportData;
   if (!d) return '';
   const byM = d.by_method || {};
-  const methodRows = Object.entries(byM).map(([m, s]) =>
+  const methodRows = (Array.isArray(byM)
+    ? byM.map(x => [x.method || x[0], x.total || x[1]])
+    : Object.entries(byM)
+  ).map(([m, s]) =>
     `<tr><td>${m}</td><td style="text-align:right;font-weight:600">${fmt(s)} so'm</td></tr>`
   ).join('');
   const now = new Date().toLocaleString('uz');
@@ -778,7 +866,8 @@ function _buildReportHTML(data, forPrint=false) {
 
 function printShiftReport() {
   const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Smena #${SHIFT_ID} hisoboti</title>
+  w.document.write(`<html><head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico"><title>Smena #${SHIFT_ID} hisoboti</title>
     <style>body{background:#fff;padding:20px}@media print{body{padding:0}}</style>
     </head><body>${_buildReportHTML()}</body></html>`);
   w.document.close();
@@ -791,7 +880,8 @@ async function exportShiftPDF() {
   if (!html) return;
   // jsPDF yo'q — print dialog orqali PDF saqlash
   const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Smena #${SHIFT_ID} hisoboti</title>
+  w.document.write(`<html><head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico"><title>Smena #${SHIFT_ID} hisoboti</title>
     <style>
       body{background:#fff;padding:20px;font-family:monospace}
       @page{size:A5;margin:10mm}
@@ -879,8 +969,12 @@ async function loadPaymentsHistory() {
   if (!SHIFT_ID) { showToast('Smena topilmadi', 'error'); return; }
   const today = new Date().toISOString().slice(0,10);
   const shiftParam = `&shift_id=${SHIFT_ID}`;
-  const r = await fetch(`${API}/api/payments?date=${today}&limit=50${shiftParam}`);
-  const items = await r.json();
+  let r, items;
+  try {
+    r = await fetch(`${API}/api/payments?date=${today}&limit=50${shiftParam}`, { headers: {'X-Staff-Pin': PIN} });
+    items = await r.json();
+  } catch(e) { showToast('To\'lovlar yuklanmadi — ulanish xatosi', 'error'); return; }
+  if (!r.ok) { showToast('To\'lovlar yuklanmadi', 'error'); return; }
   const modal = document.getElementById('payments-history-modal');
   if (!modal) return;
   const body = document.getElementById('payments-history-body');

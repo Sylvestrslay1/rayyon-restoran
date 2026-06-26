@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Xodimlar — Rayyon</title>
@@ -51,6 +52,10 @@ body{background:var(--bg);color:#fff;font-family:'Rajdhani',sans-serif;
     <div class="pin-dot" id="d1"></div>
     <div class="pin-dot" id="d2"></div>
     <div class="pin-dot" id="d3"></div>
+    <div class="pin-dot" id="d4" style="display:none"></div>
+    <div class="pin-dot" id="d5" style="display:none"></div>
+    <div class="pin-dot" id="d6" style="display:none"></div>
+    <div class="pin-dot" id="d7" style="display:none"></div>
   </div>
   <div class="keypad">
     <button class="key" onclick="addPin('1')">1</button>
@@ -71,34 +76,67 @@ body{background:var(--bg);color:#fff;font-family:'Rajdhani',sans-serif;
 
 <script>
 let pin = '';
+const MAX_LEN = 8;
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function updateDots() {
-  for (let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled', i<pin.length);
+  for (let i = 0; i < MAX_LEN; i++) {
+    const el = document.getElementById('d' + i);
+    if (!el) continue;
+    el.style.display = i < Math.max(4, pin.length) ? '' : 'none';
+    el.classList.toggle('filled', i < pin.length);
+  }
 }
+
+let _ciTimer = null;
 function addPin(d) {
-  if (pin.length >= 4) return;
+  if (pin.length >= MAX_LEN) return;
   pin += d; updateDots();
-  if (pin.length === 4) setTimeout(submitPin, 300);
+  if (pin.length >= 4) {
+    clearTimeout(_ciTimer);
+    _ciTimer = setTimeout(submitPin, 500);
+  }
 }
-function delPin() { pin = pin.slice(0,-1); updateDots(); }
+function delPin() {
+  clearTimeout(_ciTimer);
+  pin = pin.slice(0, -1);
+  updateDots();
+}
+
 async function submitPin() {
+  clearTimeout(_ciTimer);
   if (pin.length < 4) return;
-  const res  = await fetch('/api/staff/checkin', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin})
-  });
-  const data = await res.json();
-  const el   = document.getElementById('result');
+  const el = document.getElementById('result');
   el.style.display = 'block';
-  if (data.ok) {
-    el.className = data.action === 'checkin' ? 'result checkin' : 'result checkout';
-    el.innerHTML = data.action === 'checkin'
-      ? 'Xush kelibsiz!<br><strong>' + data.name + '</strong><br><small>' + data.role + '</small>'
-      : 'Xayr!<br><strong>' + data.name + '</strong><br><small>' + data.hours + ' soat ishladi</small>';
-  } else {
+  el.className = 'result';
+  el.textContent = '⏳ Tekshirilmoqda...';
+  try {
+    const res  = await fetch('/api/staff/checkin', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      el.className = data.action === 'checkin' ? 'result checkin' : 'result checkout';
+      el.innerHTML = data.action === 'checkin'
+        ? 'Xush kelibsiz!<br><strong>' + esc(data.name) + '</strong><br><small>' + esc(data.role) + '</small>'
+        : 'Xayr!<br><strong>' + esc(data.name) + '</strong><br><small>' + esc(String(data.hours || 0)) + ' soat ishladi</small>';
+    } else {
+      el.className = 'result error';
+      el.textContent = data.error || "PIN noto'g'ri!";
+    }
+  } catch(e) {
     el.className = 'result error';
-    el.innerHTML = "PIN noto'g'ri!";
+    el.textContent = 'Server bilan ulanib bo\'lmadi';
   }
   pin = ''; updateDots();
-  setTimeout(() => { el.style.display='none'; }, 3000);
+  setTimeout(() => { el.style.display = 'none'; }, 3500);
 }
 function tick() {
   const now = new Date();

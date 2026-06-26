@@ -2,7 +2,7 @@
 Rayyon Restoran Telegram Bot
 Muhit o'zgaruvchilari:
   TELEGRAM_BOT_TOKEN  - BotFather dan olingan token
-  TELEGRAM_CHAT_ID    - Bildirishnomalar yuboriluvchi chat ID
+  TELEGRAM_CHAT_ID    - Bildirishnomalar yuboriluvchi chat ID (ruxsatli chatlar)
   RAYYON_API_URL      - Backend URL (masalan https://rayyon-restoran.onrender.com)
   RAYYON_ADMIN_PASS   - Admin paroli
 Ishga tushirish: python bot/bot.py
@@ -15,10 +15,21 @@ log = logging.getLogger("rayyon-bot")
 
 TOKEN      = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 API_URL    = os.environ.get("RAYYON_API_URL", "http://localhost:5000")
-ADMIN_PASS = os.environ.get("RAYYON_ADMIN_PASS", "rayyon2024")
+ADMIN_PASS = os.environ.get("RAYYON_ADMIN_PASS", "")
+if not ADMIN_PASS:
+    raise RuntimeError("RAYYON_ADMIN_PASS muhit o'zgaruvchisi majburiy! Bot ishga tushirilmadi.")
+
+# Ruxsatli chat ID lar (vergul bilan ajratilgan, masalan: "123456,789012")
+# Bo'sh bo'lsa — barcha chatlar ruxsat beriladi (XAVFLI, faqat test uchun)
+_CHAT_IDS_RAW = os.environ.get("TELEGRAM_CHAT_ID", "")
+ALLOWED_CHAT_IDS: set = {
+    int(c.strip()) for c in _CHAT_IDS_RAW.split(",") if c.strip().lstrip("-").isdigit()
+}
 
 BASE = f"https://api.telegram.org/bot{TOKEN}"
-admin_token = None
+admin_token    = None
+_token_created = 0.0
+TOKEN_TTL_SEC  = 7 * 3600  # 7 soat (backend TTL 8h, avvalroq yangilaymiz)
 
 
 def tg(method, **kwargs):
@@ -37,11 +48,42 @@ def tg(method, **kwargs):
         return {}
 
 
-def api(method, path, data=None):
+def _do_login() -> bool:
+    """Loginni bajaradi. Muvaffaqiyatli bo'lsa True qaytaradi."""
+    global admin_token, _token_created
+    res = api_raw("POST", "/api/login", {"password": ADMIN_PASS})
+    if res.get("ok"):
+        admin_token    = res["token"]
+        _token_created = time.time()
+        log.info("Admin login OK")
+        return True
+    log.warning("Admin login FAILED — barcha API calllar 403 oladi")
+    if ALLOWED_CHAT_IDS:
+        for cid in ALLOWED_CHAT_IDS:
+            tg("sendMessage", chat_id=cid,
+               text="❌ <b>Bot login xatosi!</b>\nAdmin paroli noto'g'ri yoki server ishlamayapti.",
+               parse_mode="HTML")
+    return False
+
+
+def login():
+    _do_login()
+
+
+def _ensure_token():
+    """Token muddati tugagan bo'lsa qayta login qiladi."""
+    global admin_token
+    if not admin_token or (time.time() - _token_created) > TOKEN_TTL_SEC:
+        log.info("Admin token yangilanmoqda...")
+        _do_login()
+
+
+def api_raw(method, path, data=None, token=None):
+    """Token tekshirmasdan API call (login uchun ishlatiladi)."""
     url     = API_URL + path
     headers = {"Content-Type": "application/json"}
-    if admin_token:
-        headers["X-Admin-Token"] = admin_token
+    if token:
+        headers["X-Admin-Token"] = token
     body = json.dumps(data).encode() if data else None
     req  = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
@@ -52,22 +94,23 @@ def api(method, path, data=None):
         return {}
 
 
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+def api(method, path, data=None):
+    """Admin token bilan API call. 401/403 da qayta login qilib urinadi."""
+    _ensure_token()
+    res = api_raw(method, path, data, token=admin_token)
+    # Token muddati tugagan bo'lsa bir marta qayta urinib ko'ramiz
+    if res == {} and admin_token:
+        log.info("API 403 — qayta login qilinmoqda")
+        if _do_login():
+            res = api_raw(method, path, data, token=admin_token)
+    return res
 
 
-def login():
-    global admin_token
-    res = api("POST", "/api/login", {"password": ADMIN_PASS})
-    if res.get("ok"):
-        admin_token = res["token"]
-        log.info("Admin login OK")
-    else:
-        log.warning("Admin login FAILED — barcha API calllar 403 oladi")
-        if CHAT_ID:
-            tg("sendMessage", chat_id=CHAT_ID,
-               text="❌ <b>Bot login xatosi!</b>\nAdmin paroli noto'g'ri yoki server ishlamayapti.\n"
-                    "RAYYON_ADMIN_PASS env o'zgaruvchisini tekshiring.",
-               parse_mode="HTML")
+def is_allowed(chat_id: int) -> bool:
+    """Chat ruxsatini tekshiradi. ALLOWED_CHAT_IDS bo'sh bo'lsa hamma ruxsatli (test rejim)."""
+    if not ALLOWED_CHAT_IDS:
+        return True
+    return chat_id in ALLOWED_CHAT_IDS
 
 
 STATUS_LABELS = {
@@ -76,6 +119,8 @@ STATUS_LABELS = {
     "done":      "✔️ Bajarilgan",
     "cancelled": "❌ Bekor qilingan",
     "pending":   "⏳ Kutilmoqda",
+    "open":      "🟢 Ochiq",
+    "closed":    "🔒 Yopilgan",
 }
 
 
@@ -107,13 +152,25 @@ def main_menu(chat_id):
                 {"text": "💼 Smena",       "callback_data": "shifts"},
                 {"text": "💳 Mijozlar",    "callback_data": "customers"},
             ],
+            [
+                {"text": "📊 Bugun",       "callback_data": "today"},
+                {"text": "📈 Hafta",       "callback_data": "week"},
+                {"text": "📉 Oy",          "callback_data": "month"},
+            ],
+            [
+                {"text": "👥 Xodimlar",    "callback_data": "staff"},
+            ],
         ]
     )
 
 
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
-    text    = msg.get("text", "").strip()
+    # Xavfsizlik: ruxsatsiz chatlardan kelgan xabarlarni e'tiborsiz qoldiramiz
+    if not is_allowed(chat_id):
+        log.warning(f"Ruxsatsiz chat: {chat_id}")
+        return
+    text = msg.get("text", "").strip()
 
     if text in ("/start", "/help"):
         main_menu(chat_id)
@@ -131,6 +188,12 @@ def handle_message(msg):
         show_customers(chat_id)
     elif text == "/bugun":
         show_today(chat_id)
+    elif text == "/hafta":
+        show_period(chat_id, "weekly", "Haftalik")
+    elif text == "/oy":
+        show_period(chat_id, "monthly", "Oylik")
+    elif text == "/xodimlar":
+        show_staff(chat_id)
     else:
         send_kb(chat_id,
             "📌 Mavjud buyruqlar:\n"
@@ -140,7 +203,10 @@ def handle_message(msg):
             "/smena — Joriy smena\n"
             "/inventar — Kam mahsulotlar\n"
             "/mijozlar — Top mijozlar\n"
-            "/bugun — Bugungi hisobot",
+            "/bugun — Bugungi hisobot\n"
+            "/hafta — Haftalik hisobot\n"
+            "/oy — Oylik hisobot\n"
+            "/xodimlar — Xodimlar ro'yxati",
             [[{"text": "🏠 Asosiy menyu", "callback_data": "main"}]]
         )
 
@@ -225,22 +291,37 @@ def show_tables(chat_id):
 
 
 def show_shifts(chat_id):
-    # Barcha ochiq smenalar
+    """Joriy ochiq smenalarni ko'rsatadi."""
+    shifts = api("GET", "/api/shifts?status=open&limit=5")
     tables = api("GET", "/api/tables")
-    # Smena ma'lumotini shifts endpointidan olish mumkin emas (public emas)
-    # Faqat umumiy holatni ko'rsatamiz
-    if not isinstance(tables, list):
-        send_msg(chat_id, "❌ Ma'lumot olinmadi.")
+    occupied_ct  = sum(1 for t in (tables if isinstance(tables, list) else []) if t.get("status") != "free")
+    total_amount = sum(int(t.get("total_amount") or 0) for t in (tables if isinstance(tables, list) else []))
+
+    if not isinstance(shifts, list) or not shifts:
+        send_kb(chat_id,
+            f"💼 <b>Joriy holat</b>\n\n"
+            f"🪑 Band stollar: <b>{occupied_ct}</b> ta\n"
+            f"💰 Kutilayotgan: <b>{total_amount:,} so'm</b>\n"
+            f"ℹ️ Ochiq smena topilmadi.",
+            [[{"text": "🪑 Stollar", "callback_data": "tables"},
+              {"text": "🏠 Menyu",   "callback_data": "main"}]])
         return
-    occupied = [t for t in tables if t.get("status") != "free"]
-    total_rev = sum(int(t.get("total_amount") or 0) for t in occupied)
-    send_kb(chat_id,
-        f"💼 <b>Joriy holat</b>\n\n"
-        f"🪑 Band stollar: <b>{len(occupied)}</b> ta\n"
-        f"💰 Kutilayotgan tushum: <b>{total_rev:,} so'm</b>\n"
-        f"📊 Admin panelda to'liq smena ma'lumotini ko'ring.",
-        [[{"text": "🪑 Stollar", "callback_data": "tables"},
-          {"text": "🏠 Menyu",   "callback_data": "main"}]])
+
+    lines = [f"💼 <b>Ochiq smenalar</b>\n"]
+    for s in shifts:
+        cashier  = s.get("cashier_name", "?")
+        opened   = str(s.get("opened_at", ""))[:16]
+        sessions = s.get("sessions_count", 0)
+        revenue  = int(s.get("total_revenue") or s.get("total_collected") or 0)
+        lines.append(
+            f"👤 <b>{cashier}</b> — {opened}\n"
+            f"   🧾 {sessions} xizmat · 💰 {revenue:,} so'm"
+        )
+    lines.append(f"\n🪑 Band stollar: <b>{occupied_ct}</b> ta")
+    lines.append(f"💰 Kutilayotgan: <b>{total_amount:,} so'm</b>")
+    send_kb(chat_id, "\n".join(lines),
+            [[{"text": "🔄 Yangilash", "callback_data": "shifts"},
+              {"text": "🏠 Menyu",     "callback_data": "main"}]])
 
 
 def show_inventory(chat_id):
@@ -273,10 +354,10 @@ def show_customers(chat_id):
     top = sorted(customers, key=lambda x: x.get("total_spent", 0), reverse=True)[:10]
     lines = [f"💳 <b>Top {len(top)} mijoz</b>\n"]
     for i, c in enumerate(top, 1):
-        name = c.get("name") or c.get("phone", "?")
+        name  = c.get("name") or c.get("phone", "?")
         spent = int(c.get("total_spent", 0))
         visits = c.get("visits", 0)
-        disc = c.get("discount_pct", 0)
+        disc  = c.get("discount_pct", 0)
         lines.append(
             f"{i}. {name} — {spent:,} so'm · {visits} tashrif"
             + (f" · {disc}% chegirma" if disc else "")
@@ -286,7 +367,12 @@ def show_customers(chat_id):
 
 
 def show_today(chat_id):
-    stats = api("GET", "/api/analytics/summary?period=daily")
+    show_period(chat_id, "daily", "Bugungi")
+
+
+def show_period(chat_id, period: str, label: str):
+    """Davr bo'yicha hisobot: daily / weekly / monthly."""
+    stats = api("GET", f"/api/analytics/summary?period={period}")
     if not stats or not isinstance(stats, dict):
         send_msg(chat_id, "❌ Statistika olinmadi.")
         return
@@ -296,42 +382,79 @@ def show_today(chat_id):
     sessions = stats.get("sessions", 0)
     items_ct = stats.get("items_sold", 0)
     avg      = int(stats.get("avg_bill", 0))
+    cb_key   = {"daily": "today", "weekly": "week", "monthly": "month"}.get(period, "today")
     send_kb(chat_id,
-        f"📊 <b>Bugungi hisobot</b>\n\n"
+        f"📊 <b>{label} hisobot</b>\n\n"
         f"💰 Daromad: <b>{revenue:,} so'm</b>\n"
         f"📤 Xarajat: <b>{expenses:,} so'm</b>\n"
         f"📈 Foyda:   <b>{profit:,} so'm</b>\n"
-        f"🪑 Stollar: <b>{sessions}</b> ta xizmat\n"
+        f"🪑 Xizmatlar: <b>{sessions}</b> ta\n"
         f"🍽 Taomlar: <b>{items_ct}</b> ta sotilgan\n"
         f"🧾 O'rtacha: <b>{avg:,} so'm</b>",
-        [[{"text": "🔄 Yangilash", "callback_data": "today"},
+        [[{"text": "🔄 Yangilash", "callback_data": cb_key},
           {"text": "🏠 Menyu",     "callback_data": "main"}]])
+
+
+def show_staff(chat_id):
+    """Aktiv xodimlar ro'yxati."""
+    staff_list = api("GET", "/api/staff")
+    if not isinstance(staff_list, list):
+        send_msg(chat_id, "❌ Xodimlar ma'lumoti olinmadi.")
+        return
+    active = [s for s in staff_list if s.get("active", 1)]
+    if not active:
+        send_kb(chat_id, "👥 Aktiv xodimlar yo'q.",
+                [[{"text": "🏠 Menyu", "callback_data": "main"}]])
+        return
+    role_icons = {
+        "admin": "👑", "director": "🏆", "manager": "📋",
+        "cashier": "💳", "waiter": "🍽", "kitchen": "👨‍🍳",
+        "cook": "🧑‍🍳", "chef": "👨‍🍳", "accountant": "📊",
+        "cleaner": "🧹",
+    }
+    lines = [f"👥 <b>Xodimlar ({len(active)} ta)</b>\n"]
+    for s in active[:20]:
+        role = s.get("role", "?")
+        icon = role_icons.get(role, "👤")
+        name = s.get("name", "?")
+        lines.append(f"{icon} <b>{name}</b> — {role}")
+    send_kb(chat_id, "\n".join(lines),
+            [[{"text": "🔄 Yangilash", "callback_data": "staff"},
+              {"text": "🏠 Menyu",     "callback_data": "main"}]])
 
 
 def handle_callback(cb):
     chat_id = cb["message"]["chat"]["id"]
-    msg_id  = cb["message"]["message_id"]
-    data    = cb.get("data", "")
-    cb_id   = cb["id"]
+    # Xavfsizlik: ruxsatsiz chatlardan kelgan callbacklarni e'tiborsiz qoldiramiz
+    if not is_allowed(chat_id):
+        log.warning(f"Ruxsatsiz callback chat: {chat_id}")
+        return
+    msg_id = cb["message"]["message_id"]
+    data   = cb.get("data", "")
+    cb_id  = cb["id"]
 
     tg("answerCallbackQuery", callback_query_id=cb_id)
 
-    if data == "main":
-        main_menu(chat_id); return
-    if data == "orders":
-        show_orders(chat_id); return
-    if data == "reservations":
-        show_reservations(chat_id); return
-    if data == "tables":
-        show_tables(chat_id); return
-    if data == "shifts":
-        show_shifts(chat_id); return
-    if data == "inventory":
-        show_inventory(chat_id); return
-    if data == "customers":
-        show_customers(chat_id); return
-    if data == "today":
-        show_today(chat_id); return
+    dispatch = {
+        "main":         main_menu,
+        "orders":       show_orders,
+        "reservations": show_reservations,
+        "tables":       show_tables,
+        "shifts":       show_shifts,
+        "inventory":    show_inventory,
+        "customers":    show_customers,
+        "today":        show_today,
+        "staff":        show_staff,
+    }
+    if data in dispatch:
+        dispatch[data](chat_id)
+        return
+    if data == "week":
+        show_period(chat_id, "weekly", "Haftalik")
+        return
+    if data == "month":
+        show_period(chat_id, "monthly", "Oylik")
+        return
 
     if data.startswith("ord_"):
         _, status, oid = data.split("_", 2)
@@ -341,8 +464,9 @@ def handle_callback(cb):
             tg("editMessageText",
                chat_id=chat_id, message_id=msg_id,
                text=f"✅ Buyurtma #{oid} → {label}", parse_mode="HTML")
+        return
 
-    elif data.startswith("res_"):
+    if data.startswith("res_"):
         _, status, rid = data.split("_", 2)
         res   = api("PUT", f"/api/reservations/{rid}", {"status": status})
         label = STATUS_LABELS.get(status, status)
@@ -350,11 +474,18 @@ def handle_callback(cb):
             tg("editMessageText",
                chat_id=chat_id, message_id=msg_id,
                text=f"✅ Bron #{rid} → {label}", parse_mode="HTML")
+        return
+
+    log.debug(f"Noma'lum callback: {data}")
 
 
 def poll():
     offset = 0
     log.info(f"Bot polling boshlandi | API: {API_URL}")
+    if ALLOWED_CHAT_IDS:
+        log.info(f"Ruxsatli chatlar: {ALLOWED_CHAT_IDS}")
+    else:
+        log.warning("TELEGRAM_CHAT_ID o'rnatilmagan — barcha chatlar ruxsatli (test rejim)!")
     while True:
         res = tg("getUpdates", offset=offset, timeout=30)
         for upd in res.get("result", []):

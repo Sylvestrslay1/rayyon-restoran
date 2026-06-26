@@ -7,6 +7,19 @@ import threading, datetime, csv, io, logging
 import smtplib, email.mime.text, email.mime.multipart
 
 log = logging.getLogger(__name__)
+
+# ===== REDIS (ixtiyoriy — multi-worker uchun) =====
+_redis = None
+try:
+    _REDIS_URL = os.environ.get("REDIS_URL", "")
+    if _REDIS_URL:
+        import redis as _redis_lib
+        _redis = _redis_lib.from_url(_REDIS_URL, decode_responses=True, socket_connect_timeout=3)
+        _redis.ping()
+        log.info("Redis ulandi")
+except Exception as _re:
+    _redis = None
+    log.info("Redis yo'q — in-memory rejim: %s", _re)
 from database import get_conn, init_db, rows_to_list, USE_PG
 from werkzeug.utils import secure_filename
 
@@ -17,7 +30,7 @@ app.secret_key = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
 _cors_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
 _origins = _cors_origins.split(",") if _cors_origins else ["*"]
 CORS(app, supports_credentials=True, origins=_origins,
-     allow_headers=["Content-Type", "X-Admin-Token", "X-Kitchen-Token", "X-Session-Token"],
+     allow_headers=["Content-Type", "X-Admin-Token", "X-Kitchen-Token", "X-Session-Token", "X-Staff-Pin"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # ===== RATE LIMITER =====
@@ -59,6 +72,8 @@ PIN_LOCKOUT_MINUTES = 15
 
 def _pin_check_locked(ip: str) -> bool:
     """True qaytarsa — IP bloklangan."""
+    if _redis:
+        return int(_redis.get(f"pin_fail:{ip}") or 0) >= PIN_MAX_TRIES
     with _pin_fails_lock:
         rec = _pin_fails.get(ip)
         if not rec:
@@ -72,12 +87,21 @@ def _pin_check_locked(ip: str) -> bool:
         return True
 
 def _pin_record_fail(ip: str):
+    if _redis:
+        pipe = _redis.pipeline()
+        pipe.incr(f"pin_fail:{ip}")
+        pipe.expire(f"pin_fail:{ip}", PIN_LOCKOUT_MINUTES * 60)
+        pipe.execute()
+        return
     with _pin_fails_lock:
         rec = _pin_fails.setdefault(ip, {"count": 0, "last": datetime.datetime.utcnow()})
         rec["count"] += 1
         rec["last"] = datetime.datetime.utcnow()
 
 def _pin_record_success(ip: str):
+    if _redis:
+        _redis.delete(f"pin_fail:{ip}")
+        return
     with _pin_fails_lock:
         _pin_fails.pop(ip, None)
 
@@ -118,6 +142,8 @@ def staff_has_perm(staff, perm: str) -> bool:
     return "all" in perms or perm in perms
 
 def _prune_expired_tokens():
+    if _redis:
+        return  # Redis TTL avtomatik o'chiradi
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
     with _tokens_lock:
         expired = [t for t, info in ACTIVE_TOKENS.items() if info["created"] < cutoff]
@@ -127,17 +153,21 @@ def _prune_expired_tokens():
 def create_admin_token(ip: str) -> str:
     _prune_expired_tokens()
     token = secrets.token_urlsafe(32)
-    with _tokens_lock:
-        ACTIVE_TOKENS[token] = {
-            "created": datetime.datetime.utcnow(),
-            "last_used": datetime.datetime.utcnow(),
-            "ip": ip,
-        }
+    now = datetime.datetime.utcnow()
+    if _redis:
+        _redis.hset(f"rt:{token}", mapping={"ip": ip, "created": now.isoformat()})
+        _redis.expire(f"rt:{token}", TOKEN_TTL_HOURS * 3600)
+    else:
+        with _tokens_lock:
+            ACTIVE_TOKENS[token] = {"created": now, "last_used": now, "ip": ip}
     return token
 
 def revoke_admin_token(token: str):
-    with _tokens_lock:
-        ACTIVE_TOKENS.pop(token, None)
+    if _redis:
+        _redis.delete(f"rt:{token}")
+    else:
+        with _tokens_lock:
+            ACTIVE_TOKENS.pop(token, None)
 
 # ===== PAROL HASHING (pbkdf2_hmac + salt) =====
 def hash_password(password: str, salt: bytes = None):
@@ -205,11 +235,24 @@ def check_image_mime(file_stream) -> bool:
 
 
 def check_kitchen_auth() -> bool:
-    """Oshxona endpointlari uchun autentifikatsiya."""
+    """Oshxona endpointlari uchun autentifikatsiya.
+    Admin token, KITCHEN_TOKEN yoki kitchen/cook/manager/chef PIN bilan kirish mumkin."""
     if check_auth():
         return True
+    # Xodim PIN bilan autentifikatsiya (kitchen/cook/manager/chef rollari)
+    pin = request.headers.get("X-Staff-Pin", "")
+    if pin:
+        ip = get_remote_address()
+        if _pin_check_locked(ip):
+            return False
+        staff = check_staff_pin(pin)
+        if staff and has_role(staff, "kitchen", "cook", "manager", "chef"):
+            _pin_record_success(ip)
+            return True
+        _pin_record_fail(ip)
+        return False
+    # KITCHEN_TOKEN tekshiruvi
     if not KITCHEN_TOKEN:
-        # Production da KITCHEN_TOKEN majburiy — xavfsizlik ogohlantirishini loglash
         log.warning("KITCHEN_TOKEN o'rnatilmagan — oshxona endpoint himoyasiz! ENV var qo'shing.")
         return False
     provided = (request.headers.get("X-Kitchen-Token", "")
@@ -274,10 +317,24 @@ def add_security_headers(response):
 
 
 def check_auth() -> bool:
-    """Token ni ACTIVE_TOKENS da tekshirish (muddati + mavjudligi)."""
+    """Token ni tekshirish (Redis yoki in-memory)."""
     token = request.headers.get("X-Admin-Token", "")
     if not token or len(token) < 32:
         return False
+    if _redis:
+        data = _redis.hgetall(f"rt:{token}")
+        if not data:
+            return False
+        try:
+            created = datetime.datetime.fromisoformat(data["created"])
+        except Exception:
+            return False
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
+        if created < cutoff:
+            _redis.delete(f"rt:{token}")
+            return False
+        _redis.hset(f"rt:{token}", "last_used", datetime.datetime.utcnow().isoformat())
+        return True
     _prune_expired_tokens()
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=TOKEN_TTL_HOURS)
     with _tokens_lock:
@@ -286,6 +343,22 @@ def check_auth() -> bool:
             return False
         info["last_used"] = datetime.datetime.utcnow()
     return True
+
+
+def audit(action: str, entity: str = None, entity_id: int = None,
+          user_name: str = None, details: dict = None):
+    """Muhim amalni audit_log jadvaliga yozish (bloklash yo'q — xato bo'lsa o'tkazib yuboradi)."""
+    ip = get_remote_address()
+    det = json.dumps(details, ensure_ascii=False) if details else None
+    try:
+        conn = get_conn()
+        db_exec(conn,
+            "INSERT INTO audit_log (action, entity, entity_id, user_name, user_ip, details) VALUES (?,?,?,?,?,?)",
+            (action, entity, entity_id, user_name, ip, det))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("audit() xato: %s", e)
 
 
 def check_staff_pin(pin, conn=None):
@@ -374,6 +447,7 @@ def login():
 
     ip = get_remote_address()
     token = create_admin_token(ip)
+    audit("login", "admin", user_name="admin")
     return jsonify({"ok": True, "token": token, "ttl_hours": TOKEN_TTL_HOURS})
 
 
@@ -381,6 +455,7 @@ def login():
 def logout():
     token = request.headers.get("X-Admin-Token", "")
     revoke_admin_token(token)
+    audit("logout", "admin", user_name="admin")
     return jsonify({"ok": True})
 
 
@@ -475,6 +550,7 @@ def add_menu():
         (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1))
     )
     conn.commit(); conn.close()
+    audit("menu_add", "menu", user_name="admin", details={"name": d.get("name"), "price": d.get("price")})
     return jsonify({"ok": True})
 
 
@@ -494,6 +570,7 @@ def update_menu(item_id):
         (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1), item_id)
     )
     conn.commit(); conn.close()
+    audit("menu_update", "menu", item_id, "admin", {"name": d.get("name"), "price": d.get("price")})
     return jsonify({"ok": True})
 
 
@@ -503,6 +580,7 @@ def delete_menu(item_id):
     conn = get_conn()
     db_exec(conn, "DELETE FROM menu WHERE id=?", (item_id,))
     conn.commit(); conn.close()
+    audit("menu_delete", "menu", item_id, "admin")
     return jsonify({"ok": True})
 
 
@@ -510,21 +588,34 @@ def delete_menu(item_id):
 @app.route("/api/orders", methods=["GET"])
 def get_orders():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    limit  = min(int(request.args.get("limit",  200)), 1000)
+    offset = max(int(request.args.get("offset", 0)),   0)
     status = request.args.get("status")
+    conn   = get_conn()
     if status:
-        cur = db_exec(conn, "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC", (status,))
+        cur = db_exec(conn,
+            "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (status, limit, offset))
     else:
-        cur = db_exec(conn, "SELECT * FROM orders ORDER BY created_at DESC")
+        cur = db_exec(conn,
+            "SELECT * FROM orders ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 @app.route("/api/orders", methods=["POST"])
 @limiter.limit("20 per minute; 200 per hour")
 def add_order():
     d = request.json or {}
+    try:
+        _validate_str(d.get("item_name"),     200, "Taom nomi")
+        _validate_str(d.get("customer_name"), 100, "Ism")
+        _validate_str(d.get("customer_phone"), 20, "Telefon")
+        _validate_str(d.get("note"),          500, "Izoh")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "INSERT INTO orders (item_name, item_id, quantity, total_price, customer_name, customer_phone, note) VALUES (?,?,?,?,?,?,?)",
@@ -557,17 +648,33 @@ def update_order(order_id):
 @app.route("/api/reservations", methods=["GET"])
 def get_reservations():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
-    cur = db_exec(conn, "SELECT * FROM reservations ORDER BY created_at DESC")
+    limit  = min(int(request.args.get("limit",  200)), 1000)
+    offset = max(int(request.args.get("offset", 0)),   0)
+    date   = request.args.get("date")
+    conn   = get_conn()
+    if date:
+        cur = db_exec(conn,
+            "SELECT * FROM reservations WHERE date=? ORDER BY time ASC LIMIT ? OFFSET ?",
+            (date, limit, offset))
+    else:
+        cur = db_exec(conn,
+            "SELECT * FROM reservations ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 @app.route("/api/reservations", methods=["POST"])
 @limiter.limit("10 per minute; 50 per hour")
 def add_reservation():
     d = request.json or {}
+    try:
+        _validate_str(d.get("customer_name"),  100, "Ism")
+        _validate_str(d.get("customer_phone"),  20, "Telefon")
+        _validate_str(d.get("note"),           500, "Izoh")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "INSERT INTO reservations (customer_name, customer_phone, date, time, guests, note) VALUES (?,?,?,?,?,?)",
@@ -1119,6 +1226,8 @@ def close_session(sid):
         return jsonify({"error": f"To'lov saqlanmadi: {e}"}), 500
 
     conn.close()
+    audit("payment", "session", sid, cashier_name,
+          {"total": server_total, "table": s.get("table_number"), "methods": [p.get("method") for p in payments]})
     return jsonify({"ok": True, "total": server_total})
 
 @app.route("/api/session/<int:sid>/discount", methods=["PUT"])
@@ -1130,9 +1239,13 @@ def set_discount(sid):
         return jsonify({"error": "Ruxsat yo'q"}), 403
     if staff and not has_role(staff, "cashier", "manager"):
         return jsonify({"error": "Faqat kassir yoki menejer chegirma qo'ya oladi"}), 403
+    discount = float(d.get("discount", 0))
+    service_charge = float(d.get("service_charge", 0))
+    if not (0 <= discount <= 100) or not (0 <= service_charge <= 100):
+        return jsonify({"error": "Chegirma va xizmat haqi 0–100% oralig'ida bo'lishi kerak"}), 400
     conn = get_conn()
     db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
-        (d.get("discount",0), d.get("service_charge",0), sid))
+        (discount, service_charge, sid))
     conn.commit(); conn.close()
     return jsonify({"ok": True})
 
@@ -1341,6 +1454,8 @@ def void_item(sid, iid):
     new_total = int(row2[0] if USE_PG else (row2[0] or 0))
     db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (new_total, sid))
     conn.commit(); conn.close()
+    audit("void", "order_item", iid, voider,
+          {"item": item.get("item_name"), "reason": reason, "session_id": sid})
     tg_send(f"🚫 <b>VOID</b> — Stol #{item.get('table_number')}\n"
             f"❌ {item.get('item_name')} x{item.get('quantity')}\n"
             f"📝 Sabab: {reason}\n👤 {voider}")
@@ -1353,7 +1468,8 @@ def void_item(sid, iid):
 def get_receipt(sid):
     """Sessiya cheki — kassir PIN yoki session token yoki admin."""
     token = request.headers.get("X-Session-Token", "")
-    pin   = request.args.get("pin", "")
+    # PIN header orqali qabul qilinadi (URL loglarida ko'rinmasin)
+    pin   = request.headers.get("X-Staff-Pin", "") or request.args.get("pin", "")
     conn  = get_conn()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     sessions = rows_to_list(cur)
@@ -1457,6 +1573,7 @@ def add_staff():
         (d.get("name"), d.get("role"), pin_hash, pin_salt,
          d.get("phone"), d.get("salary_type","monthly"), d.get("salary_amount",0)))
     conn.commit(); conn.close()
+    audit("staff_add", "staff", user_name="admin", details={"name": d.get("name"), "role": d.get("role")})
     return jsonify({"ok": True})
 
 @app.route("/api/staff/<int:sid>", methods=["PUT"])
@@ -1478,6 +1595,7 @@ def update_staff(sid):
             (d.get("name"),d.get("role"),d.get("phone"),
              d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
     conn.commit(); conn.close()
+    audit("staff_update", "staff", sid, "admin", {"name": d.get("name"), "role": d.get("role")})
     return jsonify({"ok": True})
 
 @app.route("/api/staff/<int:sid>", methods=["DELETE"])
@@ -1486,6 +1604,7 @@ def delete_staff(sid):
     conn = get_conn()
     db_exec(conn, "UPDATE staff SET active=0 WHERE id=?", (sid,))
     conn.commit(); conn.close()
+    audit("staff_delete", "staff", sid, "admin")
     return jsonify({"ok": True})
 
 @app.route("/api/staff/checkin", methods=["POST"])
@@ -1529,15 +1648,21 @@ def staff_checkin():
 @app.route("/api/attendance", methods=["GET"])
 def get_attendance():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    date = request.args.get("date")
-    conn = get_conn()
+    limit  = min(int(request.args.get("limit",  100)), 500)
+    offset = max(int(request.args.get("offset", 0)),   0)
+    date   = request.args.get("date")
+    conn   = get_conn()
     if date:
-        cur = db_exec(conn, "SELECT * FROM attendance WHERE date=? ORDER BY check_in DESC", (date,))
+        cur = db_exec(conn,
+            "SELECT * FROM attendance WHERE date=? ORDER BY check_in DESC LIMIT ? OFFSET ?",
+            (date, limit, offset))
     else:
-        cur = db_exec(conn, "SELECT * FROM attendance ORDER BY check_in DESC")
+        cur = db_exec(conn,
+            "SELECT * FROM attendance ORDER BY check_in DESC LIMIT ? OFFSET ?",
+            (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 # ===== GALEREYA =====
@@ -1557,6 +1682,11 @@ def get_gallery():
 def add_gallery():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("title"), 200, "Sarlavha")
+        _validate_str(d.get("emoji"),  10, "Emoji")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn, "INSERT INTO gallery (title, emoji, image, sort_order, active) VALUES (?,?,?,?,?)",
         (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1)))
@@ -1599,6 +1729,13 @@ def get_promotions():
 def add_promotion():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("title"),       200,  "Sarlavha")
+        _validate_str(d.get("description"), 1000, "Tavsif")
+        _validate_str(d.get("badge"),        20,  "Badge")
+        _validate_str(d.get("time_info"),   100,  "Vaqt ma'lumoti")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn, "INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order, active) VALUES (?,?,?,?,?,?,?)",
         (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1)))
@@ -1760,23 +1897,41 @@ def accounting_report():
 @app.route("/api/expenses", methods=["GET"])
 def get_expenses():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    limit     = min(int(request.args.get("limit",  200)), 1000)
+    offset    = max(int(request.args.get("offset", 0)),   0)
+    date_from = request.args.get("from")
+    date_to   = request.args.get("to")
     conn = get_conn()
-    cur  = db_exec(conn, "SELECT * FROM expenses ORDER BY date DESC, id DESC")
+    if date_from and date_to:
+        cur = db_exec(conn,
+            "SELECT * FROM expenses WHERE date>=? AND date<=? ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+            (date_from, date_to, limit, offset))
+    else:
+        cur = db_exec(conn,
+            "SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+            (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 @app.route("/api/expenses", methods=["POST"])
 def add_expense():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    try:
+        _validate_str(d.get("category"),    50,  "Kategoriya")
+        _validate_str(d.get("description"), 500, "Tavsif")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     conn = get_conn()
     db_exec(conn,
         "INSERT INTO expenses (category, description, amount, date) VALUES (?,?,?,?)",
         (d.get("category"), d.get("description"), d.get("amount", 0), d.get("date"))
     )
     conn.commit(); conn.close()
+    audit("expense_add", "expense", user_name="admin",
+          details={"category": d.get("category"), "amount": d.get("amount"), "date": d.get("date")})
     return jsonify({"ok": True})
 
 
@@ -1786,6 +1941,7 @@ def delete_expense(eid):
     conn = get_conn()
     db_exec(conn, "DELETE FROM expenses WHERE id=?", (eid,))
     conn.commit(); conn.close()
+    audit("expense_delete", "expense", eid, "admin")
     return jsonify({"ok": True})
 
 
@@ -1793,11 +1949,21 @@ def delete_expense(eid):
 @app.route("/api/inventory", methods=["GET"])
 def get_inventory():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
-    cur  = db_exec(conn, "SELECT * FROM inventory ORDER BY name")
+    limit  = min(int(request.args.get("limit",  500)), 2000)
+    offset = max(int(request.args.get("offset", 0)),   0)
+    search = request.args.get("q", "").strip()
+    conn   = get_conn()
+    if search:
+        cur = db_exec(conn,
+            "SELECT * FROM inventory WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?",
+            (f"%{search}%", limit, offset))
+    else:
+        cur = db_exec(conn,
+            "SELECT * FROM inventory ORDER BY name LIMIT ? OFFSET ?",
+            (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 @app.route("/api/inventory", methods=["POST"])
@@ -1852,11 +2018,15 @@ def delete_inventory(iid):
 @app.route("/api/inventory/log", methods=["GET"])
 def get_inventory_log():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
-    cur  = db_exec(conn, "SELECT * FROM inventory_log ORDER BY created_at DESC")
+    limit  = min(int(request.args.get("limit",  100)), 500)
+    offset = max(int(request.args.get("offset", 0)),   0)
+    conn   = get_conn()
+    cur    = db_exec(conn,
+        "SELECT * FROM inventory_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (limit, offset))
     result = rows_to_list(cur)
     conn.close()
-    return jsonify(result)
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 # ===== RETSEPTLAR =====
@@ -2117,12 +2287,20 @@ def analytics_summary():
 
 @app.route("/api/payments", methods=["GET"])
 def get_payments():
-    if not check_auth():
+    # Kassir PIN yoki admin token bilan ruxsat
+    pin = request.headers.get("X-Staff-Pin", "") or request.args.get("pin", "")
+    staff = check_staff_pin(pin) if pin else None
+    if not check_auth() and not staff:
+        return jsonify({"error": "Ruxsat yo'q"}), 403
+    if staff and not has_role(staff, "cashier", "manager", "accountant"):
         return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
     date = request.args.get("date")
     shift_id = request.args.get("shift_id")
-    limit_n = int(request.args.get("limit", 100))
+    try:
+        limit_n = min(int(request.args.get("limit", 100)), 500)
+    except (ValueError, TypeError):
+        limit_n = 100
 
     sql = "SELECT p.*, s.table_number as tbl FROM payments p LEFT JOIN sessions s ON p.session_id=s.id WHERE 1=1"
     params = []
@@ -2436,7 +2614,230 @@ def sse_stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+# ===== PUSH NOTIFICATIONS =====
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_CLAIMS      = {"sub": f"mailto:{os.environ.get('VAPID_EMAIL', 'admin@rayyon.uz')}"}
+
+@app.route("/api/push/vapid-key", methods=["GET"])
+def push_vapid_key():
+    """Frontend uchun VAPID public key."""
+    if not VAPID_PUBLIC_KEY:
+        return jsonify({"ok": False, "error": "VAPID_PUBLIC_KEY o'rnatilmagan"}), 503
+    return jsonify({"ok": True, "key": VAPID_PUBLIC_KEY})
+
+@app.route("/api/push/subscribe", methods=["POST"])
+def push_subscribe():
+    """Push subscription saqlash."""
+    data = request.json or {}
+    subscription = data.get("subscription")
+    if not subscription:
+        return jsonify({"ok": False, "error": "subscription yo'q"}), 400
+    endpoint = subscription.get("endpoint", "")
+    if not endpoint:
+        return jsonify({"ok": False, "error": "endpoint yo'q"}), 400
+    keys    = subscription.get("keys", {})
+    p256dh  = keys.get("p256dh", "")
+    auth_key = keys.get("auth", "")
+    conn = get_conn()
+    try:
+        db_exec(conn, """
+            INSERT OR IGNORE INTO push_subscriptions (endpoint, p256dh, auth)
+            VALUES (?, ?, ?)
+        """, (endpoint, p256dh, auth_key))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/push/unsubscribe", methods=["POST"])
+def push_unsubscribe():
+    """Push subscription o'chirish."""
+    data = request.json or {}
+    endpoint = data.get("endpoint", "")
+    if not endpoint:
+        return jsonify({"ok": False}), 400
+    conn = get_conn()
+    try:
+        db_exec(conn, "DELETE FROM push_subscriptions WHERE endpoint=?", (endpoint,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/push/send", methods=["POST"])
+def push_send():
+    """Barcha obunachilarga push notification yuborish (faqat admin)."""
+    if not check_auth():
+        return jsonify({"ok": False, "error": "Ruxsat yo'q"}), 403
+    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        return jsonify({"ok": False, "error": "VAPID kalitlari o'rnatilmagan"}), 503
+    data = request.json or {}
+    payload = json.dumps({
+        "title": data.get("title", "Rayyon Restoran"),
+        "body":  data.get("body", ""),
+        "url":   data.get("url", "/"),
+        "tag":   data.get("tag", "rayyon"),
+    })
+    conn = get_conn()
+    try:
+        cur = db_exec(conn, "SELECT * FROM push_subscriptions", ())
+        subs = rows_to_list(cur)
+    finally:
+        conn.close()
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return jsonify({"ok": False, "error": "pywebpush o'rnatilmagan"}), 503
+    sent = 0
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub["endpoint"],
+                    "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=VAPID_CLAIMS,
+            )
+            sent += 1
+        except Exception as e:
+            log.warning("Push yuborilmadi %s: %s", sub["endpoint"][:40], e)
+    return jsonify({"ok": True, "sent": sent, "total": len(subs)})
+
+
+# ===== AUDIT LOG =====
+@app.route("/api/audit", methods=["GET"])
+def get_audit_log():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    limit  = min(int(request.args.get("limit",  100)), 500)
+    offset = max(int(request.args.get("offset", 0)),   0)
+    action = request.args.get("action")
+    entity = request.args.get("entity")
+    conn   = get_conn()
+    if action and entity:
+        cur = db_exec(conn,
+            "SELECT * FROM audit_log WHERE action=? AND entity=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (action, entity, limit, offset))
+    elif action:
+        cur = db_exec(conn,
+            "SELECT * FROM audit_log WHERE action=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (action, limit, offset))
+    else:
+        cur = db_exec(conn,
+            "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset))
+    result = rows_to_list(cur)
+    conn.close()
+    return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
+
+
+@app.route("/api/export/audit", methods=["GET"])
+def export_audit_csv():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_conn()
+    cur  = db_exec(conn, "SELECT * FROM audit_log ORDER BY created_at DESC")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "audit_log.csv")
+
+
+# ===== HEALTH CHECK =====
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    try:
+        conn = get_conn()
+        db_exec(conn, "SELECT 1")
+        conn.close()
+        db_ok = True
+    except Exception:
+        db_ok = False
+    status = "ok" if db_ok else "degraded"
+    return jsonify({
+        "status": status,
+        "db": "ok" if db_ok else "error",
+        "version": "1.0.0",
+    }), 200 if db_ok else 503
+
+
+# ===== QOSHIMCHA CSV EKSPORT =====
+@app.route("/api/export/orders", methods=["GET"])
+def export_orders_csv():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    date_from = request.args.get("from")
+    date_to   = request.args.get("to")
+    conn = get_conn()
+    if date_from and date_to:
+        cur = db_exec(conn,
+            "SELECT * FROM orders WHERE created_at>=? AND created_at<=? ORDER BY created_at DESC",
+            (date_from, date_to + " 23:59:59"))
+    else:
+        cur = db_exec(conn, "SELECT * FROM orders ORDER BY created_at DESC")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "orders.csv")
+
+
+@app.route("/api/export/expenses", methods=["GET"])
+def export_expenses_csv():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    date_from = request.args.get("from")
+    date_to   = request.args.get("to")
+    conn = get_conn()
+    if date_from and date_to:
+        cur = db_exec(conn,
+            "SELECT * FROM expenses WHERE date>=? AND date<=? ORDER BY date DESC",
+            (date_from, date_to))
+    else:
+        cur = db_exec(conn, "SELECT * FROM expenses ORDER BY date DESC")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "expenses.csv")
+
+
+@app.route("/api/export/attendance", methods=["GET"])
+def export_attendance_csv():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    date_from = request.args.get("from")
+    date_to   = request.args.get("to")
+    conn = get_conn()
+    if date_from and date_to:
+        cur = db_exec(conn,
+            "SELECT * FROM attendance WHERE date>=? AND date<=? ORDER BY date DESC",
+            (date_from, date_to))
+    else:
+        cur = db_exec(conn, "SELECT * FROM attendance ORDER BY check_in DESC")
+    rows = rows_to_list(cur); conn.close()
+    return _csv_response(rows, "attendance.csv")
+
+
+# ===== 404 / 500 XATO HANDLERLARI =====
+@app.errorhandler(404)
+def not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Endpoint topilmadi", "path": request.path}), 404
+    return jsonify({"error": "Sahifa topilmadi"}), 404
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"error": "Bu method ruxsat etilmagan", "allowed": e.valid_methods}), 405
+
+@app.errorhandler(500)
+def internal_error(e):
+    log.error("500 xato: %s — %s", request.path, e)
+    return jsonify({"error": "Server ichki xatosi"}), 500
+
+@app.errorhandler(429)
+def too_many_requests(e):
+    return jsonify({"error": "Juda ko'p so'rov. Biroz kuting."}), 429
+
+
 if __name__ == "__main__":
+    # Xavfsizlik tekshiruvi: ADMIN_PASSWORD env var o'rnatilganligini nazorat qilish
+    if not os.environ.get("ADMIN_PASSWORD"):
+        log.warning("=" * 60)
+        log.warning("XAVFSIZLIK OGOHLANTIRISHI: ADMIN_PASSWORD env var")
+        log.warning("o'rnatilmagan! Default 'rayyon2024' paroli ishlatilmoqda.")
+        log.warning("Production uchun: export ADMIN_PASSWORD='kuchli_parol'")
+        log.warning("=" * 60)
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") != "production"
     print(f"Rayyon backend ishga tushdi: http://localhost:{port}")

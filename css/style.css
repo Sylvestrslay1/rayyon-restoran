@@ -620,14 +620,51 @@ body {
   }
   .nav-links.open { display: flex; }
   .hamburger { display: flex; }
-  .about-grid, .contact-grid { grid-template-columns: 1fr; gap: 48px; }
+  .container { padding: 0 16px; }
+
+  /* Hero */
+  .hero-content { padding: 0 16px; }
+  .hero-content h1 { font-size: clamp(1.8rem, 8vw, 3rem); }
+  .hero-sub { font-size: 0.9rem; }
+  .hero-btns { flex-direction: column; align-items: center; gap: 12px; }
+  .hero-btns .btn-outline { width: 100%; max-width: 280px; text-align: center; }
+
+  /* About */
+  .about-grid, .contact-grid { grid-template-columns: 1fr; gap: 32px; }
   .about-badge-cyber { right: 0; bottom: 5%; }
-  .reservation-form { padding: 24px 20px; }
-  .footer-inner { flex-direction: column; align-items: flex-start; }
   .about-stats { gap: 10px; }
-  .gallery-grid { grid-template-columns: 1fr 1fr; }
+  .stat-item h3 { font-size: 1.6rem; }
+
+  /* Sections */
+  .section-title { font-size: clamp(1.4rem, 6vw, 2rem); }
+  .gallery-section, .promo-section, .menu-section, .about-section,
+  .contact-section, .reservations-section { padding: 60px 0; }
+
+  /* Gallery */
+  .gallery-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
   .gallery-large, .gallery-wide { grid-column: span 1; grid-row: span 1; }
-  .promo-grid { grid-template-columns: 1fr; }
+  .gallery-item { height: 140px; }
+
+  /* Promos */
+  .promo-grid { grid-template-columns: 1fr; gap: 16px; }
+  .promo-card { padding: 24px 20px; }
+
+  /* Reservation form */
+  .reservation-form { padding: 20px 16px; }
+  .reservation-form .form-row { grid-template-columns: 1fr; }
+
+  /* Footer */
+  .footer-inner { flex-direction: column; align-items: flex-start; gap: 24px; }
+  .footer-links { flex-wrap: wrap; gap: 12px; }
+}
+
+@media (max-width: 480px) {
+  .gallery-grid { grid-template-columns: 1fr; }
+  .gallery-item { height: 160px; }
+  .about-stats { grid-template-columns: 1fr 1fr; }
 }
 
 /* ===== GALLERY ===== */
