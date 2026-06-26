@@ -2518,6 +2518,23 @@ def serve_site():
     base = os.path.join(os.path.dirname(__file__), "..")
     return send_from_directory(base, "index.html")
 
+# Admin panel va boshqa HTML sahifalar uchun aniq yo'llar
+@app.route("/admin")
+@app.route("/admin/")
+def serve_admin():
+    base = os.path.join(os.path.dirname(__file__), "..", "admin")
+    return send_from_directory(base, "index.html")
+
+@app.route("/admin/<path:path>")
+def serve_admin_files(path):
+    base = os.path.join(os.path.dirname(__file__), "..", "admin")
+    return send_from_directory(base, path)
+
+# Nisbiy yo'l xatolarini tuzatish: /login.html → /admin/login.html
+@app.route("/login.html")
+def redirect_login_html():
+    return redirect("/admin/login.html", code=301)
+
 
 @app.route("/<path:path>")
 def serve_static(path):
