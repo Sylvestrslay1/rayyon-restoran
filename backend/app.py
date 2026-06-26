@@ -2522,6 +2522,10 @@ def serve_site():
 @app.route("/<path:path>")
 def serve_static(path):
     base = os.path.join(os.path.dirname(__file__), "..")
+    full = os.path.join(base, path)
+    # Papka bo'lsa (masalan /admin, /waiter) — index.html xizmat qilish
+    if os.path.isdir(full):
+        return send_from_directory(full, "index.html")
     return send_from_directory(base, path)
 
 
