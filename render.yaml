@@ -3,7 +3,7 @@ services:
     name: rayyon-restoran
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn --chdir backend app:app --workers 1 --timeout 120 --keep-alive 5 --log-level info
+    startCommand: gunicorn --chdir backend app:app --workers 1 --timeout 120 --keep-alive 5 --log-level info --bind 0.0.0.0:$PORT
     autoDeploy: true
     healthCheckPath: /api/health
     envVars:

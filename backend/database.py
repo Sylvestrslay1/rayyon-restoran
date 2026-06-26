@@ -24,6 +24,7 @@ if USE_PG:
         user=_u.username,
         password=_u.password,
         ssl_context=_ssl,
+        timeout=10,  # 10 soniya ichida ulanmasa — xato
     )
 
 
