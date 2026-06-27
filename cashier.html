@@ -301,6 +301,8 @@ let CASHIER_ID = null;
 
 // ===== PIN =====
 function pinPress(d) {
+  // Input fokusda bo'lsa olib tashlaymiz
+  document.activeElement?.blur();
   if (PIN.length >= 6) return;
   PIN += d;
   renderPinDisplay();
