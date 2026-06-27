@@ -705,8 +705,7 @@ function renderReceipt(data) {
 }
 function printReceipt() {
   const w = window.open('','_blank');
-  w.document.write('<html><head>
-<link rel="icon" type="image/x-icon" href="/favicon.ico"><title>Chek</title><style>body{font-family:monospace;font-size:13px}.receipt-row{display:flex;justify-content:space-between}</style></head><body>');
+  w.document.write('<html><head><link rel="icon" type="image/x-icon" href="/favicon.ico"><title>Chek</title><style>body{font-family:monospace;font-size:13px}.receipt-row{display:flex;justify-content:space-between}</style></head><body>');
   w.document.write(document.getElementById('receipt-content').innerHTML);
   w.document.write('</body></html>');
   w.document.close();
