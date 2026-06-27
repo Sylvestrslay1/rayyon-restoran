@@ -1434,8 +1434,8 @@ function statusSelect(id, cur, type) {
 // ===== ROL ASOSIDA NAV FILTER =====
 function applyRoleFilter() {
   const urlRole = new URLSearchParams(window.location.search).get('role');
-  const lsRole  = localStorage.getItem('staff_role');
-  const staffName = localStorage.getItem('staff_name');
+  const lsRole  = sessionStorage.getItem('staff_role') || localStorage.getItem('staff_role');
+  const staffName = sessionStorage.getItem('staff_name') || localStorage.getItem('staff_name');
   const role = urlRole || lsRole || 'admin';
 
   // admin va director uchun hech narsani yashirmaymiz
@@ -2039,7 +2039,7 @@ async function applyDiscount(sid) {
 async function closeSession(sid, tableId) {
   const amount = parseInt(document.getElementById('tsm-amount').value)||0;
   const method = document.getElementById('tsm-method').value;
-  const adminName = localStorage.getItem('staff_name') || 'Admin';
+  const adminName = sessionStorage.getItem('staff_name') || localStorage.getItem('staff_name') || 'Admin';
   const r = await fetch(`${API}/api/session/${sid}/close`, {
     method:'POST', headers:H(),
     body:JSON.stringify({payments:[{amount, method}], cashier_name: adminName})

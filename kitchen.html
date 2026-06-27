@@ -226,7 +226,7 @@ async function load() {
 
   // Yangi buyurtma signali
   const allIds = new Set();
-  groups.forEach(g => g.items.forEach(i => allIds.add(i.id)));
+  groups.forEach(g => (g.items || []).forEach(i => allIds.add(i.id)));
   if (!firstLoad) {
     for (const id of allIds) {
       if (!prevIds.has(id)) { showNewOrderToast(); break; }
@@ -237,7 +237,7 @@ async function load() {
 
   // Statistika
   let pending=0, cooking=0;
-  groups.forEach(g => g.items.forEach(i => {
+  groups.forEach(g => (g.items || []).forEach(i => {
     if (i.status==='pending') pending++;
     else if (i.status==='cooking') cooking++;
   }));
@@ -256,13 +256,14 @@ async function load() {
 
   // Aktiv buyurtmalar
   groups.forEach(g => {
+    const gItems = g.items || [];
     html += `<div class="table-card">
       <div class="table-header">
         <div class="table-num">STOL #${g.table}</div>
-        <div class="table-timer">Sessiya: ${g.items.length} taom</div>
+        <div class="table-timer">Sessiya: ${gItems.length} taom</div>
       </div>
       <div class="order-list">`;
-    g.items.forEach(item => {
+    gItems.forEach(item => {
       const isCooking = item.status === 'cooking';
       html += `<div class="order-item">
         <div class="item-emoji">${kEsc(item.item_emoji)||'🍽'}</div>
@@ -348,7 +349,7 @@ function startKFallback() {
 const _es = new EventSource('/api/events');
 _es.addEventListener('new_order', e => {
   load();
-  try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(_) {}
+  try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(e) { console.warn('SSE parse xato:', e); }
 });
 _es.addEventListener('item_cooking', () => load());
 _es.addEventListener('item_ready',   () => load());
@@ -356,6 +357,12 @@ _es.onerror = () => {
   if (_es.readyState === EventSource.CLOSED) { _es.close(); startKFallback(); }
 };
 setTimeout(() => { if (_es.readyState !== EventSource.OPEN) startKFallback(); }, 5000);
+
+// EventSource cleanup — sahifa yopilganda ulanishni to'g'ri yopish
+window.addEventListener('beforeunload', () => {
+  _es.close();
+  if (_kFallbackTimer) clearInterval(_kFallbackTimer);
+});
 
 // Timer real-time yangilanishi — kartadagi vaqtlarni har daqiqada qayta hisoblaydi
 setInterval(() => {

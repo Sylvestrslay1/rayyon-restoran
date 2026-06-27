@@ -381,6 +381,10 @@ function showMain() {
     if (_ces.readyState === EventSource.CLOSED) { _ces.close(); _startFallback(); }
   };
   setTimeout(() => { if (_ces.readyState !== EventSource.OPEN) _startFallback(); }, 5000);
+  window.addEventListener('beforeunload', () => {
+    _ces.close();
+    if (_fallbackTimer) clearInterval(_fallbackTimer);
+  }, { once: true });
 }
 function logout() {
   if (!confirm('Tizimdan chiqmoqchimisiz?')) return;
@@ -934,7 +938,7 @@ async function emailShiftReport() {
   try {
     const r = await fetch(`${API}/api/shift/${SHIFT_ID}/email-report`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': localStorage.getItem('admin_token') || '' },
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': sessionStorage.getItem('admin_token') || '' },
       body: JSON.stringify({ pin: PIN, email })
     });
     const d = await r.json();

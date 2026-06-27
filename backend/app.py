@@ -29,6 +29,8 @@ app.secret_key = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
 
 _cors_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
 _origins = _cors_origins.split(",") if _cors_origins else ["*"]
+if not _cors_origins:
+    log.warning("XAVFSIZLIK: ALLOWED_ORIGINS o'rnatilmagan — CORS barcha domenga ochiq!")
 CORS(app, supports_credentials=True, origins=_origins,
      allow_headers=["Content-Type", "X-Admin-Token", "X-Kitchen-Token", "X-Session-Token", "X-Staff-Pin"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -66,7 +68,7 @@ TG_CHAT       = os.environ.get("TELEGRAM_CHAT_ID", "")
 KITCHEN_TOKEN = os.environ.get("KITCHEN_TOKEN", "")
 
 # ===== XAVFSIZLIK KONSTANTALARI =====
-TOKEN_TTL_HOURS = 8          # Smena uzunligi
+TOKEN_TTL_HOURS = 4          # Smena uzunligi (4 soat — xavfsizlik)
 PBKDF2_ITERATIONS = 200_000  # NIST tavsiyasi 2024
 ALLOWED_PERIODS = {"daily", "weekly", "monthly"}
 
@@ -273,6 +275,15 @@ def check_kitchen_auth() -> bool:
     return hmac.compare_digest(provided, KITCHEN_TOKEN)
 
 
+def _int_param(name: str, default: int, min_val: int = 0, max_val: int = 10000) -> int:
+    """URL parametrdan xavfsiz int olish. Noto'g'ri qiymatda default qaytaradi."""
+    try:
+        v = int(request.args.get(name, default))
+        return max(min_val, min(v, max_val))
+    except (ValueError, TypeError):
+        return default
+
+
 def _validate_str(val, max_len: int, field: str):
     """Matn uzunligini tekshirish. Juda uzun bo'lsa ValueError ko'taradi."""
     if val is not None and len(str(val)) > max_len:
@@ -286,10 +297,12 @@ def q(sql):
 
 def get_setting(key):
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
-    row = cur.fetchone()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
     if not row:
         return None
     return row["value"] if not USE_PG else row[0]
@@ -307,6 +320,11 @@ def force_https():
 @app.after_request
 def add_security_headers(response):
     """Barcha javoblarga xavfsizlik headerlari qo'shish."""
+    # Static fayllar uchun cache (CSS/JS/rasm — 1 kun)
+    if request.path.startswith(("/css/", "/js/", "/assets/", "/uploads/", "/favicon")):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -460,9 +478,8 @@ def login():
     elif stored_plain and hmac.compare_digest(password, stored_plain):
         authenticated = True
 
-    # 4) Default fallback (env var ham, DB ham bo'sh)
-    elif not env_password and hmac.compare_digest(password, "rayyon2024"):
-        authenticated = True
+    # 4) Boshqa holat — autentifikatsiya muvaffaqiyatsiz
+    # Xavfsizlik: default parol yo'q. ADMIN_PASSWORD env var o'rnating.
 
     if not authenticated:
         time.sleep(0.3)  # Vaqt hujumiga qarshi kechiktirish
@@ -598,11 +615,15 @@ def update_menu(item_id):
 
 
 @app.route("/api/menu/<int:item_id>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_menu(item_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM menu WHERE id=?", (item_id,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM menu WHERE id=?", (item_id,))
+        conn.commit()
+    finally:
+        conn.close()
     audit("menu_delete", "menu", item_id, "admin")
     return jsonify({"ok": True})
 
@@ -611,8 +632,8 @@ def delete_menu(item_id):
 @app.route("/api/orders", methods=["GET"])
 def get_orders():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  200)), 1000)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 200, max_val=1000)
+    offset = _int_param("offset", 0, min_val=0)
     status = request.args.get("status")
     conn   = get_conn()
     if status:
@@ -671,8 +692,8 @@ def update_order(order_id):
 @app.route("/api/reservations", methods=["GET"])
 def get_reservations():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  200)), 1000)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 200, max_val=1000)
+    offset = _int_param("offset", 0, min_val=0)
     date   = request.args.get("date")
     conn   = get_conn()
     if date:
@@ -792,11 +813,15 @@ def update_news(news_id):
 
 
 @app.route("/api/news/<int:news_id>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_news(news_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM news WHERE id=?", (news_id,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM news WHERE id=?", (news_id,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -874,35 +899,36 @@ def update_settings():
 def get_stats():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
+    try:
+        def val(sql):
+            cur = db_exec(conn, sql)
+            row = cur.fetchone()
+            return row[0] if row else 0
 
-    def val(sql):
-        cur = db_exec(conn, sql)
-        row = cur.fetchone()
-        return row[0] if row else 0
+        if USE_PG:
+            rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at::date = CURRENT_DATE"
+            res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE::text"
+            active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
+            closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND closed_at::date = CURRENT_DATE"
+        else:
+            rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE date(created_at,'localtime')=date('now','localtime')"
+            res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
+            active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
+            closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND date(closed_at,'localtime')=date('now','localtime')"
 
-    if USE_PG:
-        rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at::date = CURRENT_DATE"
-        res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=CURRENT_DATE::text"
-        active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
-        closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND closed_at::date = CURRENT_DATE"
-    else:
-        rev_sql        = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE date(created_at,'localtime')=date('now','localtime')"
-        res_today_sql  = "SELECT COUNT(*) FROM reservations WHERE date=date('now','localtime')"
-        active_ses_sql = "SELECT COUNT(*) FROM sessions WHERE status='active'"
-        closed_sql     = "SELECT COUNT(*) FROM sessions WHERE status='closed' AND date(closed_at,'localtime')=date('now','localtime')"
-
-    result = {
-        "revenue":            val(rev_sql),
-        "active_sessions":    val(active_ses_sql),
-        "closed_today":       val(closed_sql),
-        "reservations_today": val(res_today_sql),
-        "reservations_new":   val("SELECT COUNT(*) FROM reservations WHERE status='new'"),
-        "menu_count":         val("SELECT COUNT(*) FROM menu WHERE available=1"),
-        # Eski maydonlar — website buyurtmalari uchun (orqaga moslik)
-        "orders_total": val("SELECT COUNT(*) FROM orders"),
-        "orders_new":   val("SELECT COUNT(*) FROM orders WHERE status='new'"),
-    }
-    conn.close()
+        result = {
+            "revenue":            val(rev_sql),
+            "active_sessions":    val(active_ses_sql),
+            "closed_today":       val(closed_sql),
+            "reservations_today": val(res_today_sql),
+            "reservations_new":   val("SELECT COUNT(*) FROM reservations WHERE status='new'"),
+            "menu_count":         val("SELECT COUNT(*) FROM menu WHERE available=1"),
+            # Eski maydonlar — website buyurtmalari uchun (orqaga moslik)
+            "orders_total": val("SELECT COUNT(*) FROM orders"),
+            "orders_new":   val("SELECT COUNT(*) FROM orders WHERE status='new'"),
+        }
+    finally:
+        conn.close()
     return jsonify(result)
 
 
@@ -952,11 +978,15 @@ def update_table(tid):
     return jsonify({"ok": True})
 
 @app.route("/api/tables/<int:tid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_table(tid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM tables WHERE id=?", (tid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM tables WHERE id=?", (tid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -1622,11 +1652,15 @@ def update_staff(sid):
     return jsonify({"ok": True})
 
 @app.route("/api/staff/<int:sid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_staff(sid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "UPDATE staff SET active=0 WHERE id=?", (sid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "UPDATE staff SET active=0 WHERE id=?", (sid,))
+        conn.commit()
+    finally:
+        conn.close()
     audit("staff_delete", "staff", sid, "admin")
     return jsonify({"ok": True})
 
@@ -1671,8 +1705,8 @@ def staff_checkin():
 @app.route("/api/attendance", methods=["GET"])
 def get_attendance():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  100)), 500)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 100, max_val=500)
+    offset = _int_param("offset", 0, min_val=0)
     date   = request.args.get("date")
     conn   = get_conn()
     if date:
@@ -1727,11 +1761,15 @@ def update_gallery(gid):
     return jsonify({"ok": True})
 
 @app.route("/api/gallery/<int:gid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_gallery(gid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM gallery WHERE id=?", (gid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM gallery WHERE id=?", (gid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -1776,11 +1814,15 @@ def update_promotion(pid):
     return jsonify({"ok": True})
 
 @app.route("/api/promotions/<int:pid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_promotion(pid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM promotions WHERE id=?", (pid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM promotions WHERE id=?", (pid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -1920,8 +1962,8 @@ def accounting_report():
 @app.route("/api/expenses", methods=["GET"])
 def get_expenses():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit     = min(int(request.args.get("limit",  200)), 1000)
-    offset    = max(int(request.args.get("offset", 0)),   0)
+    limit     = _int_param("limit", 200, max_val=1000)
+    offset    = _int_param("offset", 0, min_val=0)
     date_from = request.args.get("from")
     date_to   = request.args.get("to")
     conn = get_conn()
@@ -1959,11 +2001,15 @@ def add_expense():
 
 
 @app.route("/api/expenses/<int:eid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_expense(eid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM expenses WHERE id=?", (eid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM expenses WHERE id=?", (eid,))
+        conn.commit()
+    finally:
+        conn.close()
     audit("expense_delete", "expense", eid, "admin")
     return jsonify({"ok": True})
 
@@ -1972,8 +2018,8 @@ def delete_expense(eid):
 @app.route("/api/inventory", methods=["GET"])
 def get_inventory():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  500)), 2000)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 500, max_val=2000)
+    offset = _int_param("offset", 0, min_val=0)
     search = request.args.get("q", "").strip()
     conn   = get_conn()
     if search:
@@ -2030,19 +2076,23 @@ def update_inventory(iid):
 
 
 @app.route("/api/inventory/<int:iid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_inventory(iid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM inventory WHERE id=?", (iid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM inventory WHERE id=?", (iid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/inventory/log", methods=["GET"])
 def get_inventory_log():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  100)), 500)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 100, max_val=500)
+    offset = _int_param("offset", 0, min_val=0)
     conn   = get_conn()
     cur    = db_exec(conn,
         "SELECT * FROM inventory_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -2096,11 +2146,15 @@ def add_recipe():
 
 
 @app.route("/api/recipes/<int:rid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_recipe(rid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM recipes WHERE id=?", (rid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM recipes WHERE id=?", (rid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -2167,7 +2221,7 @@ def get_shifts():
     """Barcha smenalar ro'yxati — admin uchun."""
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    limit_n = min(int(request.args.get("limit", 100)), 500)
+    limit_n = _int_param("limit", 100, max_val=500)
     status  = request.args.get("status", "")
     if status:
         cur = db_exec(conn,
@@ -2321,7 +2375,7 @@ def get_payments():
     date = request.args.get("date")
     shift_id = request.args.get("shift_id")
     try:
-        limit_n = min(int(request.args.get("limit", 100)), 500)
+        limit_n = _int_param("limit", 100, max_val=500)
     except (ValueError, TypeError):
         limit_n = 100
 
@@ -2396,11 +2450,15 @@ def update_customer(cid):
     return jsonify({"ok": True})
 
 @app.route("/api/customers/<int:cid>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def delete_customer(cid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     conn = get_conn()
-    db_exec(conn, "DELETE FROM customers WHERE id=?", (cid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "DELETE FROM customers WHERE id=?", (cid,))
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({"ok": True})
 
 
@@ -2755,8 +2813,8 @@ def push_send():
 @app.route("/api/audit", methods=["GET"])
 def get_audit_log():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    limit  = min(int(request.args.get("limit",  100)), 500)
-    offset = max(int(request.args.get("offset", 0)),   0)
+    limit  = _int_param("limit", 100, max_val=500)
+    offset = _int_param("offset", 0, min_val=0)
     action = request.args.get("action")
     entity = request.args.get("entity")
     conn   = get_conn()
@@ -2790,10 +2848,20 @@ def export_audit_csv():
 @app.route("/api/health", methods=["GET"])
 def health_check():
     # Render health check uchun doim 200 qaytaradi — server ishlayapti degan signal
-    # DB holati alohida ko'rsatiladi lekin 503 qaytarmaydi (deploy failed bo'lmasin)
+    # DB holati haqiqiy query bilan tekshiriladi
+    db_ok = False
+    if _db_ready:
+        try:
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            conn.close()
+            db_ok = True
+        except Exception:
+            db_ok = False
     return jsonify({
         "status": "ok",
-        "db_ready": _db_ready,
+        "db_ready": db_ok,
         "version": "1.0.0",
     }), 200
 
@@ -2868,14 +2936,22 @@ def too_many_requests(e):
     return jsonify({"error": "Juda ko'p so'rov. Biroz kuting."}), 429
 
 
-if __name__ == "__main__":
-    # Xavfsizlik tekshiruvi: ADMIN_PASSWORD env var o'rnatilganligini nazorat qilish
+# ===== STARTUP VALIDATSIYA (gunicorn va dev rejimida ham ishlaydi) =====
+def _startup_checks():
     if not os.environ.get("ADMIN_PASSWORD"):
         log.warning("=" * 60)
-        log.warning("XAVFSIZLIK OGOHLANTIRISHI: ADMIN_PASSWORD env var")
-        log.warning("o'rnatilmagan! Default 'rayyon2024' paroli ishlatilmoqda.")
-        log.warning("Production uchun: export ADMIN_PASSWORD='kuchli_parol'")
+        log.warning("XAVFSIZLIK: ADMIN_PASSWORD o'rnatilmagan!")
+        log.warning("Admin panelga kirish BLOKLANADI.")
+        log.warning("Render > Environment: ADMIN_PASSWORD=kuchli_parol")
         log.warning("=" * 60)
+    if not os.environ.get("SECRET_KEY"):
+        log.warning("SECRET_KEY o'rnatilmagan — har restartda sessiyalar o'chadi!")
+    if not os.environ.get("REDIS_URL") and os.environ.get("FLASK_ENV") == "production":
+        log.warning("REDIS_URL yo'q — multi-worker rejimida auth sessiyalar yo'qolishi mumkin!")
+
+_startup_checks()
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") != "production"
     print(f"Rayyon backend ishga tushdi: http://localhost:{port}")

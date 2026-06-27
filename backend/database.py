@@ -739,8 +739,12 @@ def _init_db_inner(conn):
                 cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def}")
             else:
                 cur.execute(migration_sql)
-        except Exception:
-            pass  # Ustun allaqachon mavjud
+        except Exception as _me:
+            err_str = str(_me).lower()
+            # "duplicate column" yoki "already exists" — kutilgan xato, o'tamiz
+            if "duplicate" not in err_str and "already exist" not in err_str and "duplicate_column" not in err_str:
+                import logging as _lg
+                _lg.getLogger(__name__).warning("Migration ogohlantirish: %s | SQL: %s", _me, migration_sql)
 
     # ===== PERFORMANCE INDEXES =====
     indexes = [
