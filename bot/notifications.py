@@ -27,7 +27,8 @@ def notify_all(text, buttons=None):
 
 
 def check_new_reservations():
-    items = api("GET", "/api/reservations")
+    res = api("GET", "/api/reservations")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):
         return
     for r in items:
@@ -54,7 +55,8 @@ def check_new_reservations():
 
 
 def check_new_orders():
-    items = api("GET", "/api/orders?status=new")
+    res = api("GET", "/api/orders?status=new")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):
         return
     for o in items:

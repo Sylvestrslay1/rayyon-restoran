@@ -1010,11 +1010,12 @@ def get_settings():
         all_s = {r[0]: r[1] for r in rows}
     else:
         all_s = {r["key"]: r["value"] for r in rows}
-    # Admin bo'lmasa faqat public sozlamalarni qaytarish
+    # Parol va hash kalitlari hech qachon APIga chiqmasin
+    SENSITIVE = {"admin_password", "admin_password_hash", "admin_password_salt"}
     if not check_auth():
         public = [{"key": k, "value": v} for k, v in all_s.items() if k in PUBLIC_SETTINGS]
         return jsonify(public)
-    return jsonify(all_s)
+    return jsonify({k: v for k, v in all_s.items() if k not in SENSITIVE})
 
 
 @app.route("/api/settings", methods=["PUT"])

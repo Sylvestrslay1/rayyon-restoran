@@ -3095,7 +3095,8 @@ async function autoRefreshReservations() {
   try {
     const r = await apiFetch(`${API}/api/reservations`);
     if (!r) return;
-    const rows = await r.json();
+    const json = await r.json();
+    const rows = Array.isArray(json) ? json : (json.data || []);
     const badge = document.getElementById('resBadge');
     const pending = rows.filter(x => x.status === 'new').length;
     if (pending > 0) {
