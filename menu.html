@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>Rayyon Restoran — Menyu</title>
@@ -78,8 +79,8 @@ header{background:#060d1a;border-bottom:1px solid rgba(0,212,255,0.15);padding:1
 .order-btn:hover:not(:disabled){background:linear-gradient(135deg,#006688,#00aadd);}
 
 /* SUCCESS */
-.success-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:16px;display:none;}
+.success-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;}
 .success-icon{font-size:5rem;}
 .success-title{font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;letter-spacing:3px;color:var(--green);}
 .success-sub{color:var(--muted);font-size:0.9rem;text-align:center;}
@@ -132,7 +133,7 @@ footer{text-align:center;padding:20px 16px;color:rgba(255,255,255,0.2);font-size
         <span class="label">Jami:</span>
         <span class="val" id="cart-total-val">0 so'm</span>
       </div>
-      <textarea class="comment-input" id="order-comment" rows="2" placeholder="Izoh (ixtiyoriy): allergiya, maxsus talab..."></textarea>
+      <textarea class="comment-input" id="order-comment" rows="2" maxlength="300" placeholder="Izoh (ixtiyoriy): allergiya, maxsus talab..."></textarea>
       <button class="order-btn" id="order-btn" onclick="submitOrder()">✓ BUYURTMA BERISH</button>
     </div>
   </div>
@@ -179,7 +180,7 @@ async function init() {
   await Promise.all([loadMenu(), loadSettings()]);
   if (TABLE_NUM) {
     const bar = document.getElementById('subtitle-bar');
-    bar.innerHTML = `STOL #${TABLE_NUM} <span class="table-badge">QR BUYURTMA</span>`;
+    bar.innerHTML = `STOL #${esc(TABLE_NUM)} <span class="table-badge">QR BUYURTMA</span>`;
   }
   if (!SESSION_TOKEN && !SESSION_ID) {
     // Faqat menyu ko'rish rejimi — buyurtma bermaydi
@@ -190,7 +191,9 @@ async function init() {
 async function loadMenu() {
   try {
     const r = await fetch(API+'/api/menu');
-    allItems = await r.json();
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    allItems = Array.isArray(data) ? data : [];
     render();
   } catch(e) {
     document.getElementById('menu-list').innerHTML = '<div class="empty">⚠ Menyu yuklanmadi.</div>';
@@ -322,9 +325,9 @@ function renderCart() {
   }
   body.innerHTML = cart.map((c,i) => `
     <div class="cart-item">
-      <span style="font-size:1.4rem;">${c.item.emoji||'🍽'}</span>
+      <span style="font-size:1.4rem;">${esc(c.item.emoji)||'🍽'}</span>
       <div style="flex:1;">
-        <div class="ci-name">${c.item.name}</div>
+        <div class="ci-name">${esc(c.item.name)}</div>
         <div class="ci-price">${fmt(c.item.price)} × ${c.qty}</div>
       </div>
       <div class="item-qty-ctrl">
@@ -362,6 +365,7 @@ async function submitOrder() {
     // Agar sid yo'q bo'lsa, tokendan sessiyani topamiz
     if (!sid && SESSION_TOKEN) {
       const vr = await fetch(`${API}/api/session/validate?token=${encodeURIComponent(SESSION_TOKEN)}`);
+      if (!vr.ok) { showToast('QR kod eskirgan yoki noto\'g\'ri'); btn.disabled=false; btn.textContent='✓ BUYURTMA BERISH'; return; }
       const vd = await vr.json();
       if (!vd.valid || !vd.session_id) { showToast('QR kod eskirgan yoki noto\'g\'ri'); btn.disabled=false; btn.textContent='✓ BUYURTMA BERISH'; return; }
       sid = vd.session_id;

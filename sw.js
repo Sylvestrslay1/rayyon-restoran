@@ -1,8 +1,12 @@
-const CACHE = 'rayyon-v3';
+const CACHE = 'rayyon-v5';
 const STATIC = [
   '/',
   '/index.html',
   '/menu.html',
+  '/cashier.html',
+  '/kitchen.html',
+  '/waiter.html',
+  '/staff-login.html',
   '/loyalty-card.html',
   '/manifest.json',
   '/css/style.css',
@@ -39,6 +43,14 @@ async function dbGetAll() {
     req.onerror = () => rej(req.error);
   });
 }
+async function dbDeleteByKey(key) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).delete(key).onsuccess = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
 async function dbClear() {
   const db = await openDB();
   return new Promise((res, rej) => {
@@ -49,11 +61,19 @@ async function dbClear() {
 }
 
 // ===== Install =====
+// FIX: har bir fayl alohida yuklanadi — bitta 404 butun SW ni to'xtatmaydi
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(STATIC))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(async cache => {
+      const results = await Promise.allSettled(
+        STATIC.map(url => cache.add(url).catch(err => {
+          console.warn(`SW: kesh qo'shilmadi ${url}:`, err);
+        }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed) console.warn(`SW install: ${failed} ta fayl keshlanmadi`);
+      return self.skipWaiting();
+    })
   );
 });
 
@@ -79,6 +99,8 @@ self.addEventListener('fetch', e => {
       fetch(e.request.clone()).catch(async () => {
         const body = await e.request.clone().json().catch(() => null);
         if (body) {
+          const token = e.request.headers.get('X-Session-Token') || '';
+          if (token) body._session_token = token;
           await dbAdd({ url: url.pathname, body, ts: Date.now() });
           if ('SyncManager' in self) {
             await self.registration.sync.register(SYNC_TAG);
@@ -91,10 +113,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // API — network only (cache yo'q)
+  // API — network only
   if (url.pathname.startsWith('/api/')) return;
-  // Admin panel — network first
-  if (url.pathname.startsWith('/admin/')) return;
+
+  // FIX: Admin panel — network first, kesh fallback (tarmoq uzilsa ham ishlaydi)
+  if (url.pathname.startsWith('/admin/')) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        }
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
 
   // Statik fayllar — cache first, keyin network
   e.respondWith(
@@ -104,7 +137,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         }
         return res;
-      });
+      }).catch(() => cached);  // tarmoq uzilsa keshdan qaytaradi
       return cached || net;
     })
   );
@@ -118,23 +151,53 @@ self.addEventListener('sync', e => {
 });
 
 async function replayOfflineOrders() {
-  const orders = await dbGetAll();
+  const db = await openDB();
+  const orders = await new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).getAllKeys();
+    req.onsuccess = () => {
+      const keys = req.result;
+      const store = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE);
+      const items = [];
+      let pending = keys.length;
+      if (!pending) { res([]); return; }
+      keys.forEach(key => {
+        store.get(key).onsuccess = ev => {
+          items.push({ key, data: ev.target.result });
+          if (--pending === 0) res(items);
+        };
+      });
+    };
+    req.onerror = () => rej(req.error);
+  });
+
   if (!orders.length) return;
-  const results = await Promise.allSettled(
-    orders.map(o =>
-      fetch(o.url, {
+
+  // FIX: Har bir buyurtmani alohida qayta yuboramiz — muvaffaqiyatlilarini darhol o'chiramiz
+  let successCount = 0;
+  for (const { key, data: o } of orders) {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (o.body && o.body._session_token) {
+        headers['X-Session-Token'] = o.body._session_token;
+      }
+      const res = await fetch(o.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(o.body),
-      })
-    )
-  );
-  const allOk = results.every(r => r.status === 'fulfilled' && r.value.ok);
-  if (allOk) {
-    await dbClear();
-    // Barcha ochiq tab larga xabar berish
+      });
+      if (res.ok) {
+        await dbDeleteByKey(key);  // faqat muvaffaqiyatlilarni o'chiramiz
+        successCount++;
+      }
+    } catch (_) {
+      // Tarmoq yo'q — keyingi sync da qayta urinib ko'ramiz
+    }
+  }
+
+  if (successCount > 0) {
     const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach(c => c.postMessage({ type: 'SYNC_COMPLETE', count: orders.length }));
+    clients.forEach(c => c.postMessage({ type: 'SYNC_COMPLETE', count: successCount }));
   }
 }
 
@@ -144,8 +207,8 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(data.title || 'Rayyon Restoran', {
       body: data.body || '',
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
+      icon: '/assets/icon-192.png',
+      badge: '/assets/icon-192.png',
       tag: data.tag || 'rayyon',
       data: { url: data.url || '/' },
     })

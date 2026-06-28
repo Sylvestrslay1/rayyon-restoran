@@ -1,7 +1,25 @@
 __pycache__/
 *.pyc
+*.pyo
 backend/rayyon.db
 backend/uploads/*
 !backend/uploads/.gitkeep
 *.env
 .env
+.env.*
+
+# Maxfiy sozlamalar
+bot/config.py
+bot/start_bot.bat
+bot/bot.log
+
+# Keraksiz fayllar
+backend/app.py.bak
+cashier_check.js
+cashier_extracted.js
+kitchen_check.js
+rayyon_v4.js
+node_modules/
+
+# Tahlil fayllar
+*.pptx

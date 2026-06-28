@@ -102,7 +102,7 @@ const KITCHEN_TOKEN = new URLSearchParams(window.location.search).get('kitchen_t
 
 // Auth tekshiruv — faqat kitchen/cook/admin/director roli kirishi mumkin
 (function checkKitchenAuth() {
-  const role = localStorage.getItem('staff_role');
+  const role = sessionStorage.getItem('staff_role');
   const allowed = ['kitchen', 'cook', 'admin', 'director', 'manager'];
   if (!role || !allowed.includes(role)) {
     window.location.href = '/staff-login.html';
@@ -177,7 +177,10 @@ function timerColor(dateStr) {
   return 'color:var(--muted)';
 }
 
+let _updatingItem = false;
 async function updateItemStatus(sessionId, itemId, status) {
+  if (_updatingItem) return;
+  _updatingItem = true;
   try {
     const r = await fetch(`${API}/api/session/${sessionId}/item/${itemId}/status`, {
       method: 'PUT',
@@ -192,6 +195,8 @@ async function updateItemStatus(sessionId, itemId, status) {
   } catch(e) {
     showKAlert('Tarmoq xatosi: ' + e.message);
     return;
+  } finally {
+    _updatingItem = false;
   }
   load();
 }
@@ -327,7 +332,7 @@ function playBeep() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch(e) {}
+  } catch(e) { console.warn('AudioContext xato:', e); }
 }
 
 function showNewOrderToast() {
@@ -348,13 +353,15 @@ function startKFallback() {
 
 const _es = new EventSource('/api/events');
 _es.addEventListener('new_order', e => {
+  if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; }
   load();
   try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(e) { console.warn('SSE parse xato:', e); }
 });
-_es.addEventListener('item_cooking', () => load());
-_es.addEventListener('item_ready',   () => load());
+_es.addEventListener('item_cooking', () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
+_es.addEventListener('item_ready',   () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
 _es.onerror = () => {
   if (_es.readyState === EventSource.CLOSED) { _es.close(); startKFallback(); }
+  else if (_es.readyState === EventSource.CONNECTING) { startKFallback(); }
 };
 setTimeout(() => { if (_es.readyState !== EventSource.OPEN) startKFallback(); }, 5000);
 

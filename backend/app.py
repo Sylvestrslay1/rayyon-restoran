@@ -6,6 +6,11 @@ import os, time, urllib.request, urllib.parse, json, secrets, hashlib, hmac
 import threading, datetime, csv, io, logging
 import smtplib, email.mime.text, email.mime.multipart
 
+logging.basicConfig(
+    level=logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO")),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 log = logging.getLogger(__name__)
 
 # ===== REDIS (ixtiyoriy — multi-worker uchun) =====
@@ -76,6 +81,24 @@ ALLOWED_PERIODS = {"daily", "weekly", "monthly"}
 # Multi-worker (Gunicorn) uchun Redis ishlatish tavsiya etiladi
 _tokens_lock = threading.Lock()
 ACTIVE_TOKENS: dict = {}  # token -> {"created": datetime, "ip": str}
+
+# ===== DB CONNECTION HELPER (per-request, auto-close) =====
+from flask import g as _g
+
+def get_db():
+    """Request kontekstida bitta connection qayta ishlatiladi va so'rov oxirida yopiladi."""
+    if "db" not in _g:
+        _g.db = get_conn()
+    return _g.db
+
+@app.teardown_appcontext
+def _close_db(error):
+    db = _g.pop("db", None)
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 # ===== PIN BRUTE-FORCE HIMOYA =====
 _pin_fails: dict = {}  # ip -> {"count": int, "last": datetime}
@@ -222,7 +245,7 @@ def tg_send(text):
         req = urllib.request.Request(url, data=data, method="POST")
         urllib.request.urlopen(req, timeout=5)
     except Exception as e:
-        log.warning("tg_send xato: %s", e)
+        log.warning("tg_send xato: %s", type(e).__name__)
 
 
 def allowed_file(filename):
@@ -316,6 +339,49 @@ def force_https():
         if proto == "http":
             url = request.url.replace("http://", "https://", 1)
             return redirect(url, code=301)
+
+# ===== CSRF HIMOYA =====
+# Eslatma: asosiy himoya allaqachon ta'minlangan —
+# X-Admin-Token va X-Staff-Pin custom headerlari cookie asosli CSRF ni
+# imkonsiz qiladi (brauzer boshqa domenga custom header yubora olmaydi).
+# Bu qatlam qo'shimcha Origin tekshiruvi sifatida ishlaydi.
+_CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+_CSRF_PUBLIC_PATHS = {
+    "/api/staff/login",
+    "/api/staff/checkin",
+    "/api/orders",
+    "/api/reservations",
+    "/api/events",
+    "/api/health",
+    "/api/logout",
+}
+
+@app.before_request
+def csrf_origin_check():
+    """POST/PUT/DELETE da Origin yoki Referer hostni tekshirish."""
+    if request.method in _CSRF_SAFE_METHODS:
+        return
+    if request.path in _CSRF_PUBLIC_PATHS:
+        return
+    # X-Admin-Token yoki X-Staff-Pin bor bo'lsa — custom header = CSRF xavfi yo'q
+    if request.headers.get("X-Admin-Token") or request.headers.get("X-Staff-Pin"):
+        return
+    # X-Kitchen-Token ham xavfsiz
+    if request.headers.get("X-Kitchen-Token"):
+        return
+    origin = request.headers.get("Origin") or request.headers.get("Referer", "")
+    if not origin:
+        return  # Browser ba'zan yubormasligi mumkin
+    server_host = request.host  # e.g. "rayyon.onrender.com"
+    try:
+        from urllib.parse import urlparse
+        origin_host = urlparse(origin).netloc
+        if origin_host and origin_host != server_host:
+            log.warning("CSRF tekshiruvdan o'tmadi: origin=%s host=%s path=%s",
+                        origin_host, server_host, request.path)
+            return jsonify({"error": "Ruxsat yo'q (CSRF)"}), 403
+    except Exception:
+        pass
 
 @app.after_request
 def add_security_headers(response):
@@ -474,9 +540,21 @@ def login():
     elif stored_hash and stored_salt:
         authenticated = verify_password(password, stored_hash, stored_salt)
 
-    # 3) DB dagi plaintext (eski tizim)
+    # 3) DB dagi plaintext (eski tizim) — muvaffaqiyatli bo'lsa hash ga o'tkazamiz
     elif stored_plain and hmac.compare_digest(password, stored_plain):
         authenticated = True
+        new_hash, new_salt = hash_password(password)
+        conn2 = get_conn()
+        try:
+            db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_hash", new_hash))
+            db_exec(conn2, "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", ("admin_password_salt", new_salt))
+            db_exec(conn2, "DELETE FROM settings WHERE key=?", ("admin_password",))
+            conn2.commit()
+            log.info("Admin parol plaintext dan PBKDF2 ga o'tkazildi")
+        except Exception as _upe:
+            log.warning("Parol upgrade xato: %s", _upe)
+        finally:
+            conn2.close()
 
     # 4) Boshqa holat — autentifikatsiya muvaffaqiyatsiz
     # Xavfsizlik: default parol yo'q. ADMIN_PASSWORD env var o'rnating.
@@ -561,16 +639,37 @@ def staff_login():
 
 
 # ===== MENU =====
+@app.route("/api/menu/popular", methods=["GET"])
+def popular_menu():
+    """Eng ko'p buyurtma qilingan taomlar — ochiq endpoint (auth shart emas)."""
+    limit = min(int(request.args.get("limit", 5)), 20)
+    conn  = get_db()
+    cur   = db_exec(conn, """
+        SELECT oi.menu_item_id AS id, oi.item_name AS name, oi.item_emoji AS emoji,
+               m.price, SUM(oi.quantity) AS total_ordered
+        FROM order_items oi
+        LEFT JOIN menu m ON oi.menu_item_id = m.id
+        WHERE oi.status != 'cancelled' AND oi.menu_item_id IS NOT NULL
+        GROUP BY oi.menu_item_id
+        ORDER BY total_ordered DESC
+        LIMIT ?
+    """, (limit,))
+    items = rows_to_list(cur)
+    if not items:
+        cur2 = db_exec(conn, "SELECT id, name, emoji, price FROM menu WHERE available=1 ORDER BY id LIMIT ?", (limit,))
+        items = rows_to_list(cur2)
+    return jsonify(items)
+
+
 @app.route("/api/menu", methods=["GET"])
 def get_menu():
-    conn = get_conn()
+    conn = get_db()
     category = request.args.get("category")
     if category and category != "all":
         cur = db_exec(conn, "SELECT * FROM menu WHERE category=? ORDER BY id", (category,))
     else:
         cur = db_exec(conn, "SELECT * FROM menu ORDER BY category, id")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 
@@ -582,14 +681,23 @@ def add_menu():
         _validate_str(d.get("name"), 100, "Taom nomi")
         _validate_str(d.get("description"), 500, "Tavsif")
         _validate_str(d.get("emoji"), 10, "Emoji")
-    except ValueError as e:
+        price = float(d.get("price") or 0)
+        if price <= 0:
+            raise ValueError("Narx 0 dan katta bo'lishi kerak")
+    except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn,
-        "INSERT INTO menu (name, category, description, price, emoji, available) VALUES (?,?,?,?,?,?)",
-        (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1))
-    )
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn,
+            "INSERT INTO menu (name, category, description, price, emoji, available) VALUES (?,?,?,?,?,?)",
+            (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1))
+        )
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("add_menu DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     audit("menu_add", "menu", user_name="admin", details={"name": d.get("name"), "price": d.get("price")})
     return jsonify({"ok": True})
 
@@ -602,14 +710,24 @@ def update_menu(item_id):
         _validate_str(d.get("name"), 100, "Taom nomi")
         _validate_str(d.get("description"), 500, "Tavsif")
         _validate_str(d.get("emoji"), 10, "Emoji")
-    except ValueError as e:
+        if "price" in d:
+            price = float(d.get("price") or 0)
+            if price <= 0:
+                raise ValueError("Narx 0 dan katta bo'lishi kerak")
+    except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn,
-        "UPDATE menu SET name=?, category=?, description=?, price=?, emoji=?, available=? WHERE id=?",
-        (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1), item_id)
-    )
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn,
+            "UPDATE menu SET name=?, category=?, description=?, price=?, emoji=?, available=? WHERE id=?",
+            (d.get("name"), d.get("category"), d.get("description"), d.get("price"), d.get("emoji", "🍽"), d.get("available", 1), item_id)
+        )
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_menu DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     audit("menu_update", "menu", item_id, "admin", {"name": d.get("name"), "price": d.get("price")})
     return jsonify({"ok": True})
 
@@ -618,12 +736,15 @@ def update_menu(item_id):
 @limiter.limit("10 per minute")
 def delete_menu(item_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM menu WHERE id=?", (item_id,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     audit("menu_delete", "menu", item_id, "admin")
     return jsonify({"ok": True})
 
@@ -645,7 +766,6 @@ def get_orders():
             "SELECT * FROM orders ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
@@ -660,13 +780,13 @@ def add_order():
         _validate_str(d.get("note"),          500, "Izoh")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn,
         "INSERT INTO orders (item_name, item_id, quantity, total_price, customer_name, customer_phone, note) VALUES (?,?,?,?,?,?,?)",
         (d.get("item_name"), d.get("item_id"), d.get("quantity", 1),
          d.get("total_price"), d.get("customer_name"), d.get("customer_phone"), d.get("note"))
     )
-    conn.commit(); conn.close()
+    conn.commit()
     tg_send(
         f"🛒 <b>Yangi buyurtma!</b>\n"
         f"📌 Taom: {d.get('item_name')} x{d.get('quantity',1)}\n"
@@ -682,9 +802,9 @@ def add_order():
 def update_order(order_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn, "UPDATE orders SET status=? WHERE id=?", (d.get("status"), order_id))
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 
@@ -705,7 +825,6 @@ def get_reservations():
             "SELECT * FROM reservations ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
@@ -719,12 +838,18 @@ def add_reservation():
         _validate_str(d.get("note"),           500, "Izoh")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn,
-        "INSERT INTO reservations (customer_name, customer_phone, date, time, guests, note) VALUES (?,?,?,?,?,?)",
-        (d.get("customer_name"), d.get("customer_phone"), d.get("date"), d.get("time"), d.get("guests", 2), d.get("note"))
-    )
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn,
+            "INSERT INTO reservations (customer_name, customer_phone, date, time, guests, note) VALUES (?,?,?,?,?,?)",
+            (d.get("customer_name"), d.get("customer_phone"), d.get("date"), d.get("time"), d.get("guests", 2), d.get("note"))
+        )
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("add_reservation DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     tg_send(
         f"📅 <b>Yangi bron!</b>\n"
         f"👤 Mijoz: {d.get('customer_name')}\n"
@@ -742,38 +867,46 @@ def update_reservation(res_id):
     d      = request.json or {}
     status = d.get("status")
     conn   = get_conn()
-    db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (status, res_id))
-    # Tasdiqlanganda va stol_id berilgan bo'lsa — stolni band qilish
-    table_id = d.get("table_id")
-    if status == "confirmed" and table_id:
-        cur = db_exec(conn, "SELECT status FROM tables WHERE id=?", (table_id,))
-        row = cur.fetchone()
-        tbl_status = (row[0] if USE_PG else row["status"]) if row else None
-        if tbl_status == "free":
-            db_exec(conn, "UPDATE tables SET status='reserved' WHERE id=?", (table_id,))
-            db_exec(conn, "UPDATE reservations SET table_id=? WHERE id=?", (table_id, res_id))
-    # Bekor qilinganda stol bo'shatish
-    elif status == "cancelled":
-        cur2 = db_exec(conn, "SELECT table_id FROM reservations WHERE id=?", (res_id,))
-        row2 = cur2.fetchone()
-        if row2:
-            tid = row2[0] if USE_PG else row2["table_id"]
-            if tid:
-                db_exec(conn, "UPDATE tables SET status='free' WHERE id=? AND status='reserved'", (tid,))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (status, res_id))
+        # Tasdiqlanganda va stol_id berilgan bo'lsa — stolni band qilish
+        table_id = d.get("table_id")
+        if status == "confirmed" and table_id:
+            cur = db_exec(conn, "SELECT status FROM tables WHERE id=?", (table_id,))
+            row = cur.fetchone()
+            tbl_status = (row[0] if USE_PG else row["status"]) if row else None
+            if tbl_status == "free":
+                db_exec(conn, "UPDATE tables SET status='reserved' WHERE id=?", (table_id,))
+                db_exec(conn, "UPDATE reservations SET table_id=? WHERE id=?", (table_id, res_id))
+        # Bekor qilinganda stol bo'shatish
+        elif status == "cancelled":
+            cur2 = db_exec(conn, "SELECT table_id FROM reservations WHERE id=?", (res_id,))
+            row2 = cur2.fetchone()
+            if row2:
+                tid = row2[0] if USE_PG else row2["table_id"]
+                if tid:
+                    db_exec(conn, "UPDATE tables SET status='free' WHERE id=? AND status='reserved'", (tid,))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_reservation DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
     return jsonify({"ok": True})
 
 
 # ===== NEWS =====
 @app.route("/api/news", methods=["GET"])
 def get_news():
-    conn = get_conn()
+    conn = get_db()
     if request.args.get("active") == "1":
         cur = db_exec(conn, "SELECT * FROM news WHERE active=1 ORDER BY created_at DESC")
     else:
         cur = db_exec(conn, "SELECT * FROM news ORDER BY created_at DESC")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 
@@ -787,12 +920,12 @@ def add_news():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     try:
-        conn = get_conn()
+        conn = get_db()
         db_exec(conn,
             "INSERT INTO news (title, content, image, active) VALUES (?,?,?,?)",
             (d.get("title"), d.get("content"), d.get("image"), d.get("active", 1))
         )
-        conn.commit(); conn.close()
+        conn.commit()
     except Exception as e:
         log.error("add_news DB xato: %s", e)
         return jsonify({"error": f"DB xato: {e}"}), 500
@@ -803,12 +936,18 @@ def add_news():
 def update_news(news_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
-    db_exec(conn,
-        "UPDATE news SET title=?, content=?, active=? WHERE id=?",
-        (d.get("title"), d.get("content"), d.get("active", 1), news_id)
-    )
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn,
+            "UPDATE news SET title=?, content=?, active=? WHERE id=?",
+            (d.get("title"), d.get("content"), d.get("active", 1), news_id)
+        )
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_news DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -816,12 +955,15 @@ def update_news(news_id):
 @limiter.limit("10 per minute")
 def delete_news(news_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM news WHERE id=?", (news_id,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -835,6 +977,17 @@ def upload_image():
         return jsonify({"error": "Noto'g'ri fayl turi (png, jpg, gif, webp)"}), 400
     if not check_image_mime(file.stream):
         return jsonify({"error": "Fayl mazmuni rasm emas (MIME tekshiruvi muvaffaqiyatsiz)"}), 400
+    try:
+        from PIL import Image as _Img
+        img = _Img.open(file.stream)
+        w, h = img.size
+        if w > 4000 or h > 4000:
+            return jsonify({"error": f"Rasm o'lchami juda katta ({w}x{h}). Maksimal 4000x4000px"}), 400
+        file.stream.seek(0)
+    except ImportError:
+        file.stream.seek(0)
+    except Exception:
+        file.stream.seek(0)
     filename = str(int(time.time())) + "_" + secure_filename(file.filename)
     file.save(os.path.join(UPLOAD_FOLDER, filename))
     return jsonify({"ok": True, "url": f"/uploads/{filename}"})
@@ -850,10 +1003,9 @@ PUBLIC_SETTINGS = {"restaurant_name", "phone", "address", "working_hours", "tele
 
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT key, value FROM settings")
     rows = cur.fetchall()
-    conn.close()
     if USE_PG:
         all_s = {r[0]: r[1] for r in rows}
     else:
@@ -869,12 +1021,11 @@ def get_settings():
 def update_settings():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    conn = get_db()
     for key, val in d.items():
         # Parol o'zgartirish: darhol pbkdf2 bilan hash qilib saqlash
         if key == "admin_password":
             if not val or len(str(val)) < 6:
-                conn.close()
                 return jsonify({"error": "Parol kamida 6 belgi bo'lishi kerak"}), 400
             new_hash, new_salt = hash_password(str(val))
             if USE_PG:
@@ -890,7 +1041,7 @@ def update_settings():
             db_exec(conn, "INSERT INTO settings (key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, str(val)))
         else:
             db_exec(conn, "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, str(val)))
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 
@@ -898,7 +1049,7 @@ def update_settings():
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         def val(sql):
             cur = db_exec(conn, sql)
@@ -927,15 +1078,18 @@ def get_stats():
             "orders_total": val("SELECT COUNT(*) FROM orders"),
             "orders_new":   val("SELECT COUNT(*) FROM orders WHERE status='new'"),
         }
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify(result)
 
 
 # ===== STOLLAR =====
 @app.route("/api/tables", methods=["GET"])
 def get_tables():
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, """
         SELECT t.*, s.opened_at, s.total_amount, s.token, s.waiter_name
         FROM tables t
@@ -943,7 +1097,6 @@ def get_tables():
         ORDER BY t.number
     """)
     tables = rows_to_list(cur)
-    conn.close()
     # Har bir stol uchun ochiq vaqtni hisoblash
     for tbl in tables:
         if tbl.get("opened_at"):
@@ -961,32 +1114,44 @@ def get_tables():
 def add_table():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    number = d.get("number")
+    if not number and number != 0:
+        return jsonify({"error": "Stol raqami kiritilmadi"}), 400
+    try:
+        number = int(number)
+        if number <= 0:
+            return jsonify({"error": "Stol raqami musbat bo'lishi kerak"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Stol raqami butun son bo'lishi kerak"}), 400
+    conn = get_db()
     db_exec(conn, "INSERT INTO tables (number, name, capacity) VALUES (?,?,?)",
-        (d.get("number"), d.get("name", f"Stol {d.get('number')}"), d.get("capacity", 4)))
-    conn.commit(); conn.close()
+        (number, d.get("name", f"Stol {number}"), d.get("capacity", 4)))
+    conn.commit()
     return jsonify({"ok": True})
 
 @app.route("/api/tables/<int:tid>", methods=["PUT"])
 def update_table(tid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn, "UPDATE tables SET number=?, name=?, capacity=? WHERE id=?",
         (d.get("number"), d.get("name"), d.get("capacity", 4), tid))
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 @app.route("/api/tables/<int:tid>", methods=["DELETE"])
 @limiter.limit("10 per minute")
 def delete_table(tid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM tables WHERE id=?", (tid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -1003,14 +1168,13 @@ def open_session():
     if staff and not d.get("waiter_name"):
         d["waiter_name"] = staff["name"]
     table_id = d.get("table_id")
-    conn = get_conn()
+    conn = get_db()
     # Stol mavjudligini tekshirish
     cur = db_exec(conn, "SELECT * FROM tables WHERE id=?", (table_id,))
     tbl = rows_to_list(cur)
-    if not tbl: conn.close(); return jsonify({"error": "Stol topilmadi"}), 404
+    if not tbl: return jsonify({"error": "Stol topilmadi"}), 404
     tbl = tbl[0]
     if tbl["status"] != "free" and tbl.get("current_session_id"):
-        conn.close()
         return jsonify({"error": "Stol band", "session_id": tbl["current_session_id"]}), 409
     # Noyob token yaratish
     token = secrets.token_urlsafe(12)
@@ -1022,7 +1186,7 @@ def open_session():
     row  = cur2.fetchone()
     sid  = row[0] if USE_PG else row["id"]
     db_exec(conn, "UPDATE tables SET status='occupied', current_session_id=? WHERE id=?", (sid, table_id))
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True, "token": token, "session_id": sid, "table_number": tbl["number"]})
 
 @app.route("/api/session/validate", methods=["GET"])
@@ -1030,10 +1194,9 @@ def validate_session():
     """QR token tekshirish (24 soatlik TTL bilan)."""
     token = request.args.get("token")
     if not token: return jsonify({"valid": False}), 400
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT * FROM sessions WHERE token=? AND status='active'", (token,))
     rows = rows_to_list(cur)
-    conn.close()
     if not rows: return jsonify({"valid": False, "error": "Token eskirgan yoki noto'g'ri"}), 404
     s = rows[0]
     # QR token muddatini tekshirish (24 soat)
@@ -1057,16 +1220,15 @@ def get_session(sid):
     conn  = get_conn()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     rows  = rows_to_list(cur)
-    if not rows: conn.close(); return jsonify({"error": "Topilmadi"}), 404
+    if not rows: return jsonify({"error": "Topilmadi"}), 404
     s = rows[0]
     # Token yoki admin tekshirish
     if s["token"] != token and not check_auth():
-        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+        return jsonify({"error": "Ruxsat yo'q"}), 403
     cur2 = db_exec(conn, "SELECT * FROM order_items WHERE session_id=? ORDER BY created_at", (sid,))
     items = rows_to_list(cur2)
     cur3  = db_exec(conn, "SELECT * FROM payments WHERE session_id=?", (sid,))
     payments = rows_to_list(cur3)
-    conn.close()
     total = sum(i["total_price"] for i in items if i["status"] != "cancelled")
     sc    = total * s.get("service_charge", 0) / 100
     disc  = total * s.get("discount", 0) / 100
@@ -1081,23 +1243,22 @@ def add_order_item(sid):
     conn  = get_conn()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
     rows  = rows_to_list(cur)
-    if not rows: conn.close(); return jsonify({"error": "Sessiya topilmadi yoki yopilgan"}), 404
+    if not rows: return jsonify({"error": "Sessiya topilmadi yoki yopilgan"}), 404
     s = rows[0]
     body = request.json or {}
     staff = check_staff_pin(body.get("waiter_pin"), conn) if body.get("waiter_pin") else None
     if s["token"] != token and not check_auth() and not staff:
-        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+        return jsonify({"error": "Ruxsat yo'q"}), 403
     if staff and not has_role(staff, "waiter", "cashier", "manager"):
-        conn.close(); return jsonify({"error": "Faqat ofitsiant yoki kassir buyurtma bera oladi"}), 403
+        return jsonify({"error": "Faqat ofitsiant yoki kassir buyurtma bera oladi"}), 403
     items = body.get("items", [])
-    if not items: conn.close(); return jsonify({"error": "Buyurtma bo'sh"}), 400
+    if not items: return jsonify({"error": "Buyurtma bo'sh"}), 400
     # Input validatsiyasi
     for item in items:
         try:
             _validate_str(item.get("name"), 100, "Taom nomi")
             _validate_str(item.get("comment"), 500, "Izoh")
         except ValueError as e:
-            conn.close()
             return jsonify({"error": str(e)}), 400
     waiter_name_fallback = staff["name"] if staff else ""
     for item in items:
@@ -1116,7 +1277,7 @@ def add_order_item(sid):
     row  = cur2.fetchone()
     total_sum = (row[0] or 0)
     db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (total_sum, sid))
-    conn.commit(); conn.close()
+    conn.commit()
     # Telegram xabarnomasi
     names = ", ".join(f"{i.get('name')} x{i.get('quantity',1)}" for i in items)
     tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
@@ -1140,7 +1301,7 @@ def update_item_status(sid, iid):
     # Cancel uchun faqat admin
     if status == "cancelled" and not check_auth():
         return jsonify({"error": "Bekor qilish uchun admin ruxsati kerak"}), 403
-    conn = get_conn()
+    conn = get_db()
     # Oldingi item ma'lumotlarini olib qo'yish (deduct uchun)
     pre_cur = db_exec(conn, "SELECT * FROM order_items WHERE id=? AND session_id=?", (iid, sid))
     pre_rows = rows_to_list(pre_cur)
@@ -1153,8 +1314,8 @@ def update_item_status(sid, iid):
             try:
                 deduct_inventory(item["menu_item_id"], item["quantity"], conn,
                     f"Stol #{item['table_number']} — {item['item_name']}")
-            except Exception:
-                pass  # ombor moduli bo'lmasa ham ishlaydi
+            except Exception as _inv_e:
+                log.warning("deduct_inventory xato (item_id=%s): %s", item["menu_item_id"], _inv_e)
     # Agar tayyor bo'lsa → Telegram ga xabar
     if status == "ready" and pre_rows:
         item = pre_rows[0]
@@ -1164,7 +1325,7 @@ def update_item_status(sid, iid):
     elif status == "cooking" and pre_rows:
         _sse_broadcast("item_cooking", {"session_id": sid, "item_id": iid,
                                         "item_name": pre_rows[0]["item_name"]})
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 @app.route("/api/session/<int:sid>/bill", methods=["POST"])
@@ -1174,12 +1335,12 @@ def request_bill(sid):
     conn  = get_conn()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
     rows  = rows_to_list(cur)
-    if not rows: conn.close(); return jsonify({"error": "Sessiya topilmadi"}), 404
+    if not rows: return jsonify({"error": "Sessiya topilmadi"}), 404
     s = rows[0]
     if s["token"] != token and not check_auth():
-        conn.close(); return jsonify({"error": "Ruxsat yo'q"}), 403
+        return jsonify({"error": "Ruxsat yo'q"}), 403
     db_exec(conn, "UPDATE tables SET status='bill_requested' WHERE number=?", (s["table_number"],))
-    conn.commit(); conn.close()
+    conn.commit()
     tg_send(f"🧾 <b>Stol #{s['table_number']} — Hisob so'radi!</b>\nJami: {s.get('total_amount',0):,} so'm")
     return jsonify({"ok": True})
 
@@ -1214,20 +1375,24 @@ def close_session(sid):
         return jsonify({"error": "Ruxsat yo'q"}), 403
     if staff and not has_role(staff, "cashier", "manager"):
         return jsonify({"error": "Faqat kassir to'lov qabul qila oladi"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     rows = rows_to_list(cur)
-    if not rows: conn.close(); return jsonify({"error": "Topilmadi"}), 404
+    if not rows: return jsonify({"error": "Topilmadi"}), 404
     s = rows[0]
 
     # V5: Server tomonida haqiqiy summani hisoblash
     server_total = _calc_session_total(sid, conn)
     payments     = d.get("payments", [])
+    if not payments:
+        return jsonify({"error": "To'lov ma'lumotlari yo'q"}), 400
+    for p in payments:
+        if int(p.get("amount", 0)) < 0:
+            return jsonify({"error": "To'lov summasi manfi bo'lishi mumkin emas"}), 400
     client_total = sum(int(p.get("amount", 0)) for p in payments)
 
     # Tolerans ±500 so'm (yaxlitlash uchun)
     if server_total > 0 and abs(server_total - client_total) > 500:
-        conn.close()
         return jsonify({
             "error": "To'lov miqdori mos emas",
             "server_total": server_total,
@@ -1274,11 +1439,9 @@ def close_session(sid):
         conn.commit()
     except Exception as e:
         conn.rollback()
-        conn.close()
         log.error("close_session xato (sid=%s): %s", sid, e)
         return jsonify({"error": f"To'lov saqlanmadi: {e}"}), 500
 
-    conn.close()
     audit("payment", "session", sid, cashier_name,
           {"total": server_total, "table": s.get("table_number"), "methods": [p.get("method") for p in payments]})
     return jsonify({"ok": True, "total": server_total})
@@ -1296,10 +1459,16 @@ def set_discount(sid):
     service_charge = float(d.get("service_charge", 0))
     if not (0 <= discount <= 100) or not (0 <= service_charge <= 100):
         return jsonify({"error": "Chegirma va xizmat haqi 0–100% oralig'ida bo'lishi kerak"}), 400
-    conn = get_conn()
-    db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
-        (discount, service_charge, sid))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "UPDATE sessions SET discount=?, service_charge=? WHERE id=?",
+            (discount, service_charge, sid))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("set_discount DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -1316,20 +1485,25 @@ def shift_open():
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     if staff["role"] not in ("cashier", "manager", "admin"):
         return jsonify({"ok": False, "error": "Faqat kassir yoki menejer smena ocha oladi"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM shifts WHERE cashier_id=? AND status='open'", (staff["id"],))
     existing = rows_to_list(cur)
     if existing:
-        conn.close()
         return jsonify({"ok": True, "shift_id": existing[0]["id"],
                         "already_open": True, "cashier": staff["name"]})
     opening_cash = int(d.get("opening_cash") or 0)
-    db_exec(conn, "INSERT INTO shifts (cashier_id, cashier_name, status, opening_cash) VALUES (?,?,?,?)",
-            (staff["id"], staff["name"], "open", opening_cash))
-    cur2 = db_exec(conn, "SELECT id FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
-    row = cur2.fetchone()
-    shift_id = row[0] if USE_PG else row["id"]
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn, "INSERT INTO shifts (cashier_id, cashier_name, status, opening_cash) VALUES (?,?,?,?)",
+                (staff["id"], staff["name"], "open", opening_cash))
+        cur2 = db_exec(conn, "SELECT id FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
+        row = cur2.fetchone()
+        shift_id = row[0] if USE_PG else row["id"]
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("shift_open DB xato: %s", _dbe)
+        return jsonify({"ok": False, "error": "Server xatosi"}), 500
     tg_send(f"💼 <b>Smena ochildi</b>\n👤 Kassir: {staff['name']}\n🆔 Smena #{shift_id}")
     return jsonify({"ok": True, "shift_id": shift_id, "cashier": staff["name"]})
 
@@ -1343,10 +1517,9 @@ def shift_current():
     if not staff:
         time.sleep(0.3)
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM shifts WHERE cashier_id=? AND status='open' ORDER BY id DESC", (staff["id"],))
     shifts = rows_to_list(cur)
-    conn.close()
     if not shifts:
         return jsonify({"ok": True, "shift": None, "cashier": staff["name"], "role": staff["role"],
                         "cashier_id": staff["id"]})
@@ -1364,7 +1537,7 @@ def shift_close(shift_id):
     if staff and not has_role(staff, "cashier", "manager"):
         return jsonify({"ok": False, "error": "Faqat kassir smena yopa oladi"}), 403
     cashier_id = staff["id"] if staff else None
-    conn = get_conn()
+    conn = get_db()
     if cashier_id:
         cur = db_exec(conn, "SELECT * FROM shifts WHERE id=? AND cashier_id=? AND status='open'",
                       (shift_id, cashier_id))
@@ -1372,7 +1545,6 @@ def shift_close(shift_id):
         cur = db_exec(conn, "SELECT * FROM shifts WHERE id=? AND status='open'", (shift_id,))
     shift_rows = rows_to_list(cur)
     if not shift_rows:
-        conn.close()
         return jsonify({"ok": False, "error": "Smena topilmadi yoki allaqachon yopilgan"}), 404
 
     # Aktiv sessiyalar tekshiruvi
@@ -1381,7 +1553,6 @@ def shift_close(shift_id):
     active_row = active_cur.fetchone()
     active_cnt = int(active_row[0] if USE_PG else (active_row[0] or 0))
     if active_cnt > 0 and not force:
-        conn.close()
         return jsonify({
             "ok": False,
             "error": f"{active_cnt} ta ochiq stol bor. Barchasini yoping yoki force=true yuboring.",
@@ -1412,10 +1583,16 @@ def shift_close(shift_id):
     net = total - expenses
 
     notes = d.get("notes", "")
-    db_exec(conn,
-        "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=?, total_revenue=? WHERE id=?",
-        (total, sess_cnt, notes, total, shift_id))
-    conn.commit(); conn.close()
+    try:
+        db_exec(conn,
+            "UPDATE shifts SET status='closed', closed_at=CURRENT_TIMESTAMP, total_collected=?, sessions_count=?, notes=?, total_revenue=? WHERE id=?",
+            (total, sess_cnt, notes, total, shift_id))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("shift_close DB xato: %s", _dbe)
+        return jsonify({"ok": False, "error": "Server xatosi"}), 500
 
     cashier_name = staff["name"] if staff else shift_rows[0].get("cashier_name", "")
     meth_lines = "\n".join(f"  {k}: {v:,} so'm" for k, v in methods_summary.items())
@@ -1441,11 +1618,10 @@ def shift_report(shift_id):
         return jsonify({"error": "Ruxsat yo'q"}), 403
     if staff and not has_role(staff, "cashier", "manager", "accountant"):
         return jsonify({"error": "Faqat kassir, menejer yoki buxgalter hisobotni ko'ra oladi"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM shifts WHERE id=?", (shift_id,))
     shifts = rows_to_list(cur)
     if not shifts:
-        conn.close()
         return jsonify({"error": "Smena topilmadi"}), 404
     shift = shifts[0]
     # To'lov usullari bo'yicha taqsimlash
@@ -1459,7 +1635,6 @@ def shift_report(shift_id):
         GROUP BY s.id, s.table_number, s.total_amount, s.opened_at, s.closed_at
         ORDER BY s.closed_at""", (shift_id,))
     sessions_list = rows_to_list(cur3)
-    conn.close()
     return jsonify({**shift, "by_method": by_method, "sessions": sessions_list})
 
 
@@ -1481,15 +1656,13 @@ def void_item(sid, iid):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     voider = staff["name"] if staff else "Admin"
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM order_items WHERE id=? AND session_id=?", (iid, sid))
     rows = rows_to_list(cur)
     if not rows:
-        conn.close()
         return jsonify({"error": "Item topilmadi"}), 404
     item = rows[0]
     if item["status"] == "cancelled":
-        conn.close()
         return jsonify({"error": "Item allaqachon bekor qilingan"}), 400
     db_exec(conn, """UPDATE order_items SET status='cancelled', void_by=?, void_reason=?,
         voided_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?""",
@@ -1506,7 +1679,7 @@ def void_item(sid, iid):
     row2 = cur2.fetchone()
     new_total = int(row2[0] if USE_PG else (row2[0] or 0))
     db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (new_total, sid))
-    conn.commit(); conn.close()
+    conn.commit()
     audit("void", "order_item", iid, voider,
           {"item": item.get("item_name"), "reason": reason, "session_id": sid})
     tg_send(f"🚫 <b>VOID</b> — Stol #{item.get('table_number')}\n"
@@ -1527,12 +1700,10 @@ def get_receipt(sid):
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     sessions = rows_to_list(cur)
     if not sessions:
-        conn.close()
         return jsonify({"error": "Sessiya topilmadi"}), 404
     s = sessions[0]
     staff = check_staff_pin(pin, conn) if pin else None
     if s["token"] != token and not check_auth() and not staff:
-        conn.close()
         return jsonify({"error": "Ruxsat yo'q"}), 403
     cur2 = db_exec(conn, "SELECT * FROM order_items WHERE session_id=? AND status!='cancelled' ORDER BY created_at", (sid,))
     items = rows_to_list(cur2)
@@ -1543,7 +1714,6 @@ def get_receipt(sid):
     rest_info = {}
     for r in raw4:
         rest_info[r[0] if USE_PG else r["key"]] = r[1] if USE_PG else r["value"]
-    conn.close()
     subtotal   = sum(i["total_price"] for i in items)
     sc_amount  = int(subtotal * float(s.get("service_charge") or 0) / 100)
     disc_amount = int(subtotal * float(s.get("discount") or 0) / 100)
@@ -1562,7 +1732,7 @@ def kitchen_orders():
     """Oshxona ekrani uchun — faqat pending va cooking itemlar"""
     if not check_kitchen_auth():
         return jsonify({"error": "Ruxsat yo'q. Kitchen token kerak."}), 403
-    conn = get_conn()
+    conn = get_db()
     category = request.args.get("category")
     if category:
         cur = db_exec(conn, """SELECT oi.*, s.table_number
@@ -1575,7 +1745,6 @@ def kitchen_orders():
             WHERE oi.status IN ('pending','cooking')
             ORDER BY oi.course, oi.created_at""")
     items = rows_to_list(cur)
-    conn.close()
     # Stol bo'yicha guruhlash
     grouped = {}
     for item in items:
@@ -1590,11 +1759,10 @@ def kitchen_ready():
     """Tayyor bo'lgan buyurtmalar — ofitsiant olishi kerak"""
     if not check_kitchen_auth():
         return jsonify({"error": "Ruxsat yo'q. Kitchen token kerak."}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, """SELECT oi.* FROM order_items oi
         WHERE oi.status='ready' ORDER BY oi.updated_at""")
     items = rows_to_list(cur)
-    conn.close()
     return jsonify(items)
 
 
@@ -1602,10 +1770,9 @@ def kitchen_ready():
 @app.route("/api/staff", methods=["GET"])
 def get_staff():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT id,name,role,phone,salary_type,salary_amount,active FROM staff ORDER BY name")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 @app.route("/api/staff", methods=["POST"])
@@ -1621,11 +1788,11 @@ def add_staff():
     if len(pin) < 4:
         return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
     pin_hash, pin_salt = hash_password(pin)
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn, "INSERT INTO staff (name,role,pin,pin_salt,phone,salary_type,salary_amount) VALUES (?,?,?,?,?,?,?)",
         (d.get("name"), d.get("role"), pin_hash, pin_salt,
          d.get("phone"), d.get("salary_type","monthly"), d.get("salary_amount",0)))
-    conn.commit(); conn.close()
+    conn.commit()
     audit("staff_add", "staff", user_name="admin", details={"name": d.get("name"), "role": d.get("role")})
     return jsonify({"ok": True})
 
@@ -1633,11 +1800,10 @@ def add_staff():
 def update_staff(sid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    conn = get_db()
     if d.get("pin"):
         pin = str(d["pin"])
         if len(pin) < 4:
-            conn.close()
             return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
         pin_hash, pin_salt = hash_password(pin)
         db_exec(conn, "UPDATE staff SET name=?,role=?,pin=?,pin_salt=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
@@ -1647,7 +1813,7 @@ def update_staff(sid):
         db_exec(conn, "UPDATE staff SET name=?,role=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
             (d.get("name"),d.get("role"),d.get("phone"),
              d.get("salary_type"),d.get("salary_amount"),d.get("active",1),sid))
-    conn.commit(); conn.close()
+    conn.commit()
     audit("staff_update", "staff", sid, "admin", {"name": d.get("name"), "role": d.get("role")})
     return jsonify({"ok": True})
 
@@ -1655,12 +1821,15 @@ def update_staff(sid):
 @limiter.limit("10 per minute")
 def delete_staff(sid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "UPDATE staff SET active=0 WHERE id=?", (sid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     audit("staff_delete", "staff", sid, "admin")
     return jsonify({"ok": True})
 
@@ -1673,34 +1842,39 @@ def staff_checkin():
     if not pin:
         return jsonify({"ok": False, "error": "PIN kiritilmadi"}), 400
 
-    conn = get_conn()
+    conn = get_db()
     # check_staff_pin barcha aktiv xodimlarni tekshiradi (timing-safe)
     staff = check_staff_pin(pin, conn)
     if not staff:
-        conn.close()
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     import datetime
     today = datetime.date.today().isoformat()
     # Bugun allaqachon kirganmi?
     cur2 = db_exec(conn, "SELECT * FROM attendance WHERE staff_id=? AND date=? AND check_out IS NULL", (staff["id"], today))
     existing = rows_to_list(cur2)
-    if existing:
-        # Check-out
-        att = existing[0]
-        check_in = att["check_in"]
-        if isinstance(check_in, str):
-            check_in = datetime.datetime.fromisoformat(check_in)
-        hours = (datetime.datetime.utcnow() - check_in.replace(tzinfo=None)).total_seconds() / 3600
-        db_exec(conn, "UPDATE attendance SET check_out=CURRENT_TIMESTAMP, hours_worked=? WHERE id=?",
-            (round(hours,2), att["id"]))
-        conn.commit(); conn.close()
-        return jsonify({"ok": True, "action": "checkout", "name": staff["name"], "hours": round(hours,2)})
-    else:
-        # Check-in
-        db_exec(conn, "INSERT INTO attendance (staff_id, staff_name, check_in, date) VALUES (?,?,CURRENT_TIMESTAMP,?)",
-            (staff["id"], staff["name"], today))
-        conn.commit(); conn.close()
-        return jsonify({"ok": True, "action": "checkin", "name": staff["name"], "role": staff["role"]})
+    try:
+        if existing:
+            # Check-out
+            att = existing[0]
+            check_in = att["check_in"]
+            if isinstance(check_in, str):
+                check_in = datetime.datetime.fromisoformat(check_in)
+            hours = (datetime.datetime.utcnow() - check_in.replace(tzinfo=None)).total_seconds() / 3600
+            db_exec(conn, "UPDATE attendance SET check_out=CURRENT_TIMESTAMP, hours_worked=? WHERE id=?",
+                (round(hours,2), att["id"]))
+            conn.commit()
+            return jsonify({"ok": True, "action": "checkout", "name": staff["name"], "hours": round(hours,2)})
+        else:
+            # Check-in
+            db_exec(conn, "INSERT INTO attendance (staff_id, staff_name, check_in, date) VALUES (?,?,CURRENT_TIMESTAMP,?)",
+                (staff["id"], staff["name"], today))
+            conn.commit()
+            return jsonify({"ok": True, "action": "checkin", "name": staff["name"], "role": staff["role"]})
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("staff_checkin DB xato: %s", _dbe)
+        return jsonify({"ok": False, "error": "Server xatosi"}), 500
 
 @app.route("/api/attendance", methods=["GET"])
 def get_attendance():
@@ -1718,21 +1892,19 @@ def get_attendance():
             "SELECT * FROM attendance ORDER BY check_in DESC LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 # ===== GALEREYA =====
 @app.route("/api/gallery", methods=["GET"])
 def get_gallery():
-    conn = get_conn()
+    conn = get_db()
     active = request.args.get("active")
     if active == "1":
         cur = db_exec(conn, "SELECT * FROM gallery WHERE active=1 ORDER BY sort_order, id")
     else:
         cur = db_exec(conn, "SELECT * FROM gallery ORDER BY sort_order, id")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 @app.route("/api/gallery", methods=["POST"])
@@ -1744,46 +1916,60 @@ def add_gallery():
         _validate_str(d.get("emoji"),  10, "Emoji")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn, "INSERT INTO gallery (title, emoji, image, sort_order, active) VALUES (?,?,?,?,?)",
-        (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1)))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "INSERT INTO gallery (title, emoji, image, sort_order, active) VALUES (?,?,?,?,?)",
+            (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1)))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("add_gallery DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/gallery/<int:gid>", methods=["PUT"])
 def update_gallery(gid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
-    db_exec(conn, "UPDATE gallery SET title=?, emoji=?, image=?, sort_order=?, active=? WHERE id=?",
-        (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1), gid))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "UPDATE gallery SET title=?, emoji=?, image=?, sort_order=?, active=? WHERE id=?",
+            (d.get("title"), d.get("emoji","🖼"), d.get("image"), d.get("sort_order",0), d.get("active",1), gid))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_gallery DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/gallery/<int:gid>", methods=["DELETE"])
 @limiter.limit("10 per minute")
 def delete_gallery(gid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM gallery WHERE id=?", (gid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
 # ===== AKSIYALAR =====
 @app.route("/api/promotions", methods=["GET"])
 def get_promotions():
-    conn = get_conn()
+    conn = get_db()
     active = request.args.get("active")
     if active == "1":
         cur = db_exec(conn, "SELECT * FROM promotions WHERE active=1 ORDER BY sort_order, id")
     else:
         cur = db_exec(conn, "SELECT * FROM promotions ORDER BY sort_order, id")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 @app.route("/api/promotions", methods=["POST"])
@@ -1797,32 +1983,47 @@ def add_promotion():
         _validate_str(d.get("time_info"),   100,  "Vaqt ma'lumoti")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
-    db_exec(conn, "INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order, active) VALUES (?,?,?,?,?,?,?)",
-        (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1)))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "INSERT INTO promotions (title, description, badge, emoji, time_info, sort_order, active) VALUES (?,?,?,?,?,?,?)",
+            (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1)))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("add_promotion DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/promotions/<int:pid>", methods=["PUT"])
 def update_promotion(pid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
-    db_exec(conn, "UPDATE promotions SET title=?, description=?, badge=?, emoji=?, time_info=?, sort_order=?, active=? WHERE id=?",
-        (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1), pid))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "UPDATE promotions SET title=?, description=?, badge=?, emoji=?, time_info=?, sort_order=?, active=? WHERE id=?",
+            (d.get("title"), d.get("description"), d.get("badge"), d.get("emoji","🎁"), d.get("time_info"), d.get("sort_order",0), d.get("active",1), pid))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_promotion DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/promotions/<int:pid>", methods=["DELETE"])
 @limiter.limit("10 per minute")
 def delete_promotion(pid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM promotions WHERE id=?", (pid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -1871,7 +2072,6 @@ def staff_payroll():
             "salary_type": salary_type, "salary_amount": salary_amount,
             "hours_worked": hours, "earned": earned, "month": month,
         })
-    conn.close()
     return jsonify(result)
 
 
@@ -1948,7 +2148,6 @@ def accounting_report():
     else:
         exp_by_cat = [{"cat": r[0], "total": r[1]} for r in cur3.fetchall()]
 
-    conn.close()
     return jsonify({
         "revenue": revenue,
         "expenses": expenses,
@@ -1966,7 +2165,7 @@ def get_expenses():
     offset    = _int_param("offset", 0, min_val=0)
     date_from = request.args.get("from")
     date_to   = request.args.get("to")
-    conn = get_conn()
+    conn = get_db()
     if date_from and date_to:
         cur = db_exec(conn,
             "SELECT * FROM expenses WHERE date>=? AND date<=? ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
@@ -1976,7 +2175,6 @@ def get_expenses():
             "SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
@@ -1989,12 +2187,12 @@ def add_expense():
         _validate_str(d.get("description"), 500, "Tavsif")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn,
         "INSERT INTO expenses (category, description, amount, date) VALUES (?,?,?,?)",
         (d.get("category"), d.get("description"), d.get("amount", 0), d.get("date"))
     )
-    conn.commit(); conn.close()
+    conn.commit()
     audit("expense_add", "expense", user_name="admin",
           details={"category": d.get("category"), "amount": d.get("amount"), "date": d.get("date")})
     return jsonify({"ok": True})
@@ -2004,12 +2202,15 @@ def add_expense():
 @limiter.limit("10 per minute")
 def delete_expense(eid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM expenses WHERE id=?", (eid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     audit("expense_delete", "expense", eid, "admin")
     return jsonify({"ok": True})
 
@@ -2031,7 +2232,6 @@ def get_inventory():
             "SELECT * FROM inventory ORDER BY name LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
@@ -2039,12 +2239,24 @@ def get_inventory():
 def add_inventory():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Mahsulot nomi kiritilmadi"}), 400
+    unit = (d.get("unit") or "kg").strip()
+    if not unit:
+        return jsonify({"error": "Birlik kiritilmadi"}), 400
+    try:
+        qty = float(d.get("quantity", 0))
+        if qty < 0:
+            return jsonify({"error": "Miqdor manfi bo'lishi mumkin emas"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Miqdor noto'g'ri formatda"}), 400
+    conn = get_db()
     db_exec(conn,
         "INSERT INTO inventory (name, unit, quantity, min_quantity, price_per_unit) VALUES (?,?,?,?,?)",
-        (d.get("name"), d.get("unit","kg"), d.get("quantity",0), d.get("min_quantity",0), d.get("price_per_unit",0))
+        (name, unit, qty, d.get("min_quantity", 0), d.get("price_per_unit", 0))
     )
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 
@@ -2052,7 +2264,10 @@ def add_inventory():
 def update_inventory(iid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d    = request.json or {}
-    conn = get_conn()
+    new_qty = d.get("quantity")
+    if new_qty is not None and float(new_qty) < 0:
+        return jsonify({"error": "Miqdor manfi bo'lishi mumkin emas"}), 400
+    conn = get_db()
     # Miqdor o'zgartirish va log yozish
     cur  = db_exec(conn, "SELECT name, quantity FROM inventory WHERE id=?", (iid,))
     row  = cur.fetchone()
@@ -2071,7 +2286,7 @@ def update_inventory(iid):
         "UPDATE inventory SET name=?, unit=?, quantity=?, min_quantity=?, price_per_unit=? WHERE id=?",
         (d.get("name"), d.get("unit","kg"), d.get("quantity",0), d.get("min_quantity",0), d.get("price_per_unit",0), iid)
     )
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 
@@ -2079,12 +2294,15 @@ def update_inventory(iid):
 @limiter.limit("10 per minute")
 def delete_inventory(iid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM inventory WHERE id=?", (iid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -2098,7 +2316,6 @@ def get_inventory_log():
         "SELECT * FROM inventory_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
         (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
@@ -2107,7 +2324,7 @@ def get_inventory_log():
 def get_recipes():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     menu_item_id = request.args.get("menu_item_id")
-    conn = get_conn()
+    conn = get_db()
     if menu_item_id:
         cur = db_exec(conn, """
             SELECT r.*, i.name AS inv_name, i.unit AS inv_unit, i.quantity AS inv_qty
@@ -2125,7 +2342,6 @@ def get_recipes():
             ORDER BY m.name
         """)
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 
@@ -2133,15 +2349,27 @@ def get_recipes():
 def add_recipe():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    menu_item_id = d.get("menu_item_id")
+    inventory_id = d.get("inventory_id")
+    if not menu_item_id:
+        return jsonify({"error": "Taom tanlanmadi"}), 400
+    if not inventory_id:
+        return jsonify({"error": "Mahsulot tanlanmadi"}), 400
+    try:
+        qty = float(d.get("quantity", 0))
+        if qty <= 0:
+            return jsonify({"error": "Miqdor 0 dan katta bo'lishi kerak"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Miqdor noto'g'ri formatda"}), 400
+    conn = get_db()
     # Eski o'chirib yangi kiritish (upsert)
     db_exec(conn, "DELETE FROM recipes WHERE menu_item_id=? AND inventory_id=?",
-            (d.get("menu_item_id"), d.get("inventory_id")))
+            (menu_item_id, inventory_id))
     db_exec(conn,
         "INSERT INTO recipes (menu_item_id, inventory_id, quantity, unit) VALUES (?,?,?,?)",
-        (d.get("menu_item_id"), d.get("inventory_id"), d.get("quantity", 0), d.get("unit", "g"))
+        (menu_item_id, inventory_id, qty, d.get("unit", "g"))
     )
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 
@@ -2149,12 +2377,15 @@ def add_recipe():
 @limiter.limit("10 per minute")
 def delete_recipe(rid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM recipes WHERE id=?", (rid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -2220,7 +2451,7 @@ def restore_inventory(menu_item_id, quantity, conn, note=""):
 def get_shifts():
     """Barcha smenalar ro'yxati — admin uchun."""
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     limit_n = _int_param("limit", 100, max_val=500)
     status  = request.args.get("status", "")
     if status:
@@ -2232,7 +2463,6 @@ def get_shifts():
             "SELECT * FROM shifts ORDER BY opened_at DESC LIMIT ?",
             (limit_n,))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 
@@ -2248,10 +2478,16 @@ def analytics_alias():
 def toggle_stoplist(item_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
-    db_exec(conn, "UPDATE menu SET available=? WHERE id=?",
-            (0 if d.get("stop") else 1, item_id))
-    conn.commit(); conn.close()
+    conn = get_db()
+    try:
+        db_exec(conn, "UPDATE menu SET available=? WHERE id=?",
+                (0 if d.get("stop") else 1, item_id))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("toggle_stoplist DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -2353,7 +2589,6 @@ def analytics_summary():
     c5 = conn.cursor(); c5.execute("SELECT name, quantity, min_quantity, unit FROM inventory WHERE quantity <= min_quantity ORDER BY quantity")
     low_stock = [{"name": r[0], "quantity": r[1], "min_quantity": r[2], "unit": r[3]} for r in c5.fetchall()]
 
-    conn.close()
     return jsonify({
         "revenue": revenue, "expenses": expenses, "profit": revenue - expenses,
         "sessions": sessions_ct, "items_sold": items_ct, "avg_bill": round(avg_bill),
@@ -2371,7 +2606,7 @@ def get_payments():
         return jsonify({"error": "Ruxsat yo'q"}), 403
     if staff and not has_role(staff, "cashier", "manager", "accountant"):
         return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     date = request.args.get("date")
     shift_id = request.args.get("shift_id")
     try:
@@ -2391,7 +2626,6 @@ def get_payments():
     params.append(limit_n)
     cur = db_exec(conn, sql, tuple(params))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 
@@ -2399,7 +2633,7 @@ def get_payments():
 @app.route("/api/customers", methods=["GET"])
 def get_customers():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     search = request.args.get("q", "")
     if search:
         cur = db_exec(conn, "SELECT * FROM customers WHERE phone LIKE ? OR name LIKE ? ORDER BY total_spent DESC",
@@ -2407,17 +2641,15 @@ def get_customers():
     else:
         cur = db_exec(conn, "SELECT * FROM customers ORDER BY total_spent DESC")
     result = rows_to_list(cur)
-    conn.close()
     return jsonify(result)
 
 @app.route("/api/customers/lookup", methods=["GET"])
 def lookup_customer():
     phone = request.args.get("phone", "").strip()
     if not phone: return jsonify({"found": False}), 200
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM customers WHERE phone=?", (phone,))
     rows = rows_to_list(cur)
-    conn.close()
     if rows:
         return jsonify({"found": True, "customer": rows[0]})
     return jsonify({"found": False})
@@ -2427,38 +2659,46 @@ def add_customer():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
     phone = (d.get("phone") or "").strip()
-    if not phone: return jsonify({"error": "Telefon kiritilmadi"}), 400
-    conn = get_conn()
+    if not phone:
+        return jsonify({"error": "Telefon kiritilmadi"}), 400
+    import re
+    if not re.match(r"^\+?[\d\s\-\(\)]{7,20}$", phone):
+        return jsonify({"error": "Telefon formati noto'g'ri"}), 400
+    name = (d.get("name") or "").strip()
+    if len(name) > 100:
+        return jsonify({"error": "Ism 100 ta belgidan oshmasligi kerak"}), 400
+    conn = get_db()
     try:
         db_exec(conn, "INSERT INTO customers (name, phone, discount_pct, notes) VALUES (?,?,?,?)",
                 (d.get("name",""), phone, d.get("discount_pct", 0), d.get("notes","")))
         conn.commit()
     except Exception as e:
-        conn.close()
         return jsonify({"error": "Bu telefon allaqachon mavjud"}), 409
-    conn.close()
     return jsonify({"ok": True})
 
 @app.route("/api/customers/<int:cid>", methods=["PUT"])
 def update_customer(cid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
-    conn = get_conn()
+    conn = get_db()
     db_exec(conn, "UPDATE customers SET name=?, phone=?, discount_pct=?, notes=? WHERE id=?",
             (d.get("name",""), d.get("phone",""), d.get("discount_pct",0), d.get("notes",""), cid))
-    conn.commit(); conn.close()
+    conn.commit()
     return jsonify({"ok": True})
 
 @app.route("/api/customers/<int:cid>", methods=["DELETE"])
 @limiter.limit("10 per minute")
 def delete_customer(cid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM customers WHERE id=?", (cid,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 
@@ -2503,11 +2743,10 @@ def email_shift_report(shift_id):
     if not to_email or "@" not in to_email:
         return jsonify({"error": "Email manzil kiritilmadi"}), 400
 
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT * FROM shifts WHERE id=?", (shift_id,))
     rows = rows_to_list(cur)
     if not rows:
-        conn.close()
         return jsonify({"error": "Smena topilmadi"}), 404
     s = rows[0]
 
@@ -2517,7 +2756,6 @@ def email_shift_report(shift_id):
     total_pay = int((cur3.fetchone() or [0])[0] or 0)
     cur4 = db_exec(conn, "SELECT COUNT(DISTINCT session_id) FROM payments WHERE shift_id=?", (shift_id,))
     sess_cnt = int((cur4.fetchone() or [0])[0] or 0)
-    conn.close()
 
     opened = str(s.get("opened_at") or "")[:16]
     closed = str(s.get("closed_at") or "")[:16]
@@ -2558,10 +2796,9 @@ def email_shift_report(shift_id):
 @app.route("/api/loyalty-card/<int:cid>", methods=["GET"])
 def loyalty_card(cid):
     """Ochiq endpoint — mijoz o'z karta ma'lumotlarini ko'radi (token kerak emas)."""
-    conn = get_conn()
+    conn = get_db()
     cur = db_exec(conn, "SELECT id,name,phone,total_spent,visits,loyalty_points,discount_pct FROM customers WHERE id=?", (cid,))
     rows = rows_to_list(cur)
-    conn.close()
     if not rows:
         return jsonify({"error": "Mijoz topilmadi"}), 404
     c = rows[0]
@@ -2639,7 +2876,7 @@ def export_payments():
         cur = db_exec(conn, "SELECT * FROM payments WHERE to_char(created_at,'YYYY-MM')=%s ORDER BY created_at DESC", (month,))
     else:
         cur = db_exec(conn, "SELECT * FROM payments WHERE strftime('%Y-%m',created_at)=? ORDER BY created_at DESC", (month,))
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, f"payments_{month}.csv")
 
 
@@ -2652,25 +2889,25 @@ def export_sessions():
         cur = db_exec(conn, "SELECT id,table_number,waiter_name,status,total_amount,discount,service_charge,opened_at,closed_at FROM sessions WHERE to_char(opened_at,'YYYY-MM')=%s ORDER BY opened_at DESC", (month,))
     else:
         cur = db_exec(conn, "SELECT id,table_number,waiter_name,status,total_amount,discount,service_charge,opened_at,closed_at FROM sessions WHERE strftime('%Y-%m',opened_at)=? ORDER BY opened_at DESC", (month,))
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, f"sessions_{month}.csv")
 
 
 @app.route("/api/export/staff", methods=["GET"])
 def export_staff():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT id,name,role,phone,salary_type,salary_amount,active,created_at FROM staff ORDER BY name")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "staff.csv")
 
 
 @app.route("/api/export/inventory", methods=["GET"])
 def export_inventory():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT * FROM inventory ORDER BY name")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "inventory.csv")
 
 
@@ -2741,15 +2978,18 @@ def push_subscribe():
     keys    = subscription.get("keys", {})
     p256dh  = keys.get("p256dh", "")
     auth_key = keys.get("auth", "")
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, """
             INSERT OR IGNORE INTO push_subscriptions (endpoint, p256dh, auth)
             VALUES (?, ?, ?)
         """, (endpoint, p256dh, auth_key))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/push/unsubscribe", methods=["POST"])
@@ -2759,12 +2999,15 @@ def push_unsubscribe():
     endpoint = data.get("endpoint", "")
     if not endpoint:
         return jsonify({"ok": False}), 400
-    conn = get_conn()
+    conn = get_db()
     try:
         db_exec(conn, "DELETE FROM push_subscriptions WHERE endpoint=?", (endpoint,))
         conn.commit()
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/push/send", methods=["POST"])
@@ -2781,12 +3024,15 @@ def push_send():
         "url":   data.get("url", "/"),
         "tag":   data.get("tag", "rayyon"),
     })
-    conn = get_conn()
+    conn = get_db()
     try:
         cur = db_exec(conn, "SELECT * FROM push_subscriptions", ())
         subs = rows_to_list(cur)
-    finally:
-        conn.close()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("DB xato: %s", _dbe)
+        return jsonify({"error": "Server xatosi"}), 500
     try:
         from pywebpush import webpush, WebPushException
     except ImportError:
@@ -2831,16 +3077,15 @@ def get_audit_log():
             "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (limit, offset))
     result = rows_to_list(cur)
-    conn.close()
     return jsonify({"data": result, "limit": limit, "offset": offset, "count": len(result)})
 
 
 @app.route("/api/export/audit", methods=["GET"])
 def export_audit_csv():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
-    conn = get_conn()
+    conn = get_db()
     cur  = db_exec(conn, "SELECT * FROM audit_log ORDER BY created_at DESC")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "audit_log.csv")
 
 
@@ -2866,20 +3111,42 @@ def health_check():
     }), 200
 
 
+# ===== CLIENT-SIDE XATOLAR LOGGING =====
+@app.route("/api/client-errors", methods=["POST"])
+def client_errors():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    try:
+        data = request.get_json(silent=True) or {}
+        msg     = str(data.get("message", ""))[:500]
+        source  = str(data.get("source", "unknown"))[:100]
+        stack   = str(data.get("stack", ""))[:1000]
+        url     = str(data.get("url", ""))[:200]
+        ua      = request.headers.get("User-Agent", "")[:200]
+        ip      = request.remote_addr
+        log.error(
+            "CLIENT_ERROR | source=%s | msg=%s | url=%s | ip=%s | ua=%s | stack=%s",
+            source, msg, url, ip, ua, stack[:200]
+        )
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        log.warning("client_errors handler xato: %s", e)
+        return jsonify({"ok": False}), 200
+
+
 # ===== QOSHIMCHA CSV EKSPORT =====
 @app.route("/api/export/orders", methods=["GET"])
 def export_orders_csv():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     date_from = request.args.get("from")
     date_to   = request.args.get("to")
-    conn = get_conn()
+    conn = get_db()
     if date_from and date_to:
         cur = db_exec(conn,
             "SELECT * FROM orders WHERE created_at>=? AND created_at<=? ORDER BY created_at DESC",
             (date_from, date_to + " 23:59:59"))
     else:
         cur = db_exec(conn, "SELECT * FROM orders ORDER BY created_at DESC")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "orders.csv")
 
 
@@ -2888,14 +3155,14 @@ def export_expenses_csv():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     date_from = request.args.get("from")
     date_to   = request.args.get("to")
-    conn = get_conn()
+    conn = get_db()
     if date_from and date_to:
         cur = db_exec(conn,
             "SELECT * FROM expenses WHERE date>=? AND date<=? ORDER BY date DESC",
             (date_from, date_to))
     else:
         cur = db_exec(conn, "SELECT * FROM expenses ORDER BY date DESC")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "expenses.csv")
 
 
@@ -2904,14 +3171,14 @@ def export_attendance_csv():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     date_from = request.args.get("from")
     date_to   = request.args.get("to")
-    conn = get_conn()
+    conn = get_db()
     if date_from and date_to:
         cur = db_exec(conn,
             "SELECT * FROM attendance WHERE date>=? AND date<=? ORDER BY date DESC",
             (date_from, date_to))
     else:
         cur = db_exec(conn, "SELECT * FROM attendance ORDER BY check_in DESC")
-    rows = rows_to_list(cur); conn.close()
+    rows = rows_to_list(cur)
     return _csv_response(rows, "attendance.csv")
 
 

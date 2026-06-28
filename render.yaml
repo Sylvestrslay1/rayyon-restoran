@@ -13,6 +13,10 @@ services:
         value: "3.11.0"
       - key: KITCHEN_TOKEN
         generateValue: true
+      - key: DAILY_REPORT_HOUR
+        value: "22"
+      - key: NOTIF_INTERVAL
+        value: "60"
       - key: ALLOWED_ORIGINS
         value: "https://rayyon-restoran.onrender.com"
       # MAJBURIY: Render dashboard > Environment da qo'lda o'rnating!

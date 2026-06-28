@@ -391,9 +391,9 @@ function logout() {
   PIN = ''; CASHIER = null; SHIFT_ID = null; CASHIER_ID = null;
   renderPinDisplay();
   sessionStorage.removeItem('staff_pin');
-  localStorage.removeItem('staff_role');
-  localStorage.removeItem('staff_name');
-  localStorage.removeItem('staff_id');
+  sessionStorage.removeItem('staff_role');
+  sessionStorage.removeItem('staff_name');
+  sessionStorage.removeItem('staff_id');
   document.getElementById('pin-error').textContent = '';
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('pin-screen').style.display = 'flex';
@@ -402,7 +402,7 @@ function logout() {
 // staff-login.html dan kelganda PIN ni avtomatik yuborish
 (function autoLoginFromStaffPortal() {
   const savedPin  = sessionStorage.getItem('staff_pin');
-  const savedRole = localStorage.getItem('staff_role');
+  const savedRole = sessionStorage.getItem('staff_role');
   if (savedPin && savedRole === 'cashier') {
     PIN = savedPin;
     renderPinDisplay();
@@ -585,7 +585,11 @@ async function _doLookupCustomer(phone) {
       customerDisc = 0;
       info.textContent = '';
     }
-  } catch(e) { /* tarmoq xatosi — jim o'tamiz */ }
+  } catch(e) {
+    console.warn('Mijoz qidirish xato:', e);
+    const info = document.getElementById('m-cust-info');
+    if (info) { info.textContent = 'Tarmoq xatosi — mijoz ma\'lumoti yuklanmadi'; info.style.color='#ff9800'; }
+  }
 }
 
 async function submitPayment() {

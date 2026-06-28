@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rayyon — Loyalty Karta</title>
@@ -53,15 +54,20 @@ body{min-height:100vh;background:linear-gradient(135deg,#0a0a0f 0%,#1a0a2e 50%,#
     <div id="card-body"><div class="error-box"><p>Yuklanmoqda...</p></div></div>
   </div>
   <div style="display:flex;justify-content:center;gap:8px;margin-top:10px;">
-    <a id="lang-uz" href="?id=0&lang=uz" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">UZ</a>
-    <a id="lang-ru" href="?id=0&lang=ru" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">RU</a>
-    <a id="lang-en" href="?id=0&lang=en" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)">EN</a>
+    <a id="lang-uz" href="?id=0&lang=uz" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)" aria-label="O'zbek tili">UZ</a>
+    <a id="lang-ru" href="?id=0&lang=ru" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)" aria-label="Русский язык">RU</a>
+    <a id="lang-en" href="?id=0&lang=en" style="font-size:12px;padding:4px 10px;border-radius:12px;text-decoration:none;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.1)" aria-label="English">EN</a>
   </div>
   <button class="share-btn" id="share-btn" style="display:none" onclick="shareCard()">📤 Do'stlarga ulashish</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 const params = new URLSearchParams(location.search);
 const cid  = parseInt(params.get('id') || '0');
 const LANG = params.get('lang') || navigator.language.slice(0,2) || 'uz';
@@ -145,40 +151,43 @@ function render(c) {
   const cardUrl = location.href;
 
   document.getElementById('card-body').innerHTML = `
-    <div class="tier-badge tier-${c.tier}">${icon} ${c.tier}</div>
-    <div class="member-name">${c.name}</div>
-    <div class="member-phone">${c.phone}</div>
+    <div class="tier-badge tier-${esc(c.tier)}">${esc(icon)} ${esc(c.tier)}</div>
+    <div class="member-name">${esc(c.name)}</div>
+    <div class="member-phone">${esc(c.phone)}</div>
     <div class="stats-row">
       <div class="stat"><div class="stat-val">${pts}</div><div class="stat-lbl">${L.ballar}</div></div>
-      <div class="stat"><div class="stat-val">${c.visits}</div><div class="stat-lbl">${L.tashrif}</div></div>
+      <div class="stat"><div class="stat-val">${fmt(c.visits)}</div><div class="stat-lbl">${L.tashrif}</div></div>
       <div class="stat"><div class="stat-val">${fmt(Math.round(c.total_spent/1000))}K</div><div class="stat-lbl">${L.xarid}</div></div>
     </div>
     <div class="points-bar">
       <div class="points-bar-top"><span>${L.daraja}</span><span>${pts}</span></div>
       <div class="bar-track"><div class="bar-fill" id="bar-fill" style="width:0%"></div></div>
-      <div class="next-tier">${nextLabel}</div>
+      <div class="next-tier">${esc(nextLabel)}</div>
     </div>
     ${c.discount_pct > 0 ? `
     <div class="discount-box">
       <div><div class="discount-lbl">${L.chegirma}</div></div>
-      <div class="discount-val">${c.discount_pct}%</div>
+      <div class="discount-val">${esc(String(c.discount_pct))}%</div>
     </div>` : ''}
     <div class="qr-section">
       <div class="qr-box" id="qr-canvas"></div>
       <div class="qr-info">
-        <b>#${c.id}</b>
+        <b>#${esc(String(c.id))}</b>
         ${L.qr_hint}<br>
         <span style="color:rgba(255,255,255,0.2);font-size:10px">${L.qr_warn}</span>
       </div>
     </div>`;
 
   setTimeout(() => {
-    document.getElementById('bar-fill').style.width = pct + '%';
-    new QRCode(document.getElementById('qr-canvas'), {
-      text: cardUrl, width: 80, height: 80,
-      colorDark: '#0a0a0f', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
+    const barEl = document.getElementById('bar-fill');
+    if (barEl) barEl.style.width = pct + '%';
+    try {
+      new QRCode(document.getElementById('qr-canvas'), {
+        text: cardUrl, width: 80, height: 80,
+        colorDark: '#0a0a0f', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(_) {}
   }, 100);
 
   document.getElementById('share-btn').textContent = L.share;
@@ -207,6 +216,12 @@ async function shareCard() {
   try { await navigator.clipboard.writeText(url); alert(L.copied); }
   catch(_) { prompt(L.copy_prompt, url); }
 }
+
+// Til havolalarini darhol to'g'ri cid bilan yangilash
+['uz','ru','en'].forEach(l => {
+  const a = document.getElementById('lang-'+l);
+  if (a) a.href = `?id=${cid}&lang=${l}`;
+});
 
 load();
 </script>

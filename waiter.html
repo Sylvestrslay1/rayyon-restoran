@@ -150,6 +150,8 @@ body{background:var(--bg);color:#fff;font-family:'Inter',sans-serif;min-height:1
     <div class="pin-dots">
       <div class="pd" id="pd0"></div><div class="pd" id="pd1"></div>
       <div class="pd" id="pd2"></div><div class="pd" id="pd3"></div>
+      <div class="pd" id="pd4"></div><div class="pd" id="pd5"></div>
+      <div class="pd" id="pd6"></div><div class="pd" id="pd7"></div>
     </div>
     <div class="keypad">
       <button class="key" onclick="kp('1')">1</button><button class="key" onclick="kp('2')">2</button><button class="key" onclick="kp('3')">3</button>
@@ -219,13 +221,17 @@ let activeMenuCat  = 'all';
 
 // ===== PIN LOGIN =====
 function kp(d) {
-  if (pin.length>=4) return;
+  if (pin.length>=8) return;
   pin+=d; updDots();
-  if (pin.length===4) setTimeout(kpOk,300);
 }
 function kpDel() { pin=pin.slice(0,-1); updDots(); }
 function updDots() {
-  for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('on',i<pin.length);
+  for(let i=0;i<8;i++) {
+    const el = document.getElementById('pd'+i);
+    if (!el) continue;
+    el.style.display = i < Math.max(4, pin.length) ? '' : 'none';
+    el.classList.toggle('on', i < pin.length);
+  }
 }
 // ===== GLOBAL XATO YORDAMCHISI =====
 function wErr(msg) { wToast('❌ '+msg); }
@@ -270,39 +276,51 @@ async function kpOk() {
     pin=''; updDots();
   }
 }
+let _wFallbackTimer = null;
+let _wes = null;
 function startApp() {
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('wName').textContent=waiter.name;
   loadMenu();
   loadTables();
-  // SSE — real-time yangilanish
-  const _wes = new EventSource('/api/events');
+  // SSE — real-time yangilanish (fallback timer bir marta)
+  _wes = new EventSource('/api/events');
   _wes.addEventListener('item_ready', () => { loadReady(); loadTables(); });
   _wes.addEventListener('new_order', () => loadTables());
   _wes.onerror = () => {
-    if (_wes.readyState === EventSource.CLOSED) setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000);
+    if (_wes.readyState === EventSource.CLOSED) {
+      _wes.close();
+      if (!_wFallbackTimer) _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+    }
   };
-  setTimeout(() => { if (_wes.readyState !== EventSource.OPEN) setInterval(()=>{ loadTables(); loadReady(); loadMyOrders(); }, 8000); }, 3000);
-  // Browser notification ruxsati so'rash
+  setTimeout(() => {
+    if (_wes.readyState !== EventSource.OPEN && !_wFallbackTimer) {
+      _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+    }
+  }, 5000);
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
+  window.addEventListener('beforeunload', () => {
+    if (_wes) _wes.close();
+    if (_wFallbackTimer) clearInterval(_wFallbackTimer);
+  }, { once: true });
 }
 function logout() {
   waiter=null; pin=''; waiterPin=''; updDots();
-  localStorage.removeItem('staff_pin');
-  localStorage.removeItem('staff_role');
-  localStorage.removeItem('staff_name');
-  localStorage.removeItem('staff_id');
+  sessionStorage.removeItem('staff_pin');
+  sessionStorage.removeItem('staff_role');
+  sessionStorage.removeItem('staff_name');
+  sessionStorage.removeItem('staff_id');
   document.getElementById('app').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
 }
 
 // staff-login.html dan kelganda PIN ni avtomatik yuborish
 (function autoLoginFromStaffPortal() {
-  const savedPin  = localStorage.getItem('staff_pin');
-  const savedRole = localStorage.getItem('staff_role');
+  const savedPin  = sessionStorage.getItem('staff_pin');
+  const savedRole = sessionStorage.getItem('staff_role');
   if (savedPin && savedRole === 'waiter') {
     pin = savedPin;
     updDots();
@@ -370,39 +388,46 @@ function showOpenTablePrompt() {
     </div>`;
 }
 
+let _openingSession = false;
 async function openTableSession() {
+  if (_openingSession) return;
+  _openingSession = true;
   let rawRes;
   try {
     rawRes = await fetch(API+'/api/session/open', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({table_id:currentTable.id, waiter_name:waiter.name, waiter_pin:waiterPin})
     });
-  } catch(e) { wErr('Tarmoq xatosi'); return; }
+  } catch(e) { wErr('Tarmoq xatosi'); _openingSession = false; return; }
 
-  if (rawRes.status === 409) {
-    const data = await rawRes.json();
-    wToast('⚠ Stol allaqachon band — sessiya yuklanmoqda...');
-    await loadTables();
-    currentTable = tablesData.find(t=>t.id===currentTable.id) || currentTable;
-    if (data.session_id && !currentTable.current_session_id) {
-      currentTable.current_session_id = data.session_id;
-      currentTable.token = data.token || '';
+  try {
+    if (rawRes.status === 409) {
+      const data = await rawRes.json();
+      wToast('⚠ Stol allaqachon band — sessiya yuklanmoqda...');
+      await loadTables();
+      currentTable = tablesData.find(t=>t.id===currentTable.id) || currentTable;
+      if (data.session_id && !currentTable.current_session_id) {
+        currentTable.current_session_id = data.session_id;
+        currentTable.token = data.token || '';
+      }
+      await loadSessionView();
+      return;
     }
-    await loadSessionView();
-    return;
-  }
 
-  if (!rawRes.ok) {
-    let msg = `Server xatosi (${rawRes.status})`;
-    try { const d = await rawRes.json(); msg = d.error || msg; } catch {}
-    wErr(msg); return;
-  }
+    if (!rawRes.ok) {
+      let msg = `Server xatosi (${rawRes.status})`;
+      try { const d = await rawRes.json(); msg = d.error || msg; } catch {}
+      wErr(msg); return;
+    }
 
-  const data = await rawRes.json();
-  if (data.ok) {
-    await loadTables();
-    currentTable = tablesData.find(t=>t.id===currentTable.id);
-    showMenuView();
+    const data = await rawRes.json();
+    if (data.ok) {
+      await loadTables();
+      currentTable = tablesData.find(t=>t.id===currentTable.id);
+      showMenuView();
+    }
+  } finally {
+    _openingSession = false;
   }
 }
 
@@ -527,11 +552,11 @@ function showCartReview() {
       <h3 style="font-family:'Rajdhani',sans-serif;color:var(--cyan);letter-spacing:2px;margin-bottom:16px;">SAVATCHA</h3>
       ${wCart.map((c,i)=>`
         <div class="cart-item-row">
-          <span class="ci-emoji">${c.item.emoji||'🍽'}</span>
+          <span class="ci-emoji">${wEsc(c.item.emoji)||'🍽'}</span>
           <div style="flex:1;">
-            <div class="ci-name">${c.item.name}</div>
+            <div class="ci-name">${wEsc(c.item.name)}</div>
             <div class="ci-price">${Number(c.item.price).toLocaleString()} × ${c.qty} = ${Number(c.item.price*c.qty).toLocaleString()}</div>
-            <input type="text" placeholder="Izoh..." value="${c.comment}"
+            <input type="text" placeholder="Izoh..." value="${wEsc(c.comment)}"
               onchange="wCart[${i}].comment=this.value"
               style="margin-top:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
               border-radius:6px;color:#fff;padding:4px 10px;font-size:0.75rem;width:100%;font-family:inherit;"/>
@@ -581,7 +606,7 @@ async function submitWCart() {
     headers:{'Content-Type':'application/json','X-Session-Token':token},
     body:JSON.stringify({items, waiter_pin:waiterPin})
   });
-  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✅ Buyurtma berish'; }
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "✓ JO'NATISH (Oshxonaga)"; }
   if (!res) return;
   wCart=[];
   wToast('Buyurtma oshxonaga yuborildi ✓');
@@ -629,14 +654,21 @@ async function loadReady() {
     </div>`).join('');
 }
 
+let _markingServed = false;
 async function markServed(sid, itemId) {
-  const res = await safeFetch(API+'/api/session/'+sid+'/item/'+itemId+'/status', {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({status:'served', waiter_pin:waiterPin})
-  });
-  if (!res) return;
-  wToast('Berildi deb belgilandi ✓');
-  loadReady();
+  if (_markingServed) return;
+  _markingServed = true;
+  try {
+    const res = await safeFetch(API+'/api/session/'+sid+'/item/'+itemId+'/status', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status:'served', waiter_pin:waiterPin})
+    });
+    if (!res) return;
+    wToast('Berildi deb belgilandi ✓');
+    loadReady();
+  } finally {
+    _markingServed = false;
+  }
 }
 
 // ===== MENING BUYURTMALARIM =====
@@ -644,10 +676,21 @@ async function loadMyOrders() {
   const res = await safeFetch(API+'/api/tables');
   if (!res) return;
   const tables = await res.json();
-  const active = tables.filter(t=>t.status!=='free');
-  const el     = document.getElementById('myOrders');
+  // Faqat shu ofitsiant ochgan stollar (waiter_name bo'yicha filtr)
+  const myName = waiter ? waiter.name : '';
+  const myId   = waiter ? waiter.id   : null;
+  const active = tables.filter(t => {
+    if (t.status === 'free') return false;
+    // waiter_id yoki waiter_name bo'yicha moslik
+    if (myId   && t.waiter_id   && Number(t.waiter_id)   === Number(myId))   return true;
+    if (myName && t.waiter_name && t.waiter_name === myName)                  return true;
+    // Agar backend waiter ma'lumotini qaytarmasa — barcha band stollarni ko'rsat
+    if (!t.waiter_id && !t.waiter_name) return true;
+    return false;
+  });
+  const el = document.getElementById('myOrders');
   if (!active.length) {
-    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Ochiq stol yo\'q</div>'; return;
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Sizning ochiq stollaringiz yo\'q</div>'; return;
   }
   el.innerHTML = active.map(t=>`
     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
@@ -670,6 +713,9 @@ function wToast(msg) {
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2500);
 }
+
+// Boshlang'ich dot holati (pd4-pd7 yashirin)
+updDots();
 </script>
 </body>
 </html>

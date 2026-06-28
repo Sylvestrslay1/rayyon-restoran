@@ -37,6 +37,19 @@
       display: flex; min-height: 100vh; overflow-x: hidden;
     }
 
+    /* SKELETON LOADER */
+    .skeleton-row td { padding: 10px 12px; }
+    .skel { display:inline-block; height:14px; border-radius:4px; background:rgba(255,255,255,0.08); animation:skelPulse 1.4s ease-in-out infinite; }
+    @keyframes skelPulse { 0%,100%{opacity:.4} 50%{opacity:.9} }
+
+    /* PAGINATION */
+    .pager { display:flex; align-items:center; gap:6px; padding:12px 0 4px; flex-wrap:wrap; }
+    .pager-btn { background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.2); color:var(--cyan); border-radius:6px; padding:5px 12px; cursor:pointer; font-family:inherit; font-size:0.82rem; transition:background .18s; }
+    .pager-btn:hover:not(:disabled) { background:rgba(0,212,255,0.18); }
+    .pager-btn:disabled { opacity:.35; cursor:default; }
+    .pager-btn.active { background:rgba(0,212,255,0.25); font-weight:700; }
+    .pager-info { font-size:0.78rem; color:var(--muted); margin-left:auto; }
+
     /* BG NAQSH */
     body::before {
       content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
@@ -365,6 +378,12 @@
     .sidebar-overlay.open { display: block; }
 
     /* ===== RESPONSIVE BREAKPOINTS ===== */
+    @media (max-width: 1200px) and (min-width: 901px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .sidebar { width: 210px; }
+      .main { margin-left: 210px; padding: 28px 20px; }
+    }
+
     @media (max-width: 900px) {
       .sidebar { width: 200px; }
       .main { margin-left: 200px; padding: 24px 16px; }
@@ -481,6 +500,7 @@
 <body>
 
 <!-- MOBIL HEADER -->
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:4px;z-index:9999;background:var(--cyan);color:#000;padding:8px 16px;border-radius:4px;font-weight:600;text-decoration:none">Asosiy mazmunga o'tish</a>
 <div class="mob-header" id="mobHeader">
   <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Menyu">☰</button>
   <h2><span class="mob-logo-ray">RAY</span><span class="mob-logo-yon">YON</span></h2>
@@ -505,7 +525,7 @@
       <path d="M0,10 Q50,20 100,10 Q150,0 200,10" fill="none" stroke="#c8a96e" stroke-width="0.5" opacity="0.5"/>
     </svg>
   </div>
-  <nav class="nav">
+  <nav class="nav" aria-label="Asosiy navigatsiya">
     <button class="nav-item active" data-page="dashboard" data-roles="admin,director,accountant,manager,chef">
       <span class="n-icon">◈</span> <span data-i18n="adm.dashboard">Dashboard</span>
     </button>
@@ -568,7 +588,7 @@
 </aside>
 
 <!-- MAIN -->
-<main class="main">
+<main class="main" id="main-content">
 
   <!-- DASHBOARD -->
   <div class="page active" id="page-dashboard">
@@ -633,6 +653,7 @@
         <tbody id="ordersBody"></tbody>
       </table>
     </div>
+    <div id="orders-pager" class="pager"></div>
   </div>
 
   <!-- RESERVATIONS -->
@@ -712,7 +733,7 @@
   <!-- Stol sessiya modal -->
   <div class="modal-overlay" id="tableSessionModal">
     <div class="modal-box" style="max-width:480px;">
-      <div class="modal-header"><h3 id="tsm-title">Stol #1</h3><button onclick="closeTSM()">✕</button></div>
+      <div class="modal-header"><h3 id="tsm-title">Stol #1</h3><button onclick="closeTSM()" aria-label="Yopish">✕</button></div>
       <div class="modal-body" id="tsm-body"></div>
       <div class="modal-footer" id="tsm-footer"></div>
     </div>
@@ -721,7 +742,7 @@
   <!-- Stol qo'shish/tahrirlash modal -->
   <div class="modal-overlay" id="tableEditModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="tem-title">Stol qo'shish</h3><button onclick="closeTEM()">✕</button></div>
+      <div class="modal-header"><h3 id="tem-title">Stol qo'shish</h3><button onclick="closeTEM()" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="tem-id"/>
         <div class="form-group"><label>Stol raqami</label><input type="number" id="tem-num" placeholder="1"/></div>
@@ -730,7 +751,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeTEM()">Bekor</button>
-        <button class="btn-primary" onclick="saveTable()">Saqlash</button>
+        <button class="btn-primary" onclick="saveTable(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -738,7 +759,7 @@
   <!-- QR modal -->
   <div class="modal-overlay" id="qrModal">
     <div class="modal-box" style="max-width:360px;text-align:center;">
-      <div class="modal-header"><h3 id="qr-title">QR Kod</h3><button onclick="document.getElementById('qrModal').classList.remove('open')">✕</button></div>
+      <div class="modal-header"><h3 id="qr-title">QR Kod</h3><button onclick="document.getElementById('qrModal').classList.remove('open')" aria-label="Yopish">✕</button></div>
       <div class="modal-body" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
         <div id="qr-canvas" style="background:#fff;padding:16px;border-radius:8px;"></div>
         <div id="qr-url" style="font-size:0.75rem;color:rgba(255,255,255,0.4);word-break:break-all;"></div>
@@ -754,7 +775,7 @@
         <h3>🔲 Barcha Stollar — QR Kodlar</h3>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn-secondary" onclick="printAllQR()" style="font-size:0.8rem;">🖨 Chop etish</button>
-          <button onclick="document.getElementById('qrAllModal').classList.remove('open')">✕</button>
+          <button onclick="document.getElementById('qrAllModal').classList.remove('open')" aria-label="Yopish">✕</button>
         </div>
       </div>
       <div class="modal-body">
@@ -810,7 +831,7 @@
   <!-- Xodim modal -->
   <div class="modal-overlay" id="staffModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="staff-modal-title">Xodim qo'shish</h3><button onclick="closeStaffModal()">✕</button></div>
+      <div class="modal-header"><h3 id="staff-modal-title">Xodim qo'shish</h3><button onclick="closeStaffModal()" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="staff-id"/>
         <div class="form-group"><label>Ism Familiya</label><input type="text" id="staff-name" placeholder="Abdullayev Jasur"/></div>
@@ -840,7 +861,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeStaffModal()">Bekor</button>
-        <button class="btn-primary" onclick="saveStaff()">Saqlash</button>
+        <button class="btn-primary" onclick="saveStaff(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -865,7 +886,7 @@
   <!-- Galereya modal -->
   <div class="modal-overlay" id="galleryModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="gallery-modal-title">Rasm qo'shish</h3><button onclick="closeGalleryModal()">✕</button></div>
+      <div class="modal-header"><h3 id="gallery-modal-title">Rasm qo'shish</h3><button onclick="closeGalleryModal()" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="gallery-id" />
         <div class="form-group"><label>Sarlavha</label><input type="text" id="gallery-title" placeholder="Masalan: Asosiy zal" /></div>
@@ -876,7 +897,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeGalleryModal()">Bekor</button>
-        <button class="btn-primary" onclick="saveGallery()">Saqlash</button>
+        <button class="btn-primary" onclick="saveGallery(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -901,7 +922,7 @@
   <!-- Aksiya modal -->
   <div class="modal-overlay" id="promoModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="promo-modal-title">Aksiya qo'shish</h3><button onclick="closePromoModal()">✕</button></div>
+      <div class="modal-header"><h3 id="promo-modal-title">Aksiya qo'shish</h3><button onclick="closePromoModal()" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="promo-id" />
         <div class="form-group"><label>Sarlavha</label><input type="text" id="promo-title" placeholder="Masalan: Ertalabki chegirma" /></div>
@@ -914,7 +935,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closePromoModal()">Bekor</button>
-        <button class="btn-primary" onclick="savePromo()">Saqlash</button>
+        <button class="btn-primary" onclick="savePromo(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -960,7 +981,7 @@
         <div class="form-group"><label data-i18n="th.desc">Tavsif</label><input type="text" id="exp-desc" data-i18n-ph="acc.desc_ph" placeholder="Nimaga sarflandi" /></div>
         <div class="form-group"><label data-i18n="acc.amount">Summa (so'm)</label><input type="number" id="exp-amount" placeholder="0" /></div>
         <div class="form-group"><label data-i18n="res.date">Sana</label><input type="date" id="exp-date" /></div>
-        <button class="btn-primary" onclick="addExpense()" style="width:100%;" data-i18n="acc.add_btn">Qo'shish</button>
+        <button class="btn-primary" onclick="addExpense(this)" style="width:100%;" data-i18n="acc.add_btn">Qo'shish</button>
       </div>
       <!-- Kategoriya bo'yicha chiqimlar -->
       <div class="table-wrap" style="padding:20px;">
@@ -996,7 +1017,7 @@
   <!-- Ombor modal -->
   <div class="modal-overlay" id="invModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="inv-modal-title">Mahsulot qo'shish</h3><button onclick="closeInvModal()">✕</button></div>
+      <div class="modal-header"><h3 id="inv-modal-title">Mahsulot qo'shish</h3><button onclick="closeInvModal()" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="inv-id" />
         <div class="form-group"><label>Mahsulot nomi</label><input type="text" id="inv-name" placeholder="Masalan: Un, Go'sht..." /></div>
@@ -1011,7 +1032,7 @@
         <div class="form-group"><label>Narx/birlik (so'm)</label><input type="number" id="inv-price" placeholder="0" /></div>
         <div class="form-group" id="inv-note-wrap" style="display:none;"><label>Izoh (kirim/chiqim sababi)</label><input type="text" id="inv-note" /></div>
       </div>
-      <div class="modal-footer"><button class="btn-secondary" onclick="closeInvModal()">Bekor</button><button class="btn-primary" onclick="saveInv()">Saqlash</button></div>
+      <div class="modal-footer"><button class="btn-secondary" onclick="closeInvModal()">Bekor</button><button class="btn-primary" onclick="saveInv(this)">Saqlash</button></div>
     </div>
   </div>
 
@@ -1059,6 +1080,7 @@
         <tbody id="inv-body"></tbody>
       </table>
     </div>
+    <div id="inv-pager" class="pager"></div>
   </div>
 
   <!-- LOYALTY PAGE -->
@@ -1076,12 +1098,13 @@
         <tbody id="loyalty-body"></tbody>
       </table>
     </div>
+    <div id="loyalty-pager" class="pager"></div>
   </div>
 
   <!-- Inventar qo'shish modal -->
   <div class="modal-overlay" id="invAddModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="ia-modal-title">Mahsulot qo'shish</h3><button onclick="document.getElementById('invAddModal').classList.remove('open')">✕</button></div>
+      <div class="modal-header"><h3 id="ia-modal-title">Mahsulot qo'shish</h3><button onclick="document.getElementById('invAddModal').classList.remove('open')" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="ia-edit-id"/>
         <div class="form-group"><label>Nomi</label><input type="text" id="ia-name" placeholder="Un, Guruch..."/></div>
@@ -1094,7 +1117,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="document.getElementById('invAddModal').classList.remove('open')">Bekor</button>
-        <button class="btn-primary" onclick="saveInventoryItem()">Saqlash</button>
+        <button class="btn-primary" onclick="saveInventoryItem(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -1102,7 +1125,7 @@
   <!-- Mijoz qo'shish/tahrirlash modal -->
   <div class="modal-overlay" id="customerModal">
     <div class="modal-box">
-      <div class="modal-header"><h3 id="cust-modal-title">Mijoz qo'shish</h3><button onclick="document.getElementById('customerModal').classList.remove('open')">✕</button></div>
+      <div class="modal-header"><h3 id="cust-modal-title">Mijoz qo'shish</h3><button onclick="document.getElementById('customerModal').classList.remove('open')" aria-label="Yopish">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="cust-id"/>
         <div class="form-group"><label>Ism</label><input type="text" id="cust-name" placeholder="Ism familiya"/></div>
@@ -1112,7 +1135,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="document.getElementById('customerModal').classList.remove('open')">Bekor</button>
-        <button class="btn-primary" onclick="saveCustomer()">Saqlash</button>
+        <button class="btn-primary" onclick="saveCustomer(this)">Saqlash</button>
       </div>
     </div>
   </div>
@@ -1343,7 +1366,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="../js/i18n.js"></script>
 <script>
@@ -1355,12 +1378,48 @@ if (!adminToken) window.location.href = 'login.html';
 const H = () => ({ 'Content-Type': 'application/json', 'X-Admin-Token': adminToken });
 
 // ===== GLOBAL XATO BOSHQARUVI =====
+// ===== KONSTANTALAR =====
+const TOKEN_CHECK_INTERVAL  = 15 * 60 * 1000; // 15 daqiqa
+const DASHBOARD_REFRESH_MS  = 30_000;           // 30 soniya
+const RES_REFRESH_MS        = 15_000;            // 15 soniya
+const TOAST_DURATION_MS     = 3_500;             // 3.5 soniya
+const PAGE_SIZE              = 20;               // Pagination sahifa hajmi
+const SLOW_API_THRESHOLD_MS = 3_000;             // Sekin API ogohlantirish chegarasi
+
+// ===== API CACHE (GET so'rovlari uchun 30 soniyalik kesh) =====
+const _apiCache = new Map();
+const _CACHE_TTL = 30000;
+function _cacheGet(url) {
+  const c = _apiCache.get(url);
+  if (c && Date.now() - c.t < _CACHE_TTL) return c.data;
+  return null;
+}
+function _cacheSet(url, data) { _apiCache.set(url, { data, t: Date.now() }); }
+function cacheClear(prefix) {
+  if (!prefix) { _apiCache.clear(); return; }
+  for (const k of _apiCache.keys()) { if (k.includes(prefix)) _apiCache.delete(k); }
+}
+
 // Barcha fetch chaqiruvlari uchun markaziy wrapper
 async function apiFetch(url, opts = {}) {
+  const isGet = !opts.method || opts.method === 'GET';
+  if (isGet) {
+    const cached = _cacheGet(url);
+    if (cached) return new Response(JSON.stringify(cached), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  const _t0 = performance.now();
   try {
     const res = await fetch(url, { headers: H(), ...opts });
+    if (typeof _trackApiTime === 'function') _trackApiTime(url, Math.round(performance.now() - _t0));
+    if (!isGet && res.ok) {
+      const base = url.split('?')[0].replace(/\/\d+$/, '');
+      cacheClear(base);
+    }
+    if (isGet && res.ok) {
+      const clone = res.clone();
+      clone.json().then(d => _cacheSet(url, d)).catch(() => {});
+    }
     if (res.status === 401 || res.status === 403) {
-      // Token eskirgan yoki yaroqsiz — avtomatik logout
       sessionStorage.removeItem('admin_token');
       toast("Sessiya tugadi. Qayta kiring.", false);
       setTimeout(() => window.location.href = 'login.html', 1500);
@@ -1373,14 +1432,81 @@ async function apiFetch(url, opts = {}) {
     if (!res.ok) {
       let msg = `Xato ${res.status}`;
       try { const d = await res.json(); msg = d.error || msg; } catch {}
+      if (typeof logError === 'function') logError(`API ${res.status}: ${url}`, 'apiFetch');
       toast(msg, false);
       return null;
     }
     return res;
   } catch (err) {
+    if (typeof logError === 'function') logError(`Tarmoq xatosi: ${url} — ${err.message}`, 'network', { stack: err.stack });
     toast("Tarmoq xatosi. Server bilan ulanib bo'lmadi.", false);
     return null;
   }
+}
+
+// ===== MONITORING: STRUCTURED LOGGING =====
+const _errQueue = [];
+let _errFlushTimer = null;
+
+function logError(message, source = 'admin', extra = {}) {
+  const entry = {
+    message: String(message).slice(0, 500),
+    source,
+    url: location.href,
+    stack: extra.stack ? String(extra.stack).slice(0, 1000) : undefined,
+    ts: new Date().toISOString(),
+  };
+  console.error(`[${source}]`, message, extra);
+  _errQueue.push(entry);
+  clearTimeout(_errFlushTimer);
+  _errFlushTimer = setTimeout(_flushErrors, 2000);
+}
+
+async function _flushErrors() {
+  if (!_errQueue.length) return;
+  const batch = _errQueue.splice(0, 20);
+  try {
+    for (const e of batch) {
+      fetch(`${API}/api/client-errors`, {
+        method: 'POST',
+        headers: { ...H(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(e),
+      }).catch(() => {});
+    }
+  } catch (_) {}
+}
+
+// API javob vaqtini o'lchash
+const _apiTimes = {};
+function _trackApiTime(url, ms) {
+  const path = url.replace(API, '').split('?')[0];
+  if (!_apiTimes[path]) _apiTimes[path] = [];
+  _apiTimes[path].push(ms);
+  if (ms > 3000) logError(`Sekin API: ${path} (${ms}ms)`, 'performance');
+}
+
+// ===== GLOBAL XATO USHLOVCHI (guarded bo'lmagan promise rejectionlar uchun) =====
+window.addEventListener('unhandledrejection', e => {
+  logError(e.reason?.message || String(e.reason), 'unhandledrejection', { stack: e.reason?.stack });
+  toast('Xato yuz berdi. Sahifani yangilang.', false);
+  e.preventDefault();
+});
+
+// ===== DOUBLE-CLICK GUARD YORDAMCHISI =====
+// Tugmani vaqtincha o'chiradi — ikki marta bosishni oldini oladi
+function withBtnGuard(btn, asyncFn) {
+  return async function(...args) {
+    if (btn.disabled) return;
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      await asyncFn(...args);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  };
 }
 
 // Token muddatini tekshirish (8 soatda bir marta)
@@ -1391,9 +1517,9 @@ async function checkTokenValidity() {
       sessionStorage.removeItem('admin_token');
       window.location.href = 'login.html';
     }
-  } catch {}
+  } catch(e) { console.warn('Token tekshiruv xato:', e); }
 }
-setInterval(checkTokenValidity, 15 * 60 * 1000); // 15 daqiqada bir
+setInterval(checkTokenValidity, TOKEN_CHECK_INTERVAL);
 
 function priceFmt(p) { return Number(p).toLocaleString('uz-UZ') + " so'm"; }
 function timeFmt(s)  { if (!s) return '—'; return s.slice(0,16).replace('T',' '); }
@@ -1413,7 +1539,7 @@ function toast(msg, ok=true) {
   el.textContent = msg;
   el.style.borderLeftColor = ok ? 'var(--cyan)' : 'var(--red)';
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3500);
+  setTimeout(() => el.classList.remove('show'), TOAST_DURATION_MS);
 }
 function statusBadge(s) {
   const keys = { new:'filter.new', confirmed:'filter.confirmed', done:'filter.done', cancelled:'filter.cancelled' };
@@ -1434,8 +1560,8 @@ function statusSelect(id, cur, type) {
 // ===== ROL ASOSIDA NAV FILTER =====
 function applyRoleFilter() {
   const urlRole = new URLSearchParams(window.location.search).get('role');
-  const lsRole  = sessionStorage.getItem('staff_role') || localStorage.getItem('staff_role');
-  const staffName = sessionStorage.getItem('staff_name') || localStorage.getItem('staff_name');
+  const lsRole  = sessionStorage.getItem('staff_role');
+  const staffName = sessionStorage.getItem('staff_name');
   const role = urlRole || lsRole || 'admin';
 
   // admin va director uchun hech narsani yashirmaymiz
@@ -1525,44 +1651,48 @@ function loadPage(p) {
 
 // DASHBOARD
 async function loadDashboard() {
-  const r = await fetch(`${API}/api/stats`, { headers: H() });
-  const d = await r.json();
-  document.getElementById('st-active-sessions').textContent = d.active_sessions ?? '—';
-  document.getElementById('st-closed-today').textContent    = d.closed_today ?? '—';
-  document.getElementById('st-revenue').textContent         = d.revenue > 0 ? priceFmt(d.revenue) : "0 so'm";
-  document.getElementById('st-reservations').textContent    = d.reservations_new ?? d.reservations_today ?? '—';
-  document.getElementById('st-menu').textContent            = d.menu_count ?? '—';
-  const badge = document.getElementById('ordersCount');
-  badge.textContent = d.orders_new ?? 0;
-  badge.style.display = (d.orders_new > 0) ? '' : 'none';
+  try {
+    const r = await apiFetch(`${API}/api/stats`);
+    if (!r) return;
+    const d = await r.json();
+    document.getElementById('st-active-sessions').textContent = d.active_sessions ?? '—';
+    document.getElementById('st-closed-today').textContent    = d.closed_today ?? '—';
+    document.getElementById('st-revenue').textContent         = d.revenue > 0 ? priceFmt(d.revenue) : "0 so'm";
+    document.getElementById('st-reservations').textContent    = d.reservations_new ?? d.reservations_today ?? '—';
+    document.getElementById('st-menu').textContent            = d.menu_count ?? '—';
+    const badge = document.getElementById('ordersCount');
+    badge.textContent = d.orders_new ?? 0;
+    badge.style.display = (d.orders_new > 0) ? '' : 'none';
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const r2 = await fetch(`${API}/api/payments?date=${todayIso}&limit=8`, { headers: H() });
-  const paymentsData = await r2.json();
-  const pays = Array.isArray(paymentsData) ? paymentsData : (paymentsData.payments || []);
-  const tbody = document.getElementById('dashOrdersBody');
-  if (!pays.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Bugun to'lov yo'q</td></tr>`; return; }
-  tbody.innerHTML = pays.map(p => `<tr>
-    <td style="color:var(--cyan);font-weight:700">#${p.id}</td>
-    <td>${esc(p.table_number ? 'Stol ' + p.table_number : '—')}</td>
-    <td style="color:var(--gold);font-weight:700">${priceFmt(p.amount)}</td>
-    <td>${esc(p.method || 'naqd')}</td>
-    <td>${esc(p.cashier_name || '—')}</td>
-    <td style="color:var(--muted)">${timeFmt(p.created_at)}</td>
-  </tr>`).join('');
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const r2 = await apiFetch(`${API}/api/payments?date=${todayIso}&limit=8`);
+    if (!r2) return;
+    const paymentsData = await r2.json();
+    const pays = Array.isArray(paymentsData) ? paymentsData : (paymentsData.payments || []);
+    const tbody = document.getElementById('dashOrdersBody');
+    if (!pays.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Bugun to'lov yo'q</td></tr>`; return; }
+    tbody.innerHTML = pays.map(p => `<tr>
+      <td style="color:var(--cyan);font-weight:700">#${p.id}</td>
+      <td>${esc(p.table_number ? 'Stol ' + p.table_number : '—')}</td>
+      <td style="color:var(--gold);font-weight:700">${priceFmt(p.amount)}</td>
+      <td>${esc(p.method || 'naqd')}</td>
+      <td>${esc(p.cashier_name || '—')}</td>
+      <td style="color:var(--muted)">${timeFmt(p.created_at)}</td>
+    </tr>`).join('');
+  } catch(e) {
+    logError(e?.message || String(e), 'loadDashboard', { stack: e?.stack });
+  }
 }
 
 // ORDERS
-async function loadOrders() {
-  const status = document.getElementById('orderFilter').value;
-  const url = status ? `${API}/api/orders?status=${status}` : `${API}/api/orders`;
-  const r = await fetch(url, { headers: H() });
-  if (!r.ok) { toast('Buyurtmalar yuklanmadi', false); return; }
-  const json = await r.json();
-  const orders = Array.isArray(json) ? json : (json.data || []);
+let _ordersData = [], _ordersPage = 0;
+const _PAGE_SIZE = PAGE_SIZE;
+
+function _renderOrdersPage() {
   const tbody = document.getElementById('ordersBody');
-  if (!orders.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${t('empty.orders')}</td></tr>`; return; }
-  tbody.innerHTML = orders.map(o => `<tr>
+  const slice = _ordersData.slice(_ordersPage * _PAGE_SIZE, (_ordersPage + 1) * _PAGE_SIZE);
+  if (!slice.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${t('empty.orders')}</td></tr>`; return; }
+  tbody.innerHTML = slice.map(o => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${o.id}</td>
     <td>${esc(o.item_name)}</td><td>${o.quantity}</td>
     <td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td>
@@ -1573,10 +1703,24 @@ async function loadOrders() {
   </tr>`).join('');
   tbody.querySelectorAll('.order-sel').forEach(sel => {
     sel.addEventListener('change', async () => {
-      await fetch(`${API}/api/orders/${sel.dataset.id}`, { method:'PUT', headers:H(), body:JSON.stringify({status:sel.value}) });
+      await apiFetch(`${API}/api/orders/${sel.dataset.id}`, { method:'PUT', body:JSON.stringify({status:sel.value}) });
       toast(t('toast.updated')); loadDashboard();
     });
   });
+  renderPager('orders-pager', _ordersData.length, _ordersPage, _PAGE_SIZE, `p => { _ordersPage=p; _renderOrdersPage(); }`);
+}
+
+async function loadOrders() {
+  const tbody = document.getElementById('ordersBody');
+  tbody.innerHTML = skeletonRows(9);
+  const status = document.getElementById('orderFilter').value;
+  const url = status ? `${API}/api/orders?status=${status}` : `${API}/api/orders`;
+  const r = await apiFetch(url);
+  if (!r) return;
+  const json = await r.json();
+  _ordersData = Array.isArray(json) ? json : (json.data || []);
+  _ordersPage = 0;
+  _renderOrdersPage();
 }
 document.getElementById('orderFilter').addEventListener('change', loadOrders);
 
@@ -1586,8 +1730,8 @@ let _calDate = new Date();
 let _resCalMode = false;
 
 async function loadReservations() {
-  const r = await fetch(`${API}/api/reservations`, { headers: H() });
-  if (!r.ok) { toast('Bronlar yuklanmadi', false); return; }
+  const r = await apiFetch(`${API}/api/reservations`);
+  if (!r) return;
   const resJson = await r.json();
   _allReservations = Array.isArray(resJson) ? resJson : (resJson.data || []);
   if (_resCalMode) {
@@ -1611,7 +1755,7 @@ function renderResTable(rows, dayTitle) {
   </tr>`).join('');
   tbody.querySelectorAll('.res-sel').forEach(sel => {
     sel.addEventListener('change', async () => {
-      await fetch(`${API}/api/reservations/${sel.dataset.id}`, { method:'PUT', headers:H(), body:JSON.stringify({status:sel.value}) });
+      await apiFetch(`${API}/api/reservations/${sel.dataset.id}`, { method:'PUT', body:JSON.stringify({status:sel.value}) });
       toast(t('toast.updated'));
     });
   });
@@ -1704,7 +1848,8 @@ async function loadMenu() {
     const r = await fetch(API + '/api/menu?_=' + Date.now());
     data = await r.json();
   } catch(e) {
-    grid.innerHTML = '<p style="color:#ff5757;padding:20px">⚠ Backend ishlamayapti: ' + e.message + '</p>';
+    logError(e?.message || String(e), 'loadMenu', { stack: e?.stack });
+    grid.innerHTML = '<p style="color:#ff5757;padding:20px">⚠ Backend ishlamayapti</p>';
     return;
   }
   if (!Array.isArray(data)) {
@@ -1740,14 +1885,14 @@ function renderMenuGrid() {
         '<div class="mac-price">' + priceFmt(item.price) + '</div>' +
         '<div class="mac-actions">' +
           '<button class="btn btn-outline btn-sm" onclick="openMenuEdit(' + item.id + ')">✏ Tahrir</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="deleteMenu(' + item.id + ',\'' + nm + '\')">✕</button>' +
+          '<button class="btn btn-danger btn-sm" aria-label="O\'chirish" onclick="deleteMenu(' + item.id + ',\'' + nm + '\')">✕</button>' +
         '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 }
-document.getElementById('menuSearch').addEventListener('input', renderMenuGrid);
-document.getElementById('menuCatFilter').addEventListener('change', renderMenuGrid);
+document.getElementById('menuSearch')?.addEventListener('input', renderMenuGrid);
+document.getElementById('menuCatFilter')?.addEventListener('change', renderMenuGrid);
 
 function openMenuEdit(id) {
   const item = allMenuItems.find(i => i.id === id);
@@ -1782,32 +1927,43 @@ document.getElementById('menuImageFile').addEventListener('change', async e => {
   const d = await r.json();
   if (d.ok) { const prev = document.getElementById('menuImgPreview'); prev.src = API+d.url; prev.style.display = 'block'; prev.dataset.url = d.url; toast(t('toast.img')); }
 });
-document.getElementById('menuModalSave').addEventListener('click', async () => {
-  const id   = document.getElementById('menuId').value;
-  const prev = document.getElementById('menuImgPreview');
-  const payload = {
-    name: document.getElementById('mName').value, emoji: document.getElementById('mEmoji').value,
-    category: document.getElementById('mCategory').value, price: parseInt(document.getElementById('mPrice').value)||0,
-    description: document.getElementById('mDesc').value, available: document.getElementById('mAvailable').checked ? 1 : 0,
-    image: prev.style.display !== 'none' ? (prev.dataset.url || null) : null,
-  };
-  const r = await apiFetch(id ? `${API}/api/menu/${id}` : `${API}/api/menu`,
-    { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
-  if (!r) return;
-  const d = await r.json();
-  if (d.ok) { toast(t(id ? 'toast.saved' : 'toast.added')); document.getElementById('menuModal').classList.remove('open'); loadMenu(); }
-  else toast(d.error || t('toast.error'), false);
+document.getElementById('menuModalSave').addEventListener('click', async function() {
+  const btn = this;
+  if (btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const id   = document.getElementById('menuId').value;
+    const prev = document.getElementById('menuImgPreview');
+    const payload = {
+      name: document.getElementById('mName').value, emoji: document.getElementById('mEmoji').value,
+      category: document.getElementById('mCategory').value, price: parseInt(document.getElementById('mPrice').value)||0,
+      description: document.getElementById('mDesc').value, available: document.getElementById('mAvailable').checked ? 1 : 0,
+      image: prev.style.display !== 'none' ? (prev.dataset.url || null) : null,
+    };
+    const r = await apiFetch(id ? `${API}/api/menu/${id}` : `${API}/api/menu`,
+      { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+    if (!r) return;
+    const d = await r.json();
+    if (d.ok) { toast(t(id ? 'toast.saved' : 'toast.added')); document.getElementById('menuModal').classList.remove('open'); loadMenu(); }
+    else toast(d.error || t('toast.error'), false);
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 });
 async function deleteMenu(id, name) {
   if (!confirm(`"${name}" o'chirasizmi?`)) return;
-  const r = await fetch(`${API}/api/menu/${id}`, { method:'DELETE', headers:H() });
-  if ((await r.json()).ok) { toast(t('toast.deleted')); loadMenu(); }
+  const r = await apiFetch(`${API}/api/menu/${id}`, { method:'DELETE' });
+  if (!r) return;
+  const d = await r.json();
+  if (d.ok) { toast(t('toast.deleted')); loadMenu(); }
 }
 
 // NEWS
 let newsImageUrl = null, allNews = [];
 async function loadNews() {
-  const r = await fetch(`${API}/api/news`, { headers: H() });
+  const r = await apiFetch(`${API}/api/news`);
+  if (!r) return;
   const items = await r.json(); allNews = items;
   const list = document.getElementById('newsList');
   if (!items.length) { list.innerHTML = `<p style="color:var(--muted);padding:20px">${t('empty.news')}</p>`; return; }
@@ -1844,7 +2000,12 @@ document.getElementById('addNewsBtn').addEventListener('click', () => {
   document.getElementById('newsImgPreview').classList.remove('open');
   document.getElementById('newsModal').classList.add('open');
 });
-document.getElementById('newsModalClose').addEventListener('click', () => document.getElementById('newsModal').classList.remove('open'));
+document.getElementById('newsModalClose').addEventListener('click', () => {
+  document.getElementById('newsModal').classList.remove('open');
+  document.getElementById('newsId').value = '';
+  document.getElementById('nTitle').value = '';
+  document.getElementById('nContent').value = '';
+});
 document.getElementById('newsUploadArea').addEventListener('click', () => document.getElementById('newsImageFile').click());
 document.getElementById('newsImageFile').addEventListener('change', async e => {
   const file = e.target.files[0]; if (!file) return;
@@ -1853,18 +2014,27 @@ document.getElementById('newsImageFile').addEventListener('change', async e => {
   const d = await r.json();
   if (d.ok) { newsImageUrl = d.url; const prev = document.getElementById('newsImgPreview'); prev.src = API+d.url; prev.style.display = 'block'; toast(t('toast.img')); }
 });
-document.getElementById('newsModalSave').addEventListener('click', async () => {
-  const id = document.getElementById('newsId').value;
-  const payload = { title: document.getElementById('nTitle').value, content: document.getElementById('nContent').value, active: document.getElementById('nActive').checked?1:0, image: newsImageUrl };
-  const r = await apiFetch(id ? `${API}/api/news/${id}` : `${API}/api/news`, { method:id?'PUT':'POST', body:JSON.stringify(payload) });
-  if (!r) return;
-  const d = await r.json();
-  if (d.ok) { toast(t(id?'toast.saved':'toast.added')); document.getElementById('newsModal').classList.remove('open'); loadNews(); }
-  else toast(d.error || t('toast.error'), false);
+document.getElementById('newsModalSave').addEventListener('click', async function() {
+  const btn = this;
+  if (btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const id = document.getElementById('newsId').value;
+    const payload = { title: document.getElementById('nTitle').value, content: document.getElementById('nContent').value, active: document.getElementById('nActive').checked?1:0, image: newsImageUrl };
+    const r = await apiFetch(id ? `${API}/api/news/${id}` : `${API}/api/news`, { method:id?'PUT':'POST', body:JSON.stringify(payload) });
+    if (!r) return;
+    const d = await r.json();
+    if (d.ok) { toast(t(id?'toast.saved':'toast.added')); document.getElementById('newsModal').classList.remove('open'); loadNews(); }
+    else toast(d.error || t('toast.error'), false);
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 });
 async function deleteNews(id) {
   if (!confirm('Bu yangilikni o\'chirasizmi?')) return;
-  const r = await fetch(`${API}/api/news/${id}`, { method:'DELETE', headers:H() });
+  const r = await apiFetch(`${API}/api/news/${id}`, { method:'DELETE' });
+  if (!r) return;
   const d = await r.json().catch(()=>({}));
   if (d.ok) { toast(t('toast.deleted')); loadNews(); }
   else toast(d.error || t('toast.error'), false);
@@ -1872,7 +2042,8 @@ async function deleteNews(id) {
 
 // SETTINGS
 async function loadSettings() {
-  const r = await fetch(`${API}/api/settings`, { headers: H() });
+  const r = await apiFetch(`${API}/api/settings`);
+  if (!r) return;
   const d = await r.json();
   document.getElementById('set-name').value     = d.restaurant_name || '';
   document.getElementById('set-phone').value    = d.phone || '';
@@ -1885,24 +2056,33 @@ async function loadSettings() {
   document.getElementById('set-smtp-user').value   = d.smtp_user || '';
   document.getElementById('set-smtp-pass').value   = '';
 }
-document.getElementById('saveSettings').addEventListener('click', async () => {
-  const payload = {
-    restaurant_name: document.getElementById('set-name').value,
-    phone:           document.getElementById('set-phone').value,
-    address:         document.getElementById('set-address').value,
-    working_hours:   document.getElementById('set-hours').value,
-    telegram_bot:    document.getElementById('set-telegram').value,
-    smtp_host:       document.getElementById('set-smtp-host').value,
-    smtp_port:       document.getElementById('set-smtp-port').value,
-    smtp_user:       document.getElementById('set-smtp-user').value,
-  };
-  const pw   = document.getElementById('set-password').value;
-  const smpw = document.getElementById('set-smtp-pass').value;
-  if (pw)   payload.admin_password = pw;
-  if (smpw) payload.smtp_pass = smpw;
-  const r = await fetch(`${API}/api/settings`, { method:'PUT', headers:H(), body:JSON.stringify(payload) });
-  if ((await r.json()).ok) toast(t('toast.saved'));
-  else toast(t('toast.error'), false);
+document.getElementById('saveSettings').addEventListener('click', async function() {
+  const btn = this;
+  if (btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const payload = {
+      restaurant_name: document.getElementById('set-name').value,
+      phone:           document.getElementById('set-phone').value,
+      address:         document.getElementById('set-address').value,
+      working_hours:   document.getElementById('set-hours').value,
+      telegram_bot:    document.getElementById('set-telegram').value,
+      smtp_host:       document.getElementById('set-smtp-host').value,
+      smtp_port:       document.getElementById('set-smtp-port').value,
+      smtp_user:       document.getElementById('set-smtp-user').value,
+    };
+    const pw   = document.getElementById('set-password').value;
+    const smpw = document.getElementById('set-smtp-pass').value;
+    if (pw)   payload.admin_password = pw;
+    if (smpw) payload.smtp_pass = smpw;
+    const r = await apiFetch(`${API}/api/settings`, { method:'PUT', body:JSON.stringify(payload) });
+    if (!r) return;
+    if ((await r.json()).ok) toast(t('toast.saved'));
+    else toast(t('toast.error'), false);
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 });
 
 // ===== STOLLAR =====
@@ -1912,7 +2092,8 @@ let editingTableId = null;
 let currentQRTable = null;
 
 async function loadTables() {
-  const res = await fetch(`${API}/api/tables`, { headers: H() });
+  const res = await apiFetch(`${API}/api/tables`);
+  if (!res) return;
   tablesData = await res.json();
   const map = document.getElementById('tablesMap');
   if (!tablesData.length) {
@@ -1943,9 +2124,9 @@ async function loadTables() {
       ${overtimeBadge}
       ${sum  ? `<div style="color:var(--gold);font-weight:700;font-size:0.88rem;margin-top:4px;">${sum}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:12px;" onclick="event.stopPropagation()">
-        <button class="act-btn" title="QR" onclick="showQR(${tbl.id})">QR</button>
-        <button class="act-btn" title="Tahrirlash" onclick="editTable(${JSON.stringify(tbl).replace(/"/g,'&quot;')})">✎</button>
-        <button class="act-btn" style="color:#ff4466" title="O'chirish" onclick="deleteTable(${tbl.id})">✕</button>
+        <button class="act-btn" title="QR" aria-label="QR kod" onclick="showQR(${tbl.id})">QR</button>
+        <button class="act-btn" title="Tahrirlash" aria-label="Tahrirlash" onclick="editTable(${JSON.stringify(tbl).replace(/"/g,'&quot;')})">✎</button>
+        <button class="act-btn" style="color:#ff4466" title="O'chirish" aria-label="O'chirish" onclick="deleteTable(${tbl.id})">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1969,7 +2150,8 @@ async function openTableSession(tableId) {
   } else {
     // Sessiya ma'lumotlari
     const sid = t.current_session_id;
-    const res = await fetch(`${API}/api/session/${sid}`, { headers: H() });
+    const res = await apiFetch(`${API}/api/session/${sid}`);
+    if (!res) return;
     const s   = await res.json();
     const items = s.items || [];
     const statusLabel = {'pending':'Kutmoqda','cooking':'Pishmoqda','ready':'Tayyor','served':'Berildi','cancelled':'Bekor'};
@@ -2020,32 +2202,33 @@ async function openTableSession(tableId) {
 
 async function openTable(tableId) {
   const sc = parseFloat(document.getElementById('tsm-sc').value) || 0;
-  await fetch(`${API}/api/session/open`, {
-    method:'POST', headers:H(),
-    body: JSON.stringify({table_id: tableId, service_charge: sc})
+  const r = await apiFetch(`${API}/api/session/open`, {
+    method:'POST', body: JSON.stringify({table_id: tableId, service_charge: sc})
   });
+  if (!r) return;
   closeTSM(); showToast('Stol ochildi'); loadTables();
 }
 
 async function applyDiscount(sid) {
   const disc = parseFloat(document.getElementById('tsm-disc').value)||0;
   const sc   = parseFloat(document.getElementById('tsm-sc2').value)||0;
-  await fetch(`${API}/api/session/${sid}/discount`, {
-    method:'PUT', headers:H(), body:JSON.stringify({discount:disc, service_charge:sc})
+  const r = await apiFetch(`${API}/api/session/${sid}/discount`, {
+    method:'PUT', body:JSON.stringify({discount:disc, service_charge:sc})
   });
+  if (!r) return;
   showToast('Yangilandi'); openTableSession(tablesData.find(t=>t.current_session_id===sid)?.id);
 }
 
 async function closeSession(sid, tableId) {
   const amount = parseInt(document.getElementById('tsm-amount').value)||0;
   const method = document.getElementById('tsm-method').value;
-  const adminName = sessionStorage.getItem('staff_name') || localStorage.getItem('staff_name') || 'Admin';
-  const r = await fetch(`${API}/api/session/${sid}/close`, {
-    method:'POST', headers:H(),
-    body:JSON.stringify({payments:[{amount, method}], cashier_name: adminName})
+  const adminName = sessionStorage.getItem('staff_name') || 'Admin';
+  const r = await apiFetch(`${API}/api/session/${sid}/close`, {
+    method:'POST', body:JSON.stringify({payments:[{amount, method}], cashier_name: adminName})
   });
+  if (!r) return;
   const d = await r.json().catch(()=>({}));
-  if (!r.ok) { toast(d.error || 'Yopishda xato', false); return; }
+  if (!d.ok) { toast(d.error || 'Yopishda xato', false); return; }
   closeTSM(); toast('Sessiya yopildi ✓'); loadTables();
 }
 
@@ -2069,24 +2252,38 @@ function editTable(t) {
   document.getElementById('tem-cap').value=t.capacity||4;
   document.getElementById('tableEditModal').classList.add('open');
 }
-function closeTEM() { document.getElementById('tableEditModal').classList.remove('open'); }
-async function saveTable() {
-  const data = {
-    number:   parseInt(document.getElementById('tem-num').value),
-    name:     document.getElementById('tem-name').value,
-    capacity: parseInt(document.getElementById('tem-cap').value)||4,
-  };
-  if (!data.number) { showToast('Stol raqamini kiriting!',true); return; }
-  if (editingTableId) {
-    await fetch(`${API}/api/tables/${editingTableId}`,{method:'PUT',headers:H(),body:JSON.stringify(data)});
-  } else {
-    await fetch(`${API}/api/tables`,{method:'POST',headers:H(),body:JSON.stringify(data)});
+function closeTEM() {
+  document.getElementById('tableEditModal').classList.remove('open');
+  document.getElementById('tem-id').value = '';
+  document.getElementById('tem-num').value = '';
+  document.getElementById('tem-name').value = '';
+  document.getElementById('tem-cap').value = '4';
+  editingTableId = null;
+}
+async function saveTable(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const data = {
+      number:   parseInt(document.getElementById('tem-num').value),
+      name:     document.getElementById('tem-name').value,
+      capacity: parseInt(document.getElementById('tem-cap').value)||4,
+    };
+    if (!data.number) { showToast('Stol raqamini kiriting!',false); return; }
+    const r = editingTableId
+      ? await apiFetch(`${API}/api/tables/${editingTableId}`,{method:'PUT',body:JSON.stringify(data)})
+      : await apiFetch(`${API}/api/tables`,{method:'POST',body:JSON.stringify(data)});
+    if (!r) return;
+    closeTEM(); showToast('Saqlandi'); loadTables();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
-  closeTEM(); showToast('Saqlandi'); loadTables();
 }
 async function deleteTable(id) {
   if (!confirm('Stolni o\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/tables/${id}`,{method:'DELETE',headers:H()});
+  const r = await apiFetch(`${API}/api/tables/${id}`,{method:'DELETE'});
+  if (!r) return;
   showToast('O\'chirildi'); loadTables();
 }
 
@@ -2126,8 +2323,8 @@ async function showQRModal() {
   const grid = document.getElementById('qr-all-grid');
   grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px;grid-column:1/-1;">Yuklanmoqda…</div>';
 
-  const r = await fetch(`${API}/api/tables`, { headers: H() });
-  if (!r.ok) { grid.innerHTML = '<div style="color:#ff5757;text-align:center;grid-column:1/-1;">Xato: stollar yuklanmadi</div>'; return; }
+  const r = await apiFetch(`${API}/api/tables`);
+  if (!r) { grid.innerHTML = '<div style="color:#ff5757;text-align:center;grid-column:1/-1;">Xato: stollar yuklanmadi</div>'; return; }
   const tables = await r.json();
   if (!tables.length) {
     grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px;grid-column:1/-1;">Stollar yo\'q. Avval stol qo\'shing.</div>';
@@ -2191,9 +2388,11 @@ const roleNames = {
 };
 
 async function loadStaff() {
-  const res = await fetch(`${API}/api/staff`, { headers: H() });
-  const list = await res.json();
   const tbody = document.getElementById('staff-body');
+  tbody.innerHTML = skeletonRows(7);
+  const res = await apiFetch(`${API}/api/staff`);
+  if (!res) return;
+  const list = await res.json();
   tbody.innerHTML = list.length ? list.map(s=>`<tr>
     <td style="color:var(--cyan)">#${s.id}</td>
     <td style="font-weight:600">${esc(s.name)}</td>
@@ -2202,15 +2401,16 @@ async function loadStaff() {
     <td style="color:var(--gold)">${s.salary_amount ? priceFmt(s.salary_amount) + (s.salary_type==='hourly'?'/soat':s.salary_type==='percent'?'%':'') : '—'}</td>
     <td>${s.active?'<span style="color:var(--cyan)">Aktiv</span>':'<span style="color:#666">Nofaol</span>'}</td>
     <td>
-      <button class="act-btn" onclick='editStaff(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
-      <button class="act-btn" style="color:#ff4466" onclick="deleteStaffMember(${s.id})">✕</button>
+      <button class="act-btn" aria-label="Tahrirlash" onclick='editStaff(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" aria-label="O'chirish" onclick="deleteStaffMember(${s.id})">✕</button>
     </td>
   </tr>`).join('') : '<tr class="empty-row"><td colspan="7">Xodimlar yo\'q</td></tr>';
 }
 
 async function loadAttendance() {
   const wrap = document.getElementById('attendance-wrap');
-  const res  = await fetch(`${API}/api/attendance?date=${new Date().toISOString().slice(0,10)}`, {headers:H()});
+  const res  = await apiFetch(`${API}/api/attendance?date=${new Date().toISOString().slice(0,10)}`);
+  if (!res) return;
   const attJson = await res.json();
   const list = Array.isArray(attJson) ? attJson : (attJson.data || []);
   const tbody = document.getElementById('att-body');
@@ -2231,7 +2431,8 @@ async function loadPayroll() {
   const wrap  = document.getElementById('payroll-wrap');
   const tbody = document.getElementById('payroll-body');
   const typeLabel = {monthly:'Oylik',hourly:'Soatlik',percent:'Foizli'};
-  const res  = await fetch(`${API}/api/staff/payroll?month=${month}`, {headers:H()});
+  const res  = await apiFetch(`${API}/api/staff/payroll?month=${month}`);
+  if (!res) return;
   const list = await res.json();
   const total = list.reduce((s,r)=>s+r.earned,0);
   tbody.innerHTML = list.length ? list.map(r=>`<tr>
@@ -2268,36 +2469,49 @@ function editStaff(s) {
   document.getElementById('staff-pin').value='';
   document.getElementById('staffModal').classList.add('open');
 }
-function closeStaffModal() { document.getElementById('staffModal').classList.remove('open'); }
-async function saveStaff() {
-  const data = {
-    name:        document.getElementById('staff-name').value.trim(),
-    role:        document.getElementById('staff-role').value,
-    pin:         document.getElementById('staff-pin').value,
-    phone:       document.getElementById('staff-phone').value,
-    salary_type: document.getElementById('staff-salary-type').value,
-    salary_amount: parseInt(document.getElementById('staff-salary').value)||0,
-    active: 1,
-  };
-  if (!data.name) { toast('Ism kiriting!', false); return; }
-  if (!editingStaffId && !data.pin) { toast('PIN kiriting!', false); return; }
-  if (data.pin && data.pin.length < 4) { toast('PIN kamida 4 raqam bo\'lishi kerak!', false); return; }
-  if (editingStaffId) {
-    await fetch(`${API}/api/staff/${editingStaffId}`,{method:'PUT',headers:H(),body:JSON.stringify(data)});
-  } else {
-    await fetch(`${API}/api/staff`,{method:'POST',headers:H(),body:JSON.stringify(data)});
+function closeStaffModal() {
+  document.getElementById('staffModal').classList.remove('open');
+  ['staff-id','staff-name','staff-pin','staff-phone','staff-salary'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('staff-role').value = document.getElementById('staff-role').options[0]?.value || '';
+  editingStaffId = null;
+}
+async function saveStaff(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const data = {
+      name:        document.getElementById('staff-name').value.trim(),
+      role:        document.getElementById('staff-role').value,
+      pin:         document.getElementById('staff-pin').value,
+      phone:       document.getElementById('staff-phone').value,
+      salary_type: document.getElementById('staff-salary-type').value,
+      salary_amount: parseInt(document.getElementById('staff-salary').value)||0,
+      active: 1,
+    };
+    if (!data.name) { toast('Ism kiriting!', false); return; }
+    if (!editingStaffId && !data.pin) { toast('PIN kiriting!', false); return; }
+    if (data.pin && data.pin.length < 4) { toast('PIN kamida 4 raqam bo\'lishi kerak!', false); return; }
+    const r = editingStaffId
+      ? await apiFetch(`${API}/api/staff/${editingStaffId}`,{method:'PUT',body:JSON.stringify(data)})
+      : await apiFetch(`${API}/api/staff`,{method:'POST',body:JSON.stringify(data)});
+    if (!r) return;
+    closeStaffModal(); showToast('Saqlandi'); loadStaff();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
-  closeStaffModal(); showToast('Saqlandi'); loadStaff();
 }
 async function deleteStaffMember(id) {
   if (!confirm('Xodimni o\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/staff/${id}`,{method:'DELETE',headers:H()});
+  const r = await apiFetch(`${API}/api/staff/${id}`,{method:'DELETE'});
+  if (!r) return;
   showToast('O\'chirildi'); loadStaff();
 }
 
 // ===== GALEREYA ADMIN =====
 async function loadGalleryAdmin() {
-  const res   = await fetch(`${API}/api/gallery`, { headers: H() });
+  const res   = await apiFetch(`${API}/api/gallery`);
+  if (!res) return;
   const items = await res.json();
   const tbody = document.getElementById('gallery-body');
   if (!Array.isArray(items) || !items.length) {
@@ -2311,8 +2525,8 @@ async function loadGalleryAdmin() {
     <td style="color:#aaa">${g.sort_order}</td>
     <td>${g.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
     <td>
-      <button class="act-btn" onclick='editGallery(${JSON.stringify(g).replace(/'/g,"&#39;")})'>✎</button>
-      <button class="act-btn" style="color:#ff4466" onclick="deleteGallery(${g.id})">✕</button>
+      <button class="act-btn" aria-label="Tahrirlash" onclick='editGallery(${JSON.stringify(g).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" aria-label="O'chirish" onclick="deleteGallery(${g.id})">✕</button>
     </td>
   </tr>`).join('');
 }
@@ -2340,36 +2554,48 @@ function editGallery(item) {
   document.getElementById('gallery-active').checked = !!item.active;
   document.getElementById('galleryModal').classList.add('open');
 }
-function closeGalleryModal() { document.getElementById('galleryModal').classList.remove('open'); }
-async function saveGallery() {
-  const data = {
-    title:      document.getElementById('gallery-title').value.trim(),
-    emoji:      document.getElementById('gallery-emoji').value || '🖼',
-    image:      document.getElementById('gallery-image').value.trim() || null,
-    sort_order: parseInt(document.getElementById('gallery-order').value) || 0,
-    active:     document.getElementById('gallery-active').checked ? 1 : 0,
-  };
-  if (!data.title) { showToast('Sarlavha kiriting!', true); return; }
-  if (editingGalleryId) {
-    await fetch(`${API}/api/gallery/${editingGalleryId}`, { method:'PUT', headers:H(), body:JSON.stringify(data) });
-  } else {
-    await fetch(`${API}/api/gallery`, { method:'POST', headers:H(), body:JSON.stringify(data) });
+function closeGalleryModal() {
+  document.getElementById('galleryModal').classList.remove('open');
+  ['gallery-id','gallery-title','gallery-image','gallery-order'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('gallery-emoji').value = '🖼';
+  document.getElementById('gallery-active').checked = true;
+  editingGalleryId = null;
+}
+async function saveGallery(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const data = {
+      title:      document.getElementById('gallery-title').value.trim(),
+      emoji:      document.getElementById('gallery-emoji').value || '🖼',
+      image:      document.getElementById('gallery-image').value.trim() || null,
+      sort_order: parseInt(document.getElementById('gallery-order').value) || 0,
+      active:     document.getElementById('gallery-active').checked ? 1 : 0,
+    };
+    if (!data.title) { showToast('Sarlavha kiriting!', false); return; }
+    const r = editingGalleryId
+      ? await apiFetch(`${API}/api/gallery/${editingGalleryId}`, { method:'PUT', body:JSON.stringify(data) })
+      : await apiFetch(`${API}/api/gallery`, { method:'POST', body:JSON.stringify(data) });
+    if (!r) return;
+    closeGalleryModal();
+    showToast('Saqlandi');
+    loadGalleryAdmin();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
-  closeGalleryModal();
-  showToast('Saqlandi');
-  loadGalleryAdmin();
 }
 async function deleteGallery(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  const r = await fetch(`${API}/api/gallery/${id}`, { method:'DELETE', headers:H() });
-  const d = await r.json().catch(()=>({}));
-  if (d.ok) { toast('O\'chirildi'); loadGalleryAdmin(); }
-  else toast(d.error || t('toast.error'), false);
+  const r = await apiFetch(`${API}/api/gallery/${id}`, { method:'DELETE' });
+  if (!r) return;
+  toast('O\'chirildi'); loadGalleryAdmin();
 }
 
 // ===== AKSIYALAR ADMIN =====
 async function loadPromosAdmin() {
-  const res   = await fetch(`${API}/api/promotions`, { headers: H() });
+  const res   = await apiFetch(`${API}/api/promotions`);
+  if (!res) return;
   const items = await res.json();
   const tbody = document.getElementById('promos-body');
   if (!Array.isArray(items) || !items.length) {
@@ -2384,8 +2610,8 @@ async function loadPromosAdmin() {
     <td style="color:#aaa;font-size:0.8rem">${esc(p.time_info) || '—'}</td>
     <td>${p.active ? '<span style="color:var(--cyan)">✓ Aktiv</span>' : '<span style="color:#666">Yashirin</span>'}</td>
     <td>
-      <button class="act-btn" onclick='editPromo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</button>
-      <button class="act-btn" style="color:#ff4466" onclick="deletePromo(${p.id})">✕</button>
+      <button class="act-btn" aria-label="Tahrirlash" onclick='editPromo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</button>
+      <button class="act-btn" style="color:#ff4466" aria-label="O'chirish" onclick="deletePromo(${p.id})">✕</button>
     </td>
   </tr>`).join('');
 }
@@ -2412,33 +2638,44 @@ function editPromo(item) {
   document.getElementById('promo-active').checked = !!item.active;
   document.getElementById('promoModal').classList.add('open');
 }
-function closePromoModal() { document.getElementById('promoModal').classList.remove('open'); }
-async function savePromo() {
-  const data = {
-    title:       document.getElementById('promo-title').value.trim(),
-    description: document.getElementById('promo-desc').value.trim(),
-    badge:       document.getElementById('promo-badge').value.trim(),
-    emoji:       document.getElementById('promo-emoji').value || '🎁',
-    time_info:   document.getElementById('promo-time').value.trim(),
-    sort_order:  parseInt(document.getElementById('promo-order').value) || 0,
-    active:      document.getElementById('promo-active').checked ? 1 : 0,
-  };
-  if (!data.title) { showToast('Sarlavha kiriting!', true); return; }
-  if (editingPromoId) {
-    await fetch(`${API}/api/promotions/${editingPromoId}`, { method:'PUT', headers:H(), body:JSON.stringify(data) });
-  } else {
-    await fetch(`${API}/api/promotions`, { method:'POST', headers:H(), body:JSON.stringify(data) });
+function closePromoModal() {
+  document.getElementById('promoModal').classList.remove('open');
+  ['promo-id','promo-title','promo-desc','promo-badge','promo-time','promo-order'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('promo-emoji').value = '🎁';
+  document.getElementById('promo-active').checked = true;
+  editingPromoId = null;
+}
+async function savePromo(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const data = {
+      title:       document.getElementById('promo-title').value.trim(),
+      description: document.getElementById('promo-desc').value.trim(),
+      badge:       document.getElementById('promo-badge').value.trim(),
+      emoji:       document.getElementById('promo-emoji').value || '🎁',
+      time_info:   document.getElementById('promo-time').value.trim(),
+      sort_order:  parseInt(document.getElementById('promo-order').value) || 0,
+      active:      document.getElementById('promo-active').checked ? 1 : 0,
+    };
+    if (!data.title) { showToast('Sarlavha kiriting!', false); return; }
+    const r = editingPromoId
+      ? await apiFetch(`${API}/api/promotions/${editingPromoId}`, { method:'PUT', body:JSON.stringify(data) })
+      : await apiFetch(`${API}/api/promotions`, { method:'POST', body:JSON.stringify(data) });
+    if (!r) return;
+    closePromoModal();
+    showToast('Saqlandi');
+    loadPromosAdmin();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
-  closePromoModal();
-  showToast('Saqlandi');
-  loadPromosAdmin();
 }
 async function deletePromo(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  const r = await fetch(`${API}/api/promotions/${id}`, { method:'DELETE', headers:H() });
-  const d = await r.json().catch(()=>({}));
-  if (d.ok) { toast('O\'chirildi'); loadPromosAdmin(); }
-  else toast(d.error || t('toast.error'), false);
+  const r = await apiFetch(`${API}/api/promotions/${id}`, { method:'DELETE' });
+  if (!r) return;
+  toast('O\'chirildi'); loadPromosAdmin();
 }
 
 // ===== BUXGALTERIYA =====
@@ -2499,7 +2736,7 @@ async function loadAccounting() {
       '<td>' + esc(e.description || '—') + '</td>' +
       '<td style="color:var(--gold);font-weight:700">' + priceFmt(e.amount) + '</td>' +
       '<td style="color:#aaa;font-size:0.8rem">' + esc(e.date) + '</td>' +
-      '<td><button class="act-btn" style="color:#ff4466" onclick="deleteExpense(' + e.id + ')">✕</button></td></tr>'
+      '<td><button class="act-btn" style="color:#ff4466" aria-label="O\'chirish" onclick="deleteExpense(' + e.id + ')">✕</button></td></tr>'
     ).join('');
   } else {
     expBody.innerHTML = '<tr class="empty-row"><td colspan="6">Chiqimlar yo\'q</td></tr>';
@@ -2521,30 +2758,39 @@ async function loadAccounting() {
         '<td style="color:#aaa">' + item.min_quantity + '</td>' +
         '<td style="color:var(--gold)">' + priceFmt(item.price_per_unit) + '</td>' +
         '<td>' + statusBadge + '</td>' +
-        '<td><button class="act-btn" onclick="editInv(' + JSON.stringify(item).replace(/"/g,"&quot;") + ')">✎</button> ' +
-        '<button class="act-btn" style="color:#ff4466" onclick="deleteInv(' + item.id + ')">✕</button></td></tr>';
+        '<td><button class="act-btn" aria-label="Tahrirlash" onclick="editInv(' + JSON.stringify(item).replace(/"/g,"&quot;") + ')">✎</button> ' +
+        '<button class="act-btn" style="color:#ff4466" aria-label="O\'chirish" onclick="deleteInv(' + item.id + ')">✕</button></td></tr>';
     }).join('');
   } else {
     invBody.innerHTML = '<tr class="empty-row"><td colspan="8">Ombor bo\'sh</td></tr>';
   }
 }
 
-async function addExpense() {
-  const cat    = document.getElementById('exp-cat').value;
-  const desc   = document.getElementById('exp-desc').value;
-  const amount = parseInt(document.getElementById('exp-amount').value) || 0;
-  const date   = document.getElementById('exp-date').value;
-  if (!amount || !date) { showToast('Summa va sanani kiriting!', true); return; }
-  await fetch(`${API}/api/expenses`, { method:'POST', headers:H(), body: JSON.stringify({ category:cat, description:desc, amount, date }) });
-  document.getElementById('exp-desc').value = '';
-  document.getElementById('exp-amount').value = '';
-  showToast('Chiqim qo\'shildi');
-  loadAccounting();
+async function addExpense(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const cat    = document.getElementById('exp-cat').value;
+    const desc   = document.getElementById('exp-desc').value;
+    const amount = parseInt(document.getElementById('exp-amount').value) || 0;
+    const date   = document.getElementById('exp-date').value;
+    if (!amount || !date) { showToast('Summa va sanani kiriting!', false); return; }
+    const r = await apiFetch(`${API}/api/expenses`, { method:'POST', body: JSON.stringify({ category:cat, description:desc, amount, date }) });
+    if (!r) return;
+    document.getElementById('exp-desc').value = '';
+    document.getElementById('exp-amount').value = '';
+    showToast('Chiqim qo\'shildi');
+    loadAccounting();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 }
 
 async function deleteExpense(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/expenses/${id}`, { method:'DELETE', headers:H() });
+  const r = await apiFetch(`${API}/api/expenses/${id}`, { method:'DELETE' });
+  if (!r) return;
   showToast('O\'chirildi');
   loadAccounting();
 }
@@ -2581,29 +2827,41 @@ function editInv(item) {
   document.getElementById('inv-note-wrap').style.display = '';
   document.getElementById('invModal').classList.add('open');
 }
-function closeInvModal() { document.getElementById('invModal').classList.remove('open'); }
-async function saveInv() {
-  const data = {
-    name:          document.getElementById('inv-name').value,
-    unit:          document.getElementById('inv-unit').value,
-    quantity:      parseFloat(document.getElementById('inv-qty').value) || 0,
-    min_quantity:  parseFloat(document.getElementById('inv-min').value) || 0,
-    price_per_unit:parseInt(document.getElementById('inv-price').value) || 0,
-    note:          document.getElementById('inv-note').value,
-  };
-  if (!data.name) { showToast('Nomni kiriting!', true); return; }
-  if (editingInvId) {
-    await fetch(`${API}/api/inventory/${editingInvId}`, { method:'PUT', headers:H(), body: JSON.stringify(data) });
-  } else {
-    await fetch(`${API}/api/inventory`, { method:'POST', headers:H(), body: JSON.stringify(data) });
+function closeInvModal() {
+  document.getElementById('invModal').classList.remove('open');
+  ['inv-name','inv-qty','inv-min','inv-price','inv-note'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('inv-unit').value = document.getElementById('inv-unit').options[0]?.value || '';
+  editingInvId = null;
+}
+async function saveInv(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const data = {
+      name:          document.getElementById('inv-name').value,
+      unit:          document.getElementById('inv-unit').value,
+      quantity:      parseFloat(document.getElementById('inv-qty').value) || 0,
+      min_quantity:  parseFloat(document.getElementById('inv-min').value) || 0,
+      price_per_unit:parseInt(document.getElementById('inv-price').value) || 0,
+      note:          document.getElementById('inv-note').value,
+    };
+    if (!data.name) { showToast('Nomni kiriting!', false); return; }
+    const r = editingInvId
+      ? await apiFetch(`${API}/api/inventory/${editingInvId}`, { method:'PUT', body: JSON.stringify(data) })
+      : await apiFetch(`${API}/api/inventory`, { method:'POST', body: JSON.stringify(data) });
+    if (!r) return;
+    closeInvModal();
+    showToast('Saqlandi');
+    loadAccounting();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
-  closeInvModal();
-  showToast('Saqlandi');
-  loadAccounting();
 }
 async function deleteInv(id) {
   if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  await fetch(`${API}/api/inventory/${id}`, { method:'DELETE', headers:H() });
+  const r = await apiFetch(`${API}/api/inventory/${id}`, { method:'DELETE' });
+  if (!r) return;
   showToast('O\'chirildi');
   loadAccounting();
 }
@@ -2650,7 +2908,8 @@ async function selectRecipeItem(menuItemId) {
   selectedRecipeMenuItem = menuItemId;
   renderRecipeMenuList(document.getElementById('rec-search').value.toLowerCase());
   const menuItem = recipeMenuItems.find(m => m.id === menuItemId);
-  const res = await fetch(`${API}/api/recipes?menu_item_id=${menuItemId}`, { headers: H() });
+  const res = await apiFetch(`${API}/api/recipes?menu_item_id=${menuItemId}`);
+  if (!res) return;
   const recipes = await res.json();
   const box = document.getElementById('recipeEditBox');
   box.innerHTML = `
@@ -2660,7 +2919,7 @@ async function selectRecipeItem(menuItemId) {
     <div style="display:grid;grid-template-columns:1fr 1fr 100px 80px auto;gap:8px;align-items:end;margin-bottom:12px;">
       <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Mahsulot</label>
         <select id="rec-inv" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-family:inherit;">
-          ${allInventoryItems.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}
+          ${allInventoryItems.length ? allInventoryItems.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('') : '<option disabled>Mahsulot yo\'q</option>'}
         </select>
       </div>
       <div><label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:4px;">Miqdor</label>
@@ -2684,7 +2943,7 @@ async function selectRecipeItem(menuItemId) {
           <td>${r.quantity}</td>
           <td>${esc(r.unit)}</td>
           <td style="color:${r.inv_qty<=0?'var(--red)':r.inv_qty<5?'var(--orange)':'var(--green)'};">${r.inv_qty} ${esc(r.inv_unit)}</td>
-          <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${menuItemId})">✕</button></td>
+          <td><button class="btn-danger" aria-label="O'chirish" onclick="deleteRecipe(${r.id},${menuItemId})">✕</button></td>
         </tr>`).join('')}
       </tbody>
     </table>`;
@@ -2695,14 +2954,16 @@ async function addRecipeRow(menuItemId) {
   const qty    = parseFloat(document.getElementById('rec-qty').value);
   const unit   = document.getElementById('rec-unit').value;
   if (!qty || qty <= 0) { toast('Miqdor kiriting'); return; }
-  await fetch(`${API}/api/recipes`, { method:'POST', headers:H(),
+  const r = await apiFetch(`${API}/api/recipes`, { method:'POST',
     body: JSON.stringify({ menu_item_id: menuItemId, inventory_id: inv_id, quantity: qty, unit }) });
+  if (!r) return;
   selectRecipeItem(menuItemId);
   loadRecipesPage();
 }
 
 async function deleteRecipe(rid, menuItemId) {
-  await fetch(`${API}/api/recipes/${rid}`, { method:'DELETE', headers:H() });
+  const r = await apiFetch(`${API}/api/recipes/${rid}`, { method:'DELETE' });
+  if (!r) return;
   selectRecipeItem(menuItemId);
   loadRecipesPage();
 }
@@ -2716,7 +2977,7 @@ function renderAllRecipes(recipes) {
       <td>${esc(r.inv_name)}</td>
       <td>${r.quantity}</td>
       <td>${esc(r.unit)}</td>
-      <td><button class="btn-danger" onclick="deleteRecipe(${r.id},${r.menu_item_id})">✕</button></td>
+      <td><button class="btn-danger" aria-label="O'chirish" onclick="deleteRecipe(${r.id},${r.menu_item_id})">✕</button></td>
     </tr>`).join('');
 }
 
@@ -2733,7 +2994,8 @@ function setAnalyticsPeriod(p, btn) {
 }
 
 async function loadAnalytics() {
-  const res  = await fetch(`${API}/api/analytics/summary?period=${analyticsPeriod}`, { headers: H() });
+  const res  = await apiFetch(`${API}/api/analytics/summary?period=${analyticsPeriod}`);
+  if (!res) return;
   const data = await res.json();
   const fmt  = n => (n||0).toLocaleString() + ' so\'m';
 
@@ -2823,7 +3085,7 @@ let _dashTimer = null;
 function startDashTimer() {
   if (!_dashTimer) _dashTimer = setInterval(() => {
     if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
-  }, 30000);
+  }, DASHBOARD_REFRESH_MS);
 }
 startDashTimer();
 
@@ -2831,8 +3093,8 @@ startDashTimer();
 let lastResCount = 0;
 async function autoRefreshReservations() {
   try {
-    const r = await fetch(`${API}/api/reservations`, { headers: H() });
-    if (!r.ok) return;
+    const r = await apiFetch(`${API}/api/reservations`);
+    if (!r) return;
     const rows = await r.json();
     const badge = document.getElementById('resBadge');
     const pending = rows.filter(x => x.status === 'new').length;
@@ -2846,9 +3108,9 @@ async function autoRefreshReservations() {
       toast('🔔 Yangi bron keldi!');
     }
     lastResCount = pending;
-  } catch(e) {}
+  } catch(e) { console.warn('autoRefreshReservations xato:', e); }
 }
-setInterval(autoRefreshReservations, 15000);
+setInterval(autoRefreshReservations, RES_REFRESH_MS);
 
 // ===== AUDIT LOG =====
 let _auditOffset = 0;
@@ -2955,22 +3217,12 @@ async function loadShifts(statusFilter, btnEl) {
 
 // ===== INVENTAR =====
 let inventoryData = [];
-async function loadInventoryPage() {
-  const r = await fetch(`${API}/api/inventory`, { headers: H() });
-  const invPageJson = await r.json();
-  const items = Array.isArray(invPageJson) ? invPageJson : (invPageJson.data || []);
-  inventoryData = items;
+let _invPage = 0;
+function _renderInvPage() {
   const tbody = document.getElementById('inv-body');
-  const lowDiv = document.getElementById('inv-low-stock');
-  const low = items.filter(i => i.quantity <= i.min_quantity);
-  if (low.length) {
-    lowDiv.style.display = '';
-    lowDiv.innerHTML = '⚠ Kam qolgan: ' + low.map(i=>`<b>${i.name}</b> (${i.quantity} ${i.unit})`).join(', ');
-  } else {
-    lowDiv.style.display = 'none';
-  }
-  if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Inventar bo\'sh</td></tr>'; return; }
-  tbody.innerHTML = items.map(item => {
+  const slice = inventoryData.slice(_invPage * _PAGE_SIZE, (_invPage + 1) * _PAGE_SIZE);
+  if (!slice.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Inventar bo\'sh</td></tr>'; return; }
+  tbody.innerHTML = slice.map(item => {
     const low = item.quantity <= item.min_quantity;
     return `<tr>
       <td style="color:var(--cyan)">#${item.id}</td>
@@ -2981,11 +3233,31 @@ async function loadInventoryPage() {
       <td style="color:var(--gold)">${priceFmt(item.price_per_unit)}</td>
       <td>${low?'<span style="color:#ff4444;font-weight:700">⚠ Kam</span>':'<span style="color:#00e676">OK</span>'}</td>
       <td>
-        <button class="btn-sm btn-secondary" onclick="editInventory(${item.id})">✎</button>
-        <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteInventory(${item.id})">✕</button>
+        <button class="btn-sm btn-secondary" aria-label="Tahrirlash" onclick="editInventory(${item.id})">✎</button>
+        <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" aria-label="O'chirish" onclick="deleteInventory(${item.id})">✕</button>
       </td>
     </tr>`;
   }).join('');
+  renderPager('inv-pager', inventoryData.length, _invPage, _PAGE_SIZE, `p => { _invPage=p; _renderInvPage(); }`);
+}
+
+async function loadInventoryPage() {
+  const tbody = document.getElementById('inv-body');
+  tbody.innerHTML = skeletonRows(8);
+  const r = await apiFetch(`${API}/api/inventory`);
+  if (!r) return;
+  const invPageJson = await r.json();
+  inventoryData = Array.isArray(invPageJson) ? invPageJson : (invPageJson.data || []);
+  const lowDiv = document.getElementById('inv-low-stock');
+  const low = inventoryData.filter(i => i.quantity <= i.min_quantity);
+  if (low.length) {
+    lowDiv.style.display = '';
+    lowDiv.innerHTML = '⚠ Kam qolgan: ' + low.map(i=>`<b>${esc(i.name)}</b> (${i.quantity} ${i.unit})`).join(', ');
+  } else {
+    lowDiv.style.display = 'none';
+  }
+  _invPage = 0;
+  _renderInvPage();
 }
 
 function showInvAddModal(item) {
@@ -3004,39 +3276,42 @@ function editInventory(id) {
   if (item) showInvAddModal(item);
 }
 
-async function saveInventoryItem() {
-  const id = document.getElementById('ia-edit-id').value;
-  const body = {
-    name: document.getElementById('ia-name').value.trim(),
-    unit: document.getElementById('ia-unit').value,
-    quantity: parseFloat(document.getElementById('ia-qty').value)||0,
-    min_quantity: parseFloat(document.getElementById('ia-min').value)||0,
-    price_per_unit: parseInt(document.getElementById('ia-price').value)||0
-  };
-  if (!body.name) { toast('Nom kiritilmadi', 'error'); return; }
-  const url = id ? `${API}/api/inventory/${id}` : `${API}/api/inventory`;
-  const method = id ? 'PUT' : 'POST';
-  await fetch(url, { method, headers: H(), body: JSON.stringify(body) });
-  document.getElementById('invAddModal').classList.remove('open');
-  toast('Saqlandi ✓');
-  loadInventoryPage();
+async function saveInventoryItem(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const id = document.getElementById('ia-edit-id').value;
+    const body = {
+      name: document.getElementById('ia-name').value.trim(),
+      unit: document.getElementById('ia-unit').value,
+      quantity: parseFloat(document.getElementById('ia-qty').value)||0,
+      min_quantity: parseFloat(document.getElementById('ia-min').value)||0,
+      price_per_unit: parseInt(document.getElementById('ia-price').value)||0
+    };
+    if (!body.name) { toast('Nom kiritilmadi', false); return; }
+    const url = id ? `${API}/api/inventory/${id}` : `${API}/api/inventory`;
+    const method = id ? 'PUT' : 'POST';
+    const r = await apiFetch(url, { method, body: JSON.stringify(body) });
+    if (!r) return;
+    document.getElementById('invAddModal').classList.remove('open');
+    toast('Saqlandi ✓');
+    loadInventoryPage();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 }
 
 async function deleteInventory(id) {
   if (!confirm('O\'chirilsinmi?')) return;
-  await fetch(`${API}/api/inventory/${id}`, { method:'DELETE', headers: H() });
+  const r = await apiFetch(`${API}/api/inventory/${id}`, { method:'DELETE' });
+  if (!r) return;
   toast('O\'chirildi');
   loadInventoryPage();
 }
 
 // ===== LOYALTY =====
-let loyaltyData = [];
-async function loadLoyaltyPage() {
-  const r = await fetch(`${API}/api/customers`, { headers: H() });
-  const rows = await r.json();
-  loyaltyData = rows;
-  renderLoyaltyTable(rows);
-}
+let loyaltyData = [], _loyaltyPage = 0;
 
 function loyaltyTier(pts) {
   if (pts >= 500) return { label: '💎 Platinum', color: '#e2e8f0' };
@@ -3046,10 +3321,12 @@ function loyaltyTier(pts) {
   return { label: '—', color: 'var(--muted)' };
 }
 
-function renderLoyaltyTable(rows) {
+function renderLoyaltyTable(rows, resetPage = false) {
+  if (resetPage) _loyaltyPage = 0;
   const tbody = document.getElementById('loyalty-body');
-  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Mijozlar yo\'q</td></tr>'; return; }
-  tbody.innerHTML = rows.map(c => {
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Mijozlar yo\'q</td></tr>'; document.getElementById('loyalty-pager').innerHTML = ''; return; }
+  const slice = rows.slice(_loyaltyPage * _PAGE_SIZE, (_loyaltyPage + 1) * _PAGE_SIZE);
+  tbody.innerHTML = slice.map(c => {
     const pts = c.loyalty_points || 0;
     const tier = loyaltyTier(pts);
     return `<tr>
@@ -3063,18 +3340,29 @@ function renderLoyaltyTable(rows) {
     <td style="color:${tier.color};font-size:0.85rem">${tier.label}</td>
     <td style="color:var(--muted);font-size:0.8rem">${esc(c.notes||'')}</td>
     <td>
-      <button class="btn-sm" style="background:rgba(212,175,55,0.15);color:#d4af37;border:1px solid rgba(212,175,55,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;margin-right:4px" onclick="window.open('/loyalty-card.html?id=${c.id}','_blank')" title="Loyalty karta">🎴</button>
-      <button class="btn-sm btn-secondary" onclick="editCustomer(${c.id})">✎</button>
-      <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" onclick="deleteCustomer(${c.id})">✕</button>
+      <button class="btn-sm" style="background:rgba(212,175,55,0.15);color:#d4af37;border:1px solid rgba(212,175,55,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;margin-right:4px" onclick="window.open('/loyalty-card.html?id=${c.id}','_blank')" title="Loyalty karta" aria-label="Loyalty karta">🎴</button>
+      <button class="btn-sm btn-secondary" aria-label="Tahrirlash" onclick="editCustomer(${c.id})">✎</button>
+      <button class="btn-sm" style="background:rgba(255,68,68,0.15);color:#ff4444;border:none;border-radius:4px;padding:4px 10px;cursor:pointer" aria-label="O'chirish" onclick="deleteCustomer(${c.id})">✕</button>
     </td>
   </tr>`;}).join('');
+  renderPager('loyalty-pager', rows.length, _loyaltyPage, _PAGE_SIZE, `p => { _loyaltyPage=p; renderLoyaltyTable(loyaltyData); }`);
+}
+
+async function loadLoyaltyPage() {
+  document.getElementById('loyalty-body').innerHTML = skeletonRows(10);
+  const r = await apiFetch(`${API}/api/customers`);
+  if (!r) return;
+  const rows = await r.json();
+  loyaltyData = rows;
+  renderLoyaltyTable(rows, true);
 }
 
 async function searchCustomers(q) {
-  if (!q) { renderLoyaltyTable(loyaltyData); return; }
-  const r = await fetch(`${API}/api/customers?q=${encodeURIComponent(q)}`, { headers: H() });
+  if (!q) { renderLoyaltyTable(loyaltyData, true); return; }
+  const r = await apiFetch(`${API}/api/customers?q=${encodeURIComponent(q)}`);
+  if (!r) return;
   const rows = await r.json();
-  renderLoyaltyTable(rows);
+  renderLoyaltyTable(rows, true);
 }
 
 function showAddCustomerModal(c) {
@@ -3092,28 +3380,35 @@ function editCustomer(id) {
   if (c) showAddCustomerModal(c);
 }
 
-async function saveCustomer() {
-  const id = document.getElementById('cust-id').value;
-  const body = {
-    name: document.getElementById('cust-name').value.trim(),
-    phone: document.getElementById('cust-phone').value.trim(),
-    discount_pct: parseFloat(document.getElementById('cust-disc').value)||0,
-    notes: document.getElementById('cust-notes').value.trim()
-  };
-  if (!body.phone) { toast('Telefon kiritilmadi', 'error'); return; }
-  const url = id ? `${API}/api/customers/${id}` : `${API}/api/customers`;
-  const method = id ? 'PUT' : 'POST';
-  const r = await fetch(url, { method, headers: H(), body: JSON.stringify(body) });
-  const d = await r.json();
-  if (!r.ok) { toast(d.error||'Xato', 'error'); return; }
-  document.getElementById('customerModal').classList.remove('open');
-  toast('Saqlandi ✓');
-  loadLoyaltyPage();
+async function saveCustomer(btn) {
+  if (btn && btn.disabled) return;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const id = document.getElementById('cust-id').value;
+    const body = {
+      name: document.getElementById('cust-name').value.trim(),
+      phone: document.getElementById('cust-phone').value.trim(),
+      discount_pct: parseFloat(document.getElementById('cust-disc').value)||0,
+      notes: document.getElementById('cust-notes').value.trim()
+    };
+    if (!body.phone) { toast('Telefon kiritilmadi', false); return; }
+    const url = id ? `${API}/api/customers/${id}` : `${API}/api/customers`;
+    const method = id ? 'PUT' : 'POST';
+    const r = await apiFetch(url, { method, body: JSON.stringify(body) });
+    if (!r) return;
+    document.getElementById('customerModal').classList.remove('open');
+    toast('Saqlandi ✓');
+    loadLoyaltyPage();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 }
 
 async function deleteCustomer(id) {
   if (!confirm('O\'chirilsinmi?')) return;
-  await fetch(`${API}/api/customers/${id}`, { method:'DELETE', headers: H() });
+  const r = await apiFetch(`${API}/api/customers/${id}`, { method:'DELETE' });
+  if (!r) return;
   toast('O\'chirildi');
   loadLoyaltyPage();
 }
@@ -3141,6 +3436,107 @@ function initAdminSSE() {
   };
 }
 initAdminSSE();
+
+// ===== PERFORMANCE YORDAMCHILARI =====
+
+// Skeleton qatorlar (jadval uchun)
+function skeletonRows(cols, count = 5) {
+  return Array.from({ length: count }, () =>
+    `<tr class="skeleton-row">${Array.from({ length: cols }, (_, i) =>
+      `<td><span class="skel" style="width:${55 + (i * 17) % 35}%"></span></td>`
+    ).join('')}</tr>`
+  ).join('');
+}
+
+// Pagination render
+function renderPager(containerId, total, page, size, onPage) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const pages = Math.ceil(total / size);
+  if (pages <= 1) { el.innerHTML = ''; return; }
+  const from = page * size + 1, to = Math.min((page + 1) * size, total);
+  let html = `<button class="pager-btn" ${page===0?'disabled':''} onclick="(${onPage})(${page-1})">‹</button>`;
+  const start = Math.max(0, page - 2), end = Math.min(pages - 1, page + 2);
+  if (start > 0) html += `<button class="pager-btn" onclick="(${onPage})(0)">1</button>${start>1?'<span style="color:var(--muted);padding:0 4px">…</span>':''}`;
+  for (let i = start; i <= end; i++)
+    html += `<button class="pager-btn ${i===page?'active':''}" onclick="(${onPage})(${i})">${i+1}</button>`;
+  if (end < pages - 1) html += `${end<pages-2?'<span style="color:var(--muted);padding:0 4px">…</span>':''}<button class="pager-btn" onclick="(${onPage})(${pages-1})">${pages}</button>`;
+  html += `<button class="pager-btn" ${page>=pages-1?'disabled':''} onclick="(${onPage})(${page+1})">›</button>`;
+  html += `<span class="pager-info">${from}–${to} / ${total}</span>`;
+  el.innerHTML = html;
+}
+
+// ===== ACCESSIBILITY =====
+
+// Escape klavishi bilan modalni yopish
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.modal-overlay.open');
+  if (!open) return;
+  const id = open.id;
+  if (id === 'tableSessionModal') closeTSM();
+  else if (id === 'tableEditModal') closeTEM();
+  else if (id === 'staffModal') closeStaffModal();
+  else if (id === 'galleryModal') closeGalleryModal();
+  else if (id === 'promoModal') closePromoModal();
+  else if (id === 'menuModal') document.getElementById('menuModal').classList.remove('open');
+  else if (id === 'newsModal') { document.getElementById('newsModal').classList.remove('open'); document.getElementById('newsId').value=''; document.getElementById('nTitle').value=''; document.getElementById('nContent').value=''; }
+  else if (id === 'invModal') closeInvModal();
+  else open.classList.remove('open');
+});
+
+// Skip link fokusda ko'rinishi
+document.querySelector('.skip-link')?.addEventListener('focus', function() {
+  this.style.left = '4px';
+});
+document.querySelector('.skip-link')?.addEventListener('blur', function() {
+  this.style.left = '-9999px';
+});
+
+// Nav itemlarda aria-current yangilash
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.removeAttribute('aria-current'));
+    btn.setAttribute('aria-current', 'page');
+  });
+});
+document.querySelector('.nav-item.active')?.setAttribute('aria-current', 'page');
+
+// Form labellarini input larga avtomatik ulash (for atribut)
+document.querySelectorAll('.form-group').forEach(group => {
+  const label = group.querySelector('label:not([for])');
+  const input = group.querySelector('input, select, textarea');
+  if (label && input && input.id) label.setAttribute('for', input.id);
+});
+
+// Barcha modal-box larni dialog sifatida belgilash
+document.querySelectorAll('.modal-box').forEach(box => {
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  const h = box.querySelector('h3');
+  if (h) {
+    if (!h.id) h.id = 'dlg-' + Math.random().toString(36).slice(2, 7);
+    box.setAttribute('aria-labelledby', h.id);
+  }
+});
+
+// Debounce yordamchi funksiyasi
+function debounce(fn, ms) {
+  let t;
+  return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+}
+
+// Qidiruv inputlarini debounce bilan optimallashtirish
+const menuSearchEl = document.getElementById('menuSearch');
+if (menuSearchEl) {
+  menuSearchEl.removeEventListener('input', renderMenuGrid);
+  menuSearchEl.addEventListener('input', debounce(renderMenuGrid, 250));
+}
+const custSearchEl = document.getElementById('cust-search');
+if (custSearchEl) {
+  const origHandler = custSearchEl.oninput;
+  custSearchEl.oninput = debounce(function(e) { searchCustomers(e.target.value); }, 300);
+}
 </script>
 </body>
 </html>

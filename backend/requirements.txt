@@ -6,3 +6,4 @@ gunicorn==21.2.0
 pg8000==1.30.5
 redis==5.0.8
 pywebpush==2.0.3
+Pillow==10.3.0

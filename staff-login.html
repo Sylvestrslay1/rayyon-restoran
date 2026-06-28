@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#d4af37">
@@ -178,7 +179,7 @@
       <span class="icon">🔑</span>
       <span>Admin panel (parol bilan)</span>
     </a>
-    <a href="kitchen.html">
+    <a href="kitchen.html" id="kitchenLink">
       <span class="icon">🍳</span>
       <span>Oshxona ekrani (KDS)</span>
     </a>
@@ -207,8 +208,10 @@ function numPress(d) {
   pin += d;
   updateDisplay();
   setMsg('');
+  // Har raqamdan keyin timer qayta boshlanadi — 5-8 raqamli PIN uchun ham to'g'ri ishlaydi
   if (pin.length >= 4) autoLogin();
 }
+
 
 function numDel() {
   pin = pin.slice(0, -1);
@@ -265,11 +268,11 @@ async function doLogin() {
       kitchen:    'kitchen.html',
     };
 
-    // Xodim ma'lumotlarini saqlaymiz
-    localStorage.setItem('staff_id',   d.id);
-    localStorage.setItem('staff_name', d.name);
-    localStorage.setItem('staff_role', d.role);
-    localStorage.setItem('staff_pin',  pin);
+    // Xodim ma'lumotlarini sessionStorage ga (XSS himoya)
+    sessionStorage.setItem('staff_id',   d.id);
+    sessionStorage.setItem('staff_name', d.name);
+    sessionStorage.setItem('staff_role', d.role);
+    sessionStorage.setItem('staff_pin', pin);
 
     // Panel rollar uchun admin token sessionStorage ga
     if (d.token) {
