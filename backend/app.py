@@ -561,6 +561,8 @@ def login():
 
     if not authenticated:
         time.sleep(0.3)  # Vaqt hujumiga qarshi kechiktirish
+        audit("login_fail", "admin", user_name="admin",
+              details={"ip": get_remote_address(), "reason": "wrong_password"})
         return jsonify({"ok": False, "error": "Parol noto'g'ri"}), 401
 
     ip = get_remote_address()
@@ -603,6 +605,7 @@ def staff_login():
     if not staff:
         _pin_record_fail(ip)
         time.sleep(0.3)
+        audit("pin_fail", "staff", user_ip=ip, details={"reason": "wrong_pin"})
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     _pin_record_success(ip)
 
