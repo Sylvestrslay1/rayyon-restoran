@@ -9,7 +9,7 @@ from core import (
     get_cust_name, set_cust_name,
     get_cust_phone, set_cust_phone,
     get_table, set_table,
-    log,
+    log, _phone_valid,
 )
 from i18n import t, cats as i18n_cats
 
@@ -208,6 +208,13 @@ def order_handle_name(chat_id, name):
 
 def order_handle_phone(chat_id, phone, data):
     lang = get_lang(chat_id) or 'uz'
+    if not _phone_valid(phone):
+        msgs = {
+            'uz': '📞 Telefon raqami noto\'g\'ri.\nMasalan: +998901234567 yoki 0901234567',
+            'ru': '📞 Неверный номер телефона.\nПример: +998901234567',
+            'en': '📞 Invalid phone number.\nExample: +998901234567',
+        }
+        send_msg(chat_id, msgs.get(lang, msgs['uz'])); return
     data['phone'] = phone
     _order_show_confirm(chat_id, lang, data.get('name', ''), phone)
 
@@ -217,10 +224,28 @@ def _order_show_confirm(chat_id, lang, name, phone):
     lines = []
     for c in cart:
         lines.append(f"  {c.get('emoji','🍽')} {c['name']} ×{c['qty']} — {int(c['price']*c['qty']):,} so'm")
+    total = int(cart_total(chat_id))
+
+    # Loyalty chegirmasi tekshirish
+    discount_line = ''
+    if phone:
+        cust = api_raw("GET", f"/api/customers/lookup?phone={urllib.parse.quote(phone)}")
+        if isinstance(cust, dict) and cust.get('found'):
+            disc = cust.get('customer', {}).get('discount_pct', 0) or 0
+            if disc:
+                disc_amt = int(total * disc / 100)
+                total_after = total - disc_amt
+                discount_line = (
+                    f"\n🎁 Loyalty chegirma: <b>-{disc}%</b> ({disc_amt:,} so'm)\n"
+                    f"💚 To'lov: <b>{total_after:,} so'm</b>"
+                )
+
     set_state(chat_id, 'order_confirm', {'name': name, 'phone': phone})
-    send_kb(chat_id,
-        t(lang, 'confirm_order', name=name, phone=phone,
-          items='\n'.join(lines), total=f"{int(cart_total(chat_id)):,}"),
+    confirm_text = t(lang, 'confirm_order', name=name, phone=phone,
+                     items='\n'.join(lines), total=f"{total:,}")
+    if discount_line:
+        confirm_text += discount_line
+    send_kb(chat_id, confirm_text,
         [[{"text": t(lang, 'confirm'), "callback_data": "c_order_confirm"},
           {"text": t(lang, 'cancel'),  "callback_data": "c_cart"}]])
 
@@ -359,7 +384,14 @@ def bron_handle_name(chat_id, name):
 
 
 def bron_handle_phone(chat_id, phone, data):
-    lang     = get_lang(chat_id) or 'uz'
+    lang = get_lang(chat_id) or 'uz'
+    if not _phone_valid(phone):
+        msgs = {
+            'uz': '📞 Telefon raqami noto\'g\'ri.\nMasalan: +998901234567 yoki 0901234567',
+            'ru': '📞 Неверный номер телефона.\nПример: +998901234567',
+            'en': '📞 Invalid phone number.\nExample: +998901234567',
+        }
+        send_msg(chat_id, msgs.get(lang, msgs['uz'])); return
     data['phone'] = phone
     set_state(chat_id, 'bron_date', data)
     today    = datetime.date.today()
@@ -457,6 +489,13 @@ def ball_start(chat_id):
 
 def ball_by_phone(chat_id, phone):
     lang = get_lang(chat_id) or 'uz'
+    if not _phone_valid(phone):
+        msgs = {
+            'uz': '📞 Telefon raqami noto\'g\'ri.\nMasalan: +998901234567 yoki 0901234567',
+            'ru': '📞 Неверный номер телефона.\nПример: +998901234567',
+            'en': '📞 Invalid phone number.\nExample: +998901234567',
+        }
+        send_msg(chat_id, msgs.get(lang, msgs['uz'])); return
     clear_state(chat_id)
     customer = api_raw("GET", f"/api/customers/lookup?phone={urllib.parse.quote(phone)}")
     if not customer or not isinstance(customer, dict) or not customer.get('found'):

@@ -16,7 +16,7 @@ from core import (
     get_state, clear_state, cart_clear, get_staff,
     STATUS_LABELS, get_user_role, set_user_role,
     send_kb, ALLOWED_CHAT_IDS,
-    get_lang, get_cust_name,
+    get_lang, get_cust_name, _load_persist,
 )
 from admin import (
     main_menu, show_orders, show_reservations, show_tables,
@@ -268,5 +268,6 @@ if __name__ == "__main__":
         print("❌ TELEGRAM_BOT_TOKEN o'rnatilmagan!")
         print("   export TELEGRAM_BOT_TOKEN=<token>")
         exit(1)
+    _load_persist()   # Saqlangan til/ism/telefon ma'lumotlarini yuklash
     login()
     poll()

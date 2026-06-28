@@ -23,3 +23,7 @@ node_modules/
 
 # Tahlil fayllar
 *.pptx
+
+# Mijoz persistens va QR kodlar
+bot/user_data.json
+bot/qr_codes/
