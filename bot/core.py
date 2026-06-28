@@ -42,10 +42,12 @@ ROLE_ICONS = {
     'cook': '🧑‍🍳', 'chef': '👨‍🍳',
 }
 CATS = [
-    ('milliy', '🏺 Milliy taomlar'),
-    ('grill',  '🔥 Grill'),
-    ('salad',  '🥗 Salatlar'),
-    ('drink',  '🥤 Ichimliklar'),
+    ('milliy',  '🏺 Milliy taomlar'),
+    ('grill',   '🔥 Grill'),
+    ('soup',    '🍲 Sho\'rvalar'),
+    ('salad',   '🥗 Salatlar'),
+    ('dessert', '🍰 Shirinliklar'),
+    ('drink',   '🥤 Ichimliklar'),
 ]
 WAITER_ROLES  = ('waiter',)
 KITCHEN_ROLES = ('kitchen', 'cook', 'chef')

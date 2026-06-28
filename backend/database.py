@@ -565,20 +565,47 @@ def _init_db_inner(conn):
 
     # Default menu
     menu_defaults = [
+        # ── Milliy taomlar ─────────────────────────────────────────
         ("Palov", "milliy", "An'anaviy o'zbek palovi, qo'zi go'shti bilan", 35000, "🍚"),
         ("Somsa (2 dona)", "milliy", "Tandirda pishirilgan, go'shtli somsa", 18000, "🥟"),
         ("Lag'mon", "milliy", "Qo'lda tortilgan lag'mon, sabzavotlar bilan", 28000, "🍜"),
-        ("Manti (5 dona)", "milliy", "Bug'da pishirilgan manti", 32000, "🥠"),
-        ("Shurva", "milliy", "Qo'zichoq qovurg'asi bilan shurva", 30000, "🍲"),
-        ("Grill tovuq", "grill", "Butun tovuq, marinadlangan va grillda pishirilgan", 75000, "🍗"),
-        ("Kebab", "grill", "Mol go'shti kebabi, sabzavot garniri bilan", 55000, "🍢"),
-        ("Grill sabzavot", "grill", "Aralash grill sabzavotlar", 22000, "🥦"),
-        ("Toshkent salat", "salad", "Go'sht, pomidor, piyoz va o'tlar bilan", 20000, "🥗"),
-        ("Meva salati", "salad", "Mavsumiy mevalar va asal bilan", 18000, "🍓"),
-        ("Cezar salat", "salad", "Tovuq, kruton, parmezan bilan", 25000, "🥙"),
-        ("Kompot (1L)", "drink", "Tabiiy mevali kompot", 12000, "🥤"),
-        ("Choy (dam)", "drink", "Ko'k yoki qora choy, non bilan", 8000, "🍵"),
-        ("Limonad", "drink", "Toza siqilgan limon sharbati", 15000, "🍋"),
+        ("Manti (5 dona)", "milliy", "Bug'da pishirilgan manti, smetana bilan", 32000, "🥠"),
+        ("Shurva", "milliy", "Qo'zichoq qovurg'asi bilan quyuq shurva", 30000, "🍲"),
+        ("Dimlama", "milliy", "Qo'zi go'shti va sabzavotlar bilan dimlama", 38000, "🥘"),
+        ("Beshbarmak", "milliy", "Qo'zi go'shti va yupqa xamir bilan", 45000, "🍽"),
+        ("Chuchvara", "milliy", "Kichik chuchvaralar, qatiq sousi bilan", 28000, "🥟"),
+        ("Non (2 dona)", "milliy", "Tandirda yangi pishirilgan non", 8000, "🍞"),
+        ("Mastava", "milliy", "Sholi va sabzavotli quyuq mastava sho'rva", 25000, "🍲"),
+        # ── Grill ─────────────────────────────────────────────────
+        ("Grill tovuq (yarim)", "grill", "Yarim tovuq, o'tlar marinadida grillda", 55000, "🍗"),
+        ("Grill tovuq (butun)", "grill", "Butun tovuq, go'sht sharbatida marinadlangan", 95000, "🍗"),
+        ("Mol kebabi", "grill", "Mol go'shti kebabi, sabzavot garniri bilan", 55000, "🍢"),
+        ("Qo'zi kebabi", "grill", "Qo'zi go'shti kebabi, o'tlar bilan", 65000, "🍢"),
+        ("Tikka kebab", "grill", "Tovuq tikka, krem sousi va lavash bilan", 48000, "🥙"),
+        ("Grill sabzavot", "grill", "Aralash grill sabzavotlar (baklajan, qo'ng'iroq, pomidor)", 22000, "🥦"),
+        ("Antrikot", "grill", "Yirik mol antrikoti, kartoshka va sabzavot bilan", 85000, "🥩"),
+        ("Lula kebab", "grill", "Mol va qo'zi go'shtidan lula kebab", 52000, "🍖"),
+        # ── Sho'rvalar ────────────────────────────────────────────
+        ("Oshi kovurma", "soup", "Qovurilgan go'sht bilan boy sho'rva", 32000, "🍜"),
+        ("Tos qozon sho'rva", "soup", "Qozon sho'rva, turli go'sht va sabzavot", 35000, "🍲"),
+        # ── Salatlar ─────────────────────────────────────────────
+        ("Toshkent salat", "salad", "Mol go'shti, pomidor, piyoz va o'tlar bilan", 20000, "🥗"),
+        ("Meva salati", "salad", "Mavsumiy mevalar, asal va yong'oq bilan", 18000, "🍓"),
+        ("Cezar salat", "salad", "Tovuq fille, kruton, parmezan, Cezar sousi", 25000, "🥙"),
+        ("Achichuk", "salad", "Yangi pomidor, piyoz, o'tlar va zira bilan", 14000, "🍅"),
+        ("Ko'k salat", "salad", "Mavsumiy ko'k o'tlar, olive yog'i va limon", 16000, "🥬"),
+        # ── Shirinliklar ──────────────────────────────────────────
+        ("Halva", "dessert", "An'anaviy o'zbek halvasi, o'riklarla bezatilgan", 18000, "🍯"),
+        ("Samsa-chak-chak", "dessert", "Asal bilan qorilgan chak-chak, yong'oq bilan", 22000, "🍬"),
+        ("Muzqaymoq (2 sharik)", "dessert", "Vanil va shokolad muzqaymoq, meva siropida", 20000, "🍦"),
+        # ── Ichimliklar ───────────────────────────────────────────
+        ("Kompot (1L)", "drink", "Tabiiy mevali kompot, suvda qaynatilgan", 12000, "🥤"),
+        ("Choy ko'k (dam)", "drink", "Ko'k choy, non va konfet bilan", 8000, "🍵"),
+        ("Choy qora (dam)", "drink", "Qora choy, qand bilan", 8000, "🍵"),
+        ("Limonad", "drink", "Toza siqilgan limon sharbati, nane bilan", 15000, "🍋"),
+        ("Meva sharbati", "drink", "Toza meva sharbati (olcha/o'rik/anor)", 18000, "🍹"),
+        ("Mineral suv (0.5L)", "drink", "Sovuq mineral suv", 6000, "💧"),
+        ("Ayron (500ml)", "drink", "Toza qo'y sutidan tayyorlangan ayron", 10000, "🥛"),
     ]
     # Jadval bo'sh bo'lsagina default taomlarni qo'shamiz
     cur.execute("SELECT COUNT(*) FROM menu")
