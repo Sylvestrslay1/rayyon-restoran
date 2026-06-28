@@ -643,6 +643,7 @@ def staff_login():
 
 # ===== MENU =====
 @app.route("/api/menu/popular", methods=["GET"])
+@limiter.limit("120 per minute")
 def popular_menu():
     """Eng ko'p buyurtma qilingan taomlar — ochiq endpoint (auth shart emas)."""
     limit = min(int(request.args.get("limit", 5)), 20)
@@ -665,6 +666,7 @@ def popular_menu():
 
 
 @app.route("/api/menu", methods=["GET"])
+@limiter.limit("120 per minute")
 def get_menu():
     conn = get_db()
     category = request.args.get("category")
@@ -2655,6 +2657,7 @@ def get_customers():
     return jsonify(result)
 
 @app.route("/api/customers/lookup", methods=["GET"])
+@limiter.limit("30 per minute")
 def lookup_customer():
     phone = request.args.get("phone", "").strip()
     if not phone: return jsonify({"found": False}), 200
