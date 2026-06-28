@@ -5,11 +5,14 @@ from core import (
     ALLOWED_CHAT_IDS, _NOTIF_INTERVAL, _DAILY_REPORT_HOUR,
 )
 
-_notified_res   = set()   # bron ID lari — allaqachon xabar yuborilgan
-_notified_ord   = set()   # QR buyurtma ID lari
-_notified_bill  = set()   # hisob so'ragan sessiya ID lari
-_notified_low   = set()   # kam inventar item ID lari (kun davomida bir marta)
-_last_daily_day = None    # kunlik hisobot yuborilgan kun (ISO sana)
+_notified_res    = set()   # bron ID lari — allaqachon xabar yuborilgan
+_notified_ord    = set()   # QR buyurtma ID lari
+_notified_bill   = set()   # hisob so'ragan sessiya ID lari
+_notified_low    = set()   # kam inventar item ID lari (kun davomida bir marta)
+_last_daily_day  = None    # kunlik hisobot yuborilgan kun (ISO sana)
+_fail_count      = 0       # ketma-ket xatolar soni
+_FAIL_THRESHOLD  = 3       # shu miqdordan keyin admin xabardor qilinadi
+_fail_notified   = False   # bir marta xabar yuborilgandan keyin takrorlanmasin
 
 
 def notify_all(text, buttons=None):
@@ -151,6 +154,7 @@ def send_daily_report():
 
 
 def _notification_loop():
+    global _fail_count, _fail_notified
     log.info(f"Bildirishnoma tekshiruvi boshlandi (har {_NOTIF_INTERVAL}s)")
     while True:
         try:
@@ -159,6 +163,17 @@ def _notification_loop():
             check_bill_requests()
             check_low_inventory()
             send_daily_report()
+            # Muvaffaqiyatli tsikl — hisoblagichni nollashtirish
+            if _fail_count > 0:
+                _fail_count = 0
+                _fail_notified = False
         except Exception as e:
             log.error(f"Bildirishnoma xatosi: {e}")
+            _fail_count += 1
+            if _fail_count >= _FAIL_THRESHOLD and not _fail_notified:
+                _fail_notified = True
+                try:
+                    notify_all(f"⚠️ <b>Bildirishnoma tizimi xatosi</b>\n{_fail_count} marta ketma-ket xato:\n<code>{e}</code>")
+                except Exception:
+                    pass
         time.sleep(_NOTIF_INTERVAL)

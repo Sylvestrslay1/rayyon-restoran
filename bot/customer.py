@@ -546,7 +546,7 @@ def ball_by_phone(chat_id, phone):
 
 def show_promotions(chat_id):
     lang  = get_lang(chat_id) or 'uz'
-    promos = api_raw("GET", "/api/promotions")
+    promos = api_raw("GET", "/api/promotions?active=1")
     if not isinstance(promos, list) or not promos:
         msgs = {
             'uz': '🎁 Hozircha faol aksiyalar yo\'q.\nTez kunda yangi takliflar bo\'ladi!',
