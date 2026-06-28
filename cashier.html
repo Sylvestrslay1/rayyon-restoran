@@ -637,7 +637,14 @@ async function submitPayment() {
     }
     showToast('To\'lov qabul qilindi! ✅', 'success');
     closeModal('session-modal');
+    // Yopilgan sessiyani chek ko'rsatish uchun saqlash
+    const closedSession = currentSession;
     loadTables();
+    // To'lovdan keyin chek avtomatik ko'rsatish
+    try {
+      const rr = await fetch(`${API}/api/receipt/${closedSession.id}`, { headers: {'X-Staff-Pin': PIN} });
+      if (rr.ok) { const dd = await rr.json(); renderReceipt(dd); document.getElementById('receipt-modal').classList.remove('hidden'); }
+    } catch(_e) { /* chek ochilmasa ham muammo emas */ }
   } catch(e) {
     showToast('Server xatosi', 'error');
     if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ To\'lovni tasdiqlash'; }

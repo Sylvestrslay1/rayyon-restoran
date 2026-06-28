@@ -2188,10 +2188,17 @@ def add_expense():
         _validate_str(d.get("description"), 500, "Tavsif")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    # Sana validatsiyasi va normalizatsiyasi
+    raw_date = (d.get("date") or "").strip()
+    try:
+        import datetime as _dt
+        exp_date = _dt.date.fromisoformat(raw_date).isoformat()
+    except (ValueError, AttributeError):
+        exp_date = datetime.date.today().isoformat()
     conn = get_db()
     db_exec(conn,
         "INSERT INTO expenses (category, description, amount, date) VALUES (?,?,?,?)",
-        (d.get("category"), d.get("description"), d.get("amount", 0), d.get("date"))
+        (d.get("category"), d.get("description"), int(d.get("amount", 0) or 0), exp_date)
     )
     conn.commit()
     audit("expense_add", "expense", user_name="admin",

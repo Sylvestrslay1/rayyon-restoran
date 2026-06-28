@@ -100,8 +100,9 @@ def customer_main(chat_id):
         [{"text": t(lang, 'menu'),    "callback_data": "c_menu"},
          {"text": t(lang, 'bron'),    "callback_data": "c_bron"}],
         [{"text": t(lang, 'ball'),    "callback_data": "c_ball"},
-         {"text": t(lang, 'contact'), "callback_data": "c_contact"}],
-        [{"text": t(lang, 'staff'),   "callback_data": "s_login"}],
+         {"text": "🎁 Aksiyalar",     "callback_data": "c_promos"}],
+        [{"text": t(lang, 'contact'), "callback_data": "c_contact"},
+         {"text": t(lang, 'staff'),   "callback_data": "s_login"}],
     ]
     if cart:
         rows.insert(0, [{"text": t(lang, 'view_cart', count=len(cart)), "callback_data": "c_cart"}])
@@ -370,7 +371,21 @@ def cust_name_handle(chat_id, name):
 # ── Bron oqimi ────────────────────────────────────────────────
 
 def bron_start(chat_id):
-    lang = get_lang(chat_id) or 'uz'
+    lang  = get_lang(chat_id) or 'uz'
+    saved_name  = get_cust_name(chat_id)
+    saved_phone = get_cust_phone(chat_id)
+    if saved_name and saved_phone:
+        # Ism va telefon saqlangan — to'g'ridan sana so'rashga o'tish
+        data = {'name': saved_name, 'phone': saved_phone}
+        set_state(chat_id, 'bron_date', data)
+        today    = datetime.date.today()
+        tomorrow = today + datetime.timedelta(days=1)
+        send_kb(chat_id, t(lang, 'ask_bron_date'), [
+            [{"text": t(lang, 'today',    date=today),    "callback_data": f"c_bron_date_{today}"},
+             {"text": t(lang, 'tomorrow', date=tomorrow), "callback_data": f"c_bron_date_{tomorrow}"}],
+            [{"text": t(lang, 'other_date'), "callback_data": "c_bron_date_manual"}],
+        ])
+        return
     set_state(chat_id, 'bron_name')
     send_msg(chat_id, t(lang, 'bron_start'))
 
@@ -507,10 +522,63 @@ def ball_by_phone(chat_id, phone):
     spent  = int(c.get('total_spent', 0))
     disc   = c.get('discount_pct', 0)
     points = c.get('loyalty_points', 0)
-    level  = t(lang, 'level_bronze') if visits < 5 else t(lang, 'level_silver') if visits < 15 else t(lang, 'level_gold')
-    text   = t(lang, 'loyalty_info', name=name, level=level, points=points, visits=visits, spent=f'{spent:,}')
+    if visits < 5:
+        level = t(lang, 'level_bronze')
+        next_visits = 5 - visits
+        next_msgs = {'uz': f'\n📈 Kumush darajaga: yana <b>{next_visits}</b> tashrif', 'ru': f'\n📈 До Серебра: ещё <b>{next_visits}</b> визита', 'en': f'\n📈 To Silver: <b>{next_visits}</b> more visit(s)'}
+        next_line = next_msgs.get(lang, next_msgs['uz'])
+    elif visits < 15:
+        level = t(lang, 'level_silver')
+        next_visits = 15 - visits
+        next_msgs = {'uz': f'\n📈 Oltin darajaga: yana <b>{next_visits}</b> tashrif', 'ru': f'\n📈 До Золота: ещё <b>{next_visits}</b> визита', 'en': f'\n📈 To Gold: <b>{next_visits}</b> more visit(s)'}
+        next_line = next_msgs.get(lang, next_msgs['uz'])
+    else:
+        level = t(lang, 'level_gold')
+        next_line = ''
+    text = t(lang, 'loyalty_info', name=name, level=level, points=points, visits=visits, spent=f'{spent:,}')
+    text += next_line
     if disc:
         text += t(lang, 'loyalty_disc', disc=disc)
+    send_kb(chat_id, text, [[{"text": t(lang, 'home'), "callback_data": "c_main"}]])
+
+
+# ── Aksiyalar ─────────────────────────────────────────────────
+
+def show_promotions(chat_id):
+    lang  = get_lang(chat_id) or 'uz'
+    promos = api_raw("GET", "/api/promotions")
+    if not isinstance(promos, list) or not promos:
+        msgs = {
+            'uz': '🎁 Hozircha faol aksiyalar yo\'q.\nTez kunda yangi takliflar bo\'ladi!',
+            'ru': '🎁 Активных акций пока нет.\nСледите за обновлениями!',
+            'en': '🎁 No active promotions right now.\nCheck back soon!',
+        }
+        send_kb(chat_id, msgs.get(lang, msgs['uz']),
+                [[{"text": t(lang, 'home'), "callback_data": "c_main"}]])
+        return
+    lines = []
+    for p in promos:
+        if not p.get('active', 1):
+            continue
+        emoji = p.get('emoji', '🎁')
+        title = p.get('title', '')
+        desc  = p.get('description', '')
+        badge = p.get('badge', '')
+        time_info = p.get('time_info', '')
+        badge_str = f" <b>[{badge}]</b>" if badge else ''
+        time_str  = f"\n⏰ {time_info}" if time_info else ''
+        lines.append(f"{emoji} <b>{title}</b>{badge_str}\n{desc}{time_str}")
+    if not lines:
+        msgs = {
+            'uz': '🎁 Hozircha faol aksiyalar yo\'q.',
+            'ru': '🎁 Активных акций нет.',
+            'en': '🎁 No active promotions.',
+        }
+        send_kb(chat_id, msgs.get(lang, msgs['uz']),
+                [[{"text": t(lang, 'home'), "callback_data": "c_main"}]])
+        return
+    headers = {'uz': '🎁 <b>AKSIYALAR VA TAKLIFLAR</b>', 'ru': '🎁 <b>АКЦИИ И ПРЕДЛОЖЕНИЯ</b>', 'en': '🎁 <b>PROMOTIONS & OFFERS</b>'}
+    text = headers.get(lang, headers['uz']) + '\n\n' + '\n\n'.join(lines)
     send_kb(chat_id, text, [[{"text": t(lang, 'home'), "callback_data": "c_main"}]])
 
 
@@ -589,3 +657,5 @@ def handle_customer_callback(chat_id, data):
         clear_state(chat_id); ball_start(chat_id)
     elif data == "c_contact":
         show_contact(chat_id)
+    elif data == "c_promos":
+        show_promotions(chat_id)

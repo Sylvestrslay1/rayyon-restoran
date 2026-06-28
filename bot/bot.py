@@ -90,8 +90,41 @@ def handle_message(msg):
             customer_start(chat_id)
         return
 
-    # ── /start va /help ───────────────────────────────────────
-    if text.startswith('/start') or text in ('/help',):
+    # ── /help ─────────────────────────────────────────────────
+    if text == '/help':
+        lang = get_lang(chat_id) or 'uz'
+        help_texts = {
+            'uz': (
+                "ℹ️ <b>Rayyon Restoran Boti</b>\n\n"
+                "/start — Bosh menyuga qaytish\n"
+                "/menu — Menyu va buyurtma berish\n"
+                "/cancel — Joriy amalni bekor qilish\n"
+                "/help — Ushbu yordam xabari\n\n"
+                "📌 Savollar uchun: @rayyon_admin"
+            ),
+            'ru': (
+                "ℹ️ <b>Бот Rayyon Restoran</b>\n\n"
+                "/start — Главное меню\n"
+                "/menu — Меню и заказ\n"
+                "/cancel — Отменить текущее действие\n"
+                "/help — Эта справка\n\n"
+                "📌 По вопросам: @rayyon_admin"
+            ),
+            'en': (
+                "ℹ️ <b>Rayyon Restaurant Bot</b>\n\n"
+                "/start — Main menu\n"
+                "/menu — Menu & ordering\n"
+                "/cancel — Cancel current action\n"
+                "/help — This help message\n\n"
+                "📌 Support: @rayyon_admin"
+            ),
+        }
+        from core import send_msg as _sm
+        _sm(chat_id, help_texts.get(lang, help_texts['uz']))
+        return
+
+    # ── /start ────────────────────────────────────────────────
+    if text.startswith('/start'):
         clear_state(chat_id)
         if is_admin:
             main_menu(chat_id)
