@@ -3126,24 +3126,25 @@ def export_audit_csv():
 def health_check():
     # Render health check uchun doim 200 qaytaradi — server ishlayapti degan signal
     # DB holati haqiqiy query bilan tekshiriladi
-    from database import USE_PG
+    from database import USE_PG, get_conn as _gc, DATABASE_URL
     db_ok = False
     connect_error = None
-    if _db_ready:
-        try:
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT 1")
-            conn.close()
-            db_ok = True
-        except Exception as _ce:
-            connect_error = f"{type(_ce).__name__}: {_ce}"
+    # Har doim yangi ulanish sinab ko'ramiz (init_done dan qat'iy nazar)
+    try:
+        _conn = _gc()
+        _cur = _conn.cursor()
+        _cur.execute("SELECT 1")
+        _conn.close()
+        db_ok = True
+    except Exception as _ce:
+        connect_error = f"{type(_ce).__name__}: {_ce}"
     resp = {
         "status": "ok",
         "db_ready": db_ok,
         "init_done": _db_ready,
         "version": "1.0.0",
         "db_engine": "postgresql" if USE_PG else "sqlite",
+        "db_url_set": bool(DATABASE_URL),
     }
     if _db_error:
         resp["init_error"] = _db_error
