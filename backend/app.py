@@ -319,13 +319,19 @@ def q(sql):
 
 
 def get_setting(key):
-    conn = get_conn()
     try:
+        conn = get_db()
         cur = conn.cursor()
         cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
         row = cur.fetchone()
-    finally:
-        conn.close()
+    except Exception:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
     if not row:
         return None
     return row["value"] if not USE_PG else row[0]
@@ -604,7 +610,7 @@ def staff_login():
     if not staff:
         _pin_record_fail(ip)
         time.sleep(0.3)
-        audit("pin_fail", "staff", user_ip=ip, details={"reason": "wrong_pin"})
+        audit("pin_fail", "staff", details={"reason": "wrong_pin", "ip": ip})
         return jsonify({"ok": False, "error": "PIN noto'g'ri"}), 401
     _pin_record_success(ip)
 

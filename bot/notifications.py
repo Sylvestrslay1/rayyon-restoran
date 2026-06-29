@@ -9,10 +9,18 @@ _notified_res    = set()   # bron ID lari — allaqachon xabar yuborilgan
 _notified_ord    = set()   # QR buyurtma ID lari
 _notified_bill   = set()   # hisob so'ragan sessiya ID lari
 _notified_low    = set()   # kam inventar item ID lari (kun davomida bir marta)
+_MAX_NOTIFIED    = 2000    # set o'lcham chegarasi
 _last_daily_day  = None    # kunlik hisobot yuborilgan kun (ISO sana)
 _fail_count      = 0       # ketma-ket xatolar soni
 _FAIL_THRESHOLD  = 3       # shu miqdordan keyin admin xabardor qilinadi
 _fail_notified   = False   # bir marta xabar yuborilgandan keyin takrorlanmasin
+
+
+def _trim_set(s):
+    """Set hajmi chegaradan oshsa eng eski (kichik) IDlarni o'chiradi."""
+    if len(s) > _MAX_NOTIFIED:
+        for item in sorted(s)[:len(s) - _MAX_NOTIFIED]:
+            s.discard(item)
 
 
 def notify_all(text, buttons=None):
@@ -42,6 +50,7 @@ def check_new_reservations():
             _notified_res.add(rid)
             continue
         _notified_res.add(rid)
+        _trim_set(_notified_res)
         txt = (
             f"📅 <b>YANGI BRON #{rid}</b>\n"
             f"👤 {r.get('customer_name','')} · {r.get('customer_phone','')}\n"
@@ -67,6 +76,7 @@ def check_new_orders():
         if not oid or oid in _notified_ord:
             continue
         _notified_ord.add(oid)
+        _trim_set(_notified_ord)
         txt = (
             f"📦 <b>YANGI BUYURTMA #{oid}</b>\n"
             f"🍽 {o.get('item_name','')} × {o.get('quantity', 1)}\n"
@@ -94,6 +104,7 @@ def check_bill_requests():
         if not sid or sid in _notified_bill:
             continue
         _notified_bill.add(sid)
+        _trim_set(_notified_bill)
         amt = f"{int(t.get('total_amount', 0)):,} so'm" if t.get("total_amount") else "—"
         txt = (
             f"🧾 <b>HISOB SO'RALDI — Stol #{t['number']}</b>\n"
@@ -132,6 +143,10 @@ def send_daily_report():
     if now.hour < _DAILY_REPORT_HOUR or _last_daily_day == today:
         return
     _last_daily_day = today
+    from core import admin_token
+    if not admin_token:
+        _last_daily_day = None  # qayta urinish uchun reset
+        return
     stats = api("GET", "/api/analytics/summary?period=daily")
     if not stats or not isinstance(stats, dict):
         return

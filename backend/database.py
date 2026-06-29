@@ -49,7 +49,10 @@ def execute(conn, sql, params=()):
         if "INSERT OR IGNORE" in sql:
             sql = sql.replace("INSERT OR IGNORE", "INSERT")
             sql = sql.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
-        sql = sql.replace("INSERT OR REPLACE", "INSERT")
+        # INSERT OR REPLACE -> INSERT ... ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value
+        if "INSERT OR REPLACE" in sql:
+            sql = sql.replace("INSERT OR REPLACE", "INSERT")
+            sql = sql.rstrip().rstrip(";") + " ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value"
     cur = conn.cursor()
     cur.execute(sql, params)
     return cur
