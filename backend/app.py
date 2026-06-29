@@ -655,17 +655,20 @@ def popular_menu():
     """Eng ko'p buyurtma qilingan taomlar — ochiq endpoint (auth shart emas)."""
     limit = min(int(request.args.get("limit", 5)), 20)
     conn  = get_db()
-    cur   = db_exec(conn, """
-        SELECT oi.menu_item_id AS id, oi.item_name AS name, oi.item_emoji AS emoji,
-               m.price, SUM(oi.quantity) AS total_ordered
-        FROM order_items oi
-        LEFT JOIN menu m ON oi.menu_item_id = m.id
-        WHERE oi.status != 'cancelled' AND oi.menu_item_id IS NOT NULL
-        GROUP BY oi.menu_item_id
-        ORDER BY total_ordered DESC
-        LIMIT ?
-    """, (limit,))
-    items = rows_to_list(cur)
+    try:
+        cur = db_exec(conn, """
+            SELECT oi.menu_item_id AS id, oi.item_name AS name, oi.item_emoji AS emoji,
+                   m.price, SUM(oi.quantity) AS total_ordered
+            FROM order_items oi
+            LEFT JOIN menu m ON oi.menu_item_id = m.id
+            WHERE oi.status != 'cancelled' AND oi.menu_item_id IS NOT NULL
+            GROUP BY oi.menu_item_id, oi.item_name, oi.item_emoji, m.price
+            ORDER BY total_ordered DESC
+            LIMIT ?
+        """, (limit,))
+        items = rows_to_list(cur)
+    except Exception:
+        items = []
     if not items:
         cur2 = db_exec(conn, "SELECT id, name, emoji, price FROM menu WHERE available=1 ORDER BY id LIMIT ?", (limit,))
         items = rows_to_list(cur2)
