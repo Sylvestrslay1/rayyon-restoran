@@ -75,6 +75,11 @@ def handle_message(msg):
         bron_handle_date(chat_id, text, data); return
     if step == 'bron_time':
         bron_handle_time(chat_id, text, data); return
+    if step == 'bron_guests':
+        lang = get_lang(chat_id) or 'uz'
+        msg = {'uz': "👥 Mehmonlar sonini tugmalar orqali tanlang:", 'ru': "👥 Выберите количество гостей кнопками:", 'en': "👥 Please select the number of guests using the buttons:"}
+        from core import send_msg as _sm
+        _sm(chat_id, msg.get(lang, msg['uz'])); return
     if step == 'bron_note':
         bron_handle_note(chat_id, text, data); return
     if step == 'ball_phone':
@@ -88,6 +93,22 @@ def handle_message(msg):
             main_menu(chat_id)
         else:
             customer_start(chat_id)
+        return
+
+    # ── /ping ─────────────────────────────────────────────────
+    if text == '/ping' and is_admin:
+        from core import send_msg as _sm, API_URL, admin_token
+        import time as _time
+        t0 = _time.time()
+        res = api("GET", "/api/menu")
+        ms = int((_time.time() - t0) * 1000)
+        status = "✅ Ishlayapti" if isinstance(res, list) else "❌ Javob yo'q"
+        _sm(chat_id,
+            f"🏓 <b>Ping natijasi</b>\n\n"
+            f"Backend: {status}\n"
+            f"Javob vaqti: {ms} ms\n"
+            f"URL: <code>{API_URL}</code>\n"
+            f"Token: {'✅ Bor' if admin_token else '❌ Yo\\'q'}")
         return
 
     # ── /help ─────────────────────────────────────────────────

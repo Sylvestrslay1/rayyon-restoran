@@ -407,12 +407,14 @@ def add_security_headers(response):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://api.telegram.org; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: blob: https:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none';"
+        "connect-src 'self' https://api.telegram.org; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
     )
     return response
 
@@ -2692,7 +2694,11 @@ def add_customer():
                 (d.get("name",""), phone, d.get("discount_pct", 0), d.get("notes","")))
         conn.commit()
     except Exception as e:
-        return jsonify({"error": "Bu telefon allaqachon mavjud"}), 409
+        err = str(e).lower()
+        if "unique" in err or "duplicate" in err or "already exists" in err:
+            return jsonify({"error": "Bu telefon allaqachon mavjud"}), 409
+        log.error("add_customer DB xato: %s", e)
+        return jsonify({"error": "Saqlashda xato yuz berdi"}), 500
     return jsonify({"ok": True})
 
 @app.route("/api/customers/<int:cid>", methods=["PUT"])
