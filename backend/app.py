@@ -3126,7 +3126,9 @@ def export_audit_csv():
 def health_check():
     # Render health check uchun doim 200 qaytaradi — server ishlayapti degan signal
     # DB holati haqiqiy query bilan tekshiriladi
+    from database import USE_PG
     db_ok = False
+    connect_error = None
     if _db_ready:
         try:
             conn = get_conn()
@@ -3134,16 +3136,19 @@ def health_check():
             cur.execute("SELECT 1")
             conn.close()
             db_ok = True
-        except Exception:
-            db_ok = False
+        except Exception as _ce:
+            connect_error = f"{type(_ce).__name__}: {_ce}"
     resp = {
         "status": "ok",
         "db_ready": db_ok,
+        "init_done": _db_ready,
         "version": "1.0.0",
-        "db_engine": "postgresql" if __import__('database').USE_PG else "sqlite",
+        "db_engine": "postgresql" if USE_PG else "sqlite",
     }
-    if not db_ok and _db_error:
-        resp["db_error"] = _db_error
+    if _db_error:
+        resp["init_error"] = _db_error
+    if connect_error:
+        resp["connect_error"] = connect_error
     return jsonify(resp), 200
 
 
