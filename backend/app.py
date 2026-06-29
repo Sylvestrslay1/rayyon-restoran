@@ -446,12 +446,11 @@ def audit(action: str, entity: str = None, entity_id: int = None,
     ip = get_remote_address()
     det = json.dumps(details, ensure_ascii=False) if details else None
     try:
-        conn = get_conn()
+        conn = get_db()
         db_exec(conn,
             "INSERT INTO audit_log (action, entity, entity_id, user_name, user_ip, details) VALUES (?,?,?,?,?,?)",
             (action, entity, entity_id, user_name, ip, det))
         conn.commit()
-        conn.close()
     except Exception as e:
         log.warning("audit() xato: %s", e)
 
@@ -2808,6 +2807,7 @@ def email_shift_report(shift_id):
 
 # ===== LOYALTY KARTA (public) =====
 @app.route("/api/loyalty-card/<int:cid>", methods=["GET"])
+@limiter.limit("10 per minute; 30 per hour")
 def loyalty_card(cid):
     """Ochiq endpoint — mijoz o'z karta ma'lumotlarini ko'radi (token kerak emas)."""
     conn = get_db()

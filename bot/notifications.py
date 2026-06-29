@@ -106,7 +106,8 @@ def check_bill_requests():
 
 
 def check_low_inventory():
-    items = api("GET", "/api/inventory")
+    res = api("GET", "/api/inventory")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):
         return
     low = [i for i in items

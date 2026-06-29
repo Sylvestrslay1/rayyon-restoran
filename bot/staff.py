@@ -325,11 +325,11 @@ def update_item_status(chat_id, session_id, item_id, status):
 # ── Smena (kassir/manager) ────────────────────────────────────
 
 def show_shift_status(chat_id):
-    shifts = api("GET", "/api/shift/current", {})
-    if not isinstance(shifts, dict) or not shifts.get('id'):
+    res = api("POST", "/api/shift/current", {})
+    s = res.get("shift") if isinstance(res, dict) else None
+    if not s or not s.get('id'):
         send_kb(chat_id, "💼 Ochiq smena topilmadi.",
                 [[{"text": "🏠 Panel", "callback_data": "s_main"}]]); return
-    s       = shifts
     revenue = int(s.get('total_collected') or s.get('total_revenue') or 0)
     opened  = str(s.get('opened_at', ''))[:16]
     send_kb(chat_id,
