@@ -3136,9 +3136,6 @@ def health_check():
         _cur.execute("SELECT 1")
         _conn.close()
         db_ok = True
-        # Agar ulanish ishlasa — _db_ready ni ham True qilamiz
-        if not _db_ready:
-            _db_ready = True
     except Exception as _ce:
         connect_error = f"{type(_ce).__name__}: {_ce}"
     resp = {
