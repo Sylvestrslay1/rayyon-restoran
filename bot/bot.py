@@ -108,7 +108,7 @@ def handle_message(msg):
             f"Backend: {status}\n"
             f"Javob vaqti: {ms} ms\n"
             f"URL: <code>{API_URL}</code>\n"
-            f"Token: {'✅ Bor' if admin_token else '❌ Yo\\'q'}")
+            f"Token: {'✅ Bor' if admin_token else '❌ Yoq'}")
         return
 
     # ── /help ─────────────────────────────────────────────────
