@@ -234,6 +234,10 @@ def verify_legacy_pin(pin: str, stored_hash: str) -> bool:
         return False
 
 
+def _tg_escape(s: str) -> str:
+    """Telegram HTML parse_mode uchun foydalanuvchi kiritgan matnni xavfsizlashtirish."""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 def tg_send(text):
     """Telegram guruhiga xabar yuborish"""
     if not TG_TOKEN or not TG_CHAT:
@@ -807,11 +811,11 @@ def add_order():
     conn.commit()
     tg_send(
         f"🛒 <b>Yangi buyurtma!</b>\n"
-        f"📌 Taom: {d.get('item_name')} x{d.get('quantity',1)}\n"
+        f"📌 Taom: {_tg_escape(d.get('item_name',''))} x{d.get('quantity',1)}\n"
         f"💰 Narx: {d.get('total_price',0):,} so'm\n"
-        f"👤 Mijoz: {d.get('customer_name')}\n"
-        f"📞 Telefon: {d.get('customer_phone')}\n"
-        + (f"📝 Izoh: {d.get('note')}" if d.get("note") else "")
+        f"👤 Mijoz: {_tg_escape(d.get('customer_name',''))}\n"
+        f"📞 Telefon: {_tg_escape(d.get('customer_phone',''))}\n"
+        + (f"📝 Izoh: {_tg_escape(d.get('note',''))}" if d.get("note") else "")
     )
     return jsonify({"ok": True})
 
@@ -870,11 +874,11 @@ def add_reservation():
         return jsonify({"error": "Server xatosi"}), 500
     tg_send(
         f"📅 <b>Yangi bron!</b>\n"
-        f"👤 Mijoz: {d.get('customer_name')}\n"
-        f"📞 Telefon: {d.get('customer_phone')}\n"
-        f"📆 Sana: {d.get('date')} {d.get('time')}\n"
+        f"👤 Mijoz: {_tg_escape(d.get('customer_name',''))}\n"
+        f"📞 Telefon: {_tg_escape(d.get('customer_phone',''))}\n"
+        f"📆 Sana: {_tg_escape(d.get('date',''))} {_tg_escape(d.get('time',''))}\n"
         f"👥 Mehmonlar: {d.get('guests',2)} kishi\n"
-        + (f"📝 Izoh: {d.get('note')}" if d.get("note") else "")
+        + (f"📝 Izoh: {_tg_escape(d.get('note',''))}" if d.get("note") else "")
     )
     return jsonify({"ok": True})
 
@@ -2827,12 +2831,18 @@ def email_shift_report(shift_id):
 @app.route("/api/loyalty-card/<int:cid>", methods=["GET"])
 @limiter.limit("10 per minute; 30 per hour")
 def loyalty_card(cid):
-    """Ochiq endpoint — mijoz o'z karta ma'lumotlarini ko'radi (token kerak emas)."""
+    """Loyalty karta — admin token YOKI telefon oxirgi 4 raqami talab qilinadi."""
     conn = get_db()
     cur = db_exec(conn, "SELECT id,name,phone,total_spent,visits,loyalty_points,discount_pct FROM customers WHERE id=?", (cid,))
     rows = rows_to_list(cur)
     if not rows:
         return jsonify({"error": "Mijoz topilmadi"}), 404
+    # IDOR himoya: admin token YOKI telefon oxirgi 4 raqami tekshiruvi
+    if not check_auth():
+        phone_last4 = request.args.get("verify", "").strip()
+        db_phone = str(rows[0].get("phone", ""))
+        if not phone_last4 or not db_phone.endswith(phone_last4) or len(phone_last4) != 4:
+            return jsonify({"error": "Tasdiqlash talab qilinadi"}), 403
     c = rows[0]
     pts = c.get("loyalty_points") or 0
     tier = ("Platinum" if pts >= 500 else "Gold" if pts >= 200 else "Silver" if pts >= 100 else "Bronze" if pts >= 1 else "Yangi")
@@ -2999,7 +3009,9 @@ def push_vapid_key():
 
 @app.route("/api/push/subscribe", methods=["POST"])
 def push_subscribe():
-    """Push subscription saqlash."""
+    """Push subscription saqlash — faqat autentifikatsiyadan o'tgan foydalanuvchilar."""
+    if not check_auth():
+        return jsonify({"ok": False, "error": "Ruxsat yo'q"}), 403
     data = request.json or {}
     subscription = data.get("subscription")
     if not subscription:

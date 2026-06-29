@@ -84,6 +84,8 @@ const I18N = {
     qr_warn:'Karta shaxsiy va boshqalarga berilmaydi',
     copied:'Havola nusxalandi!', copy_prompt:'Havolani nusxalang:',
     share_title:'Rayyon Loyalty Karta', share_text:'Mening loyalty kartam',
+    verify_prompt:'Telefon raqamingizning oxirgi 4 ta raqamini kiriting:',
+    verify_fail:'Telefon raqami noto\'g\'ri. Karta ochilmadi.',
   },
   ru: {
     ballar:'БАЛЛЫ', tashrif:'ВИЗИТЫ', xarid:'ПОКУПКИ', daraja:'Уровень',
@@ -96,6 +98,8 @@ const I18N = {
     qr_warn:'Карта личная и не передаётся другим',
     copied:'Ссылка скопирована!', copy_prompt:'Скопируйте ссылку:',
     share_title:'Rayyon Loyalty Card', share_text:'Моя карта лояльности',
+    verify_prompt:'Введите последние 4 цифры вашего номера телефона:',
+    verify_fail:'Неверный номер телефона. Карта не открыта.',
   },
   en: {
     ballar:'POINTS', tashrif:'VISITS', xarid:'SPENT', daraja:'Level',
@@ -108,6 +112,8 @@ const I18N = {
     qr_warn:'Card is personal and non-transferable',
     copied:'Link copied!', copy_prompt:'Copy the link:',
     share_title:'Rayyon Loyalty Card', share_text:'My loyalty card',
+    verify_prompt:'Enter the last 4 digits of your phone number:',
+    verify_fail:'Phone number incorrect. Card access denied.',
   },
 };
 const L = I18N[LANG] || I18N.uz;
@@ -127,9 +133,24 @@ function tierProgress(pts) {
 
 async function load() {
   if (!cid) { showErr(L.err_id); return; }
+  // verify parametri URL da bo'lsa ishlatiladi (QR kod orqali kelgan bo'lsa)
+  const verify = params.get('verify') || '';
+  if (!verify) {
+    // Telefon oxirgi 4 raqamini so'rash
+    const input = prompt(L.verify_prompt || 'Telefon raqamingizning oxirgi 4 ta raqamini kiriting:');
+    if (!input || input.trim().length !== 4 || !/^\d{4}$/.test(input.trim())) {
+      showErr(L.verify_fail || 'Tasdiqlash muvaffaqiyatsiz');
+      return;
+    }
+    const url = new URL(location.href);
+    url.searchParams.set('verify', input.trim());
+    location.replace(url.toString());
+    return;
+  }
   document.getElementById('card-body').innerHTML = `<div class="error-box"><p>${L.loading}</p></div>`;
   try {
-    const r = await fetch(`/api/loyalty-card/${cid}`);
+    const r = await fetch(`/api/loyalty-card/${cid}?verify=${encodeURIComponent(verify)}`);
+    if (r.status === 403) { showErr(L.verify_fail || 'Telefon raqami noto\'g\'ri'); return; }
     if (!r.ok) { showErr(L.err_notfound); return; }
     const c = await r.json();
     render(c);
