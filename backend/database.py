@@ -610,11 +610,11 @@ def _init_db_inner(conn):
         ("Mineral suv (0.5L)", "drink", "Sovuq mineral suv", 6000, "💧"),
         ("Ayron (500ml)", "drink", "Toza qo'y sutidan tayyorlangan ayron", 10000, "🥛"),
     ]
-    # Jadval bo'sh bo'lsagina default taomlarni qo'shamiz
-    cur.execute("SELECT COUNT(*) FROM menu")
-    count = cur.fetchone()[0]
-    if count == 0:
-        for item in menu_defaults:
+    # Mavjud taom nomlarini olamiz — yo'q bo'lgan yangi defaultlarni qo'shamiz
+    cur.execute("SELECT name FROM menu")
+    existing_names = {r[0] if USE_PG else r["name"] for r in cur.fetchall()}
+    for item in menu_defaults:
+        if item[0] not in existing_names:
             if USE_PG:
                 cur.execute(
                     "INSERT INTO menu (name, category, description, price, emoji) VALUES (%s,%s,%s,%s,%s)",
