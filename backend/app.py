@@ -57,14 +57,17 @@ app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 # init_db() fon threadida — gunicorn darhol portga bog'lanadi, health check bloklanmaydi
 _db_ready = False
+_db_error  = None
 def _init_db_background():
-    global _db_ready
+    global _db_ready, _db_error
     try:
         init_db()
         _db_ready = True
         log.info("DB init muvaffaqiyatli yakunlandi")
     except Exception as _e:
-        log.error("DB init xato: %s", _e)
+        import traceback as _tb
+        _db_error = f"{type(_e).__name__}: {_e}"
+        log.error("DB init xato: %s\n%s", _db_error, _tb.format_exc())
 
 threading.Thread(target=_init_db_background, daemon=True).start()
 
@@ -3133,11 +3136,15 @@ def health_check():
             db_ok = True
         except Exception:
             db_ok = False
-    return jsonify({
+    resp = {
         "status": "ok",
         "db_ready": db_ok,
         "version": "1.0.0",
-    }), 200
+        "db_engine": "postgresql" if __import__('database').USE_PG else "sqlite",
+    }
+    if not db_ok and _db_error:
+        resp["db_error"] = _db_error
+    return jsonify(resp), 200
 
 
 # ===== CLIENT-SIDE XATOLAR LOGGING =====
