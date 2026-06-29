@@ -169,9 +169,9 @@ STRINGS = {
 }
 
 CATS_I18N = {
-    'uz': [('milliy', '🏺 Milliy taomlar'), ('grill', '🔥 Grill'), ('salad', '🥗 Salatlar'), ('drink', '🥤 Ichimliklar')],
-    'ru': [('milliy', '🏺 Национальные'),   ('grill', '🔥 Гриль'),  ('salad', '🥗 Салаты'),   ('drink', '🥤 Напитки')],
-    'en': [('milliy', '🏺 Traditional'),    ('grill', '🔥 Grill'),  ('salad', '🥗 Salads'),   ('drink', '🥤 Drinks')],
+    'uz': [('milliy', '🏺 Milliy taomlar'), ('grill', '🔥 Grill'), ('soup', '🍲 Sho\'rvalar'), ('salad', '🥗 Salatlar'), ('dessert', '🍰 Shirinliklar'), ('drink', '🥤 Ichimliklar')],
+    'ru': [('milliy', '🏺 Национальные'),   ('grill', '🔥 Гриль'),  ('soup', '🍲 Супы'),       ('salad', '🥗 Салаты'),   ('dessert', '🍰 Десерты'),        ('drink', '🥤 Напитки')],
+    'en': [('milliy', '🏺 Traditional'),    ('grill', '🔥 Grill'),  ('soup', '🍲 Soups'),      ('salad', '🥗 Salads'),   ('dessert', '🍰 Desserts'),       ('drink', '🥤 Drinks')],
 }
 
 

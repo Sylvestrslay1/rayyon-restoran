@@ -110,10 +110,12 @@ footer{text-align:center;padding:20px 16px;color:rgba(255,255,255,0.2);font-size
 
 <div class="cats">
   <button class="cat-btn active" onclick="filterCat('all',this)">Hammasi</button>
-  <button class="cat-btn" onclick="filterCat('milliy',this)">Milliy</button>
-  <button class="cat-btn" onclick="filterCat('grill',this)">Grill</button>
-  <button class="cat-btn" onclick="filterCat('salad',this)">Salatlar</button>
-  <button class="cat-btn" onclick="filterCat('drink',this)">Ichimliklar</button>
+  <button class="cat-btn" onclick="filterCat('milliy',this)">🏺 Milliy</button>
+  <button class="cat-btn" onclick="filterCat('grill',this)">🔥 Grill</button>
+  <button class="cat-btn" onclick="filterCat('soup',this)">🍲 Sho'rva</button>
+  <button class="cat-btn" onclick="filterCat('salad',this)">🥗 Salat</button>
+  <button class="cat-btn" onclick="filterCat('dessert',this)">🍰 Shirinlik</button>
+  <button class="cat-btn" onclick="filterCat('drink',this)">🥤 Ichimlik</button>
 </div>
 
 <div class="menu-list" id="menu-list">
@@ -172,8 +174,8 @@ let allItems = [];
 let currentCat = 'all';
 let cart = []; // [{item, qty, comment}]
 
-const catNames = {milliy:'Milliy taomlar',grill:'Grill',salad:'Salatlar',drink:'Ichimliklar'};
-const catOrder = ['milliy','grill','salad','drink'];
+const catNames = {milliy:'Milliy taomlar',grill:'Grill',soup:"Sho'rvalar",salad:'Salatlar',dessert:'Shirinliklar',drink:'Ichimliklar'};
+const catOrder = ['milliy','grill','soup','salad','dessert','drink'];
 
 // ===== INIT =====
 async function init() {
