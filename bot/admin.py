@@ -251,13 +251,14 @@ def show_period(chat_id, period: str, label: str):
 
     chart = ""
     if period == "weekly":
-        days_data = api("GET", "/api/analytics?period=weekly")
-        if isinstance(days_data, list) and days_data:
-            max_rev = max((int(d.get("revenue", 0)) for d in days_data), default=1) or 1
+        # /api/analytics dict qaytaradi — chart[] maydoni ichida kunlik ma'lumotlar
+        days_data = stats.get("chart", [])
+        if days_data:
+            max_rev = max((int(d.get("rev", 0)) for d in days_data), default=1) or 1
             lines   = ["\n<b>Haftalik grafik:</b>"]
             for d in days_data[-7:]:
-                rev  = int(d.get("revenue", 0))
-                day  = str(d.get("date", ""))[-5:]
+                rev  = int(d.get("rev", 0))
+                day  = str(d.get("day", ""))[-5:]
                 bar  = _ascii_bar(rev, max_rev)
                 lines.append(f"<code>{day} {bar} {rev//1000}k</code>")
             chart = "\n".join(lines)
@@ -283,12 +284,12 @@ def show_top_menu(chat_id):
     if not data:
         send_kb(chat_id, "📊 Hozircha ma'lumot yo'q.",
                 [[{"text": "🏠 Menyu", "callback_data": "main"}]]); return
-    max_qty = max((int(d.get("quantity") or d.get("total_qty") or 1) for d in data), default=1)
+    max_qty = max((int(d.get("count") or d.get("quantity") or 1) for d in data), default=1)
     lines   = ["📊 <b>Top taomlar (bu oy)</b>\n"]
     medals  = ["🥇", "🥈", "🥉"]
     for i, d in enumerate(data[:10]):
-        name  = d.get("item_name") or d.get("name", "?")
-        qty   = int(d.get("quantity") or d.get("total_qty") or 0)
+        name  = d.get("name") or d.get("item_name", "?")
+        qty   = int(d.get("count") or d.get("quantity") or 0)
         rev   = int(d.get("revenue") or d.get("total_revenue") or 0)
         bar   = _ascii_bar(qty, max_qty, 8)
         medal = medals[i] if i < 3 else f"{i+1}."

@@ -22,7 +22,7 @@ def get_orders():
     limit  = _int_param("limit", 200, max_val=1000)
     offset = _int_param("offset", 0, min_val=0)
     status = request.args.get("status")
-    conn   = get_conn()
+    conn   = get_db()
     if status:
         cur = db_exec(conn,
             "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -131,7 +131,7 @@ def validate_session():
 @bp.route("/api/session/<int:sid>", methods=["GET"])
 def get_session(sid):
     token = request.headers.get("X-Session-Token","")
-    conn  = get_conn()
+    conn  = get_db()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     rows  = rows_to_list(cur)
     if not rows: return jsonify({"error": "Topilmadi"}), 404
@@ -153,7 +153,7 @@ def get_session(sid):
 @bp.route("/api/session/<int:sid>/order", methods=["POST"])
 def add_order_item(sid):
     token = request.headers.get("X-Session-Token","")
-    conn  = get_conn()
+    conn  = get_db()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
     rows  = rows_to_list(cur)
     if not rows: return jsonify({"error": "Sessiya topilmadi yoki yopilgan"}), 404
@@ -237,7 +237,7 @@ def update_item_status(sid, iid):
 @bp.route("/api/session/<int:sid>/bill", methods=["POST"])
 def request_bill(sid):
     token = request.headers.get("X-Session-Token","")
-    conn  = get_conn()
+    conn  = get_db()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (sid,))
     rows  = rows_to_list(cur)
     if not rows: return jsonify({"error": "Sessiya topilmadi"}), 404
@@ -401,7 +401,7 @@ def void_item(sid, iid):
 def get_receipt(sid):
     token = request.headers.get("X-Session-Token", "")
     pin   = request.headers.get("X-Staff-Pin", "") or request.args.get("pin", "")
-    conn  = get_conn()
+    conn  = get_db()
     cur   = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
     sessions = rows_to_list(cur)
     if not sessions:

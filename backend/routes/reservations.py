@@ -18,7 +18,7 @@ def get_reservations():
     limit  = _int_param("limit", 200, max_val=1000)
     offset = _int_param("offset", 0, min_val=0)
     date   = request.args.get("date")
-    conn   = get_conn()
+    conn   = get_db()
     if date:
         cur = db_exec(conn,
             "SELECT * FROM reservations WHERE date=? ORDER BY time ASC LIMIT ? OFFSET ?",

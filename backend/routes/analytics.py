@@ -24,7 +24,7 @@ def analytics_summary():
     period = request.args.get("period", "daily")
     if period not in ALLOWED_PERIODS:
         period = "daily"
-    conn   = get_conn()
+    conn   = get_db()
 
     if USE_PG:
         if period == "daily":
@@ -93,7 +93,7 @@ def analytics_summary():
     avg_bill    = (revenue / sessions_ct) if sessions_ct else 0
 
     pay_cur = conn.cursor()
-    pay_cur.execute(f"SELECT method, COALESCE(SUM(amount),0) FROM payments WHERE {df2.replace('created_at','created_at')} GROUP BY method")
+    pay_cur.execute(f"SELECT method, COALESCE(SUM(amount),0) FROM payments WHERE {df.replace('closed_at','created_at')} GROUP BY method")
     pay_by_method = [{"method": r[0], "total": r[1]} for r in pay_cur.fetchall()]
 
     c2 = conn.cursor(); c2.execute(chart_sql)
@@ -122,7 +122,7 @@ def accounting_report():
     period = request.args.get("period", "daily")
     if period not in ALLOWED_PERIODS:
         period = "daily"
-    conn   = get_conn()
+    conn   = get_db()
 
     if USE_PG:
         if period == "daily":
@@ -260,7 +260,7 @@ def get_audit_log():
     offset = _int_param("offset", 0, min_val=0)
     action = request.args.get("action")
     entity = request.args.get("entity")
-    conn   = get_conn()
+    conn   = get_db()
     if action and entity:
         cur = db_exec(conn,
             "SELECT * FROM audit_log WHERE action=? AND entity=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -282,7 +282,7 @@ def get_audit_log():
 def export_payments():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
-    conn  = get_conn()
+    conn  = get_db()
     if USE_PG:
         cur = db_exec(conn, "SELECT * FROM payments WHERE to_char(created_at,'YYYY-MM')=%s ORDER BY created_at DESC", (month,))
     else:
@@ -295,7 +295,7 @@ def export_payments():
 def export_sessions():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
-    conn  = get_conn()
+    conn  = get_db()
     if USE_PG:
         cur = db_exec(conn, "SELECT id,table_number,waiter_name,status,total_amount,discount,service_charge,opened_at,closed_at FROM sessions WHERE to_char(opened_at,'YYYY-MM')=%s ORDER BY opened_at DESC", (month,))
     else:

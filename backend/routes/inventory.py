@@ -18,7 +18,7 @@ def get_inventory():
     limit  = _int_param("limit", 500, max_val=2000)
     offset = _int_param("offset", 0, min_val=0)
     search = request.args.get("q", "").strip()
-    conn   = get_conn()
+    conn   = get_db()
     if search:
         cur = db_exec(conn,
             "SELECT * FROM inventory WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?",
@@ -107,7 +107,7 @@ def get_inventory_log():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     limit  = _int_param("limit", 100, max_val=500)
     offset = _int_param("offset", 0, min_val=0)
-    conn   = get_conn()
+    conn   = get_db()
     cur    = db_exec(conn,
         "SELECT * FROM inventory_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
         (limit, offset))

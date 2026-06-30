@@ -8,7 +8,8 @@ from core import (
 _notified_res    = set()   # bron ID lari — allaqachon xabar yuborilgan
 _notified_ord    = set()   # QR buyurtma ID lari
 _notified_bill   = set()   # hisob so'ragan sessiya ID lari
-_notified_low    = set()   # kam inventar item ID lari (kun davomida bir marta)
+_notified_low    = set()   # kam inventar item ID lari (shu kun uchun)
+_notified_low_day = None   # _notified_low qaysi kunda to'ldirilgan (ISO sana)
 _MAX_NOTIFIED    = 2000    # set o'lcham chegarasi
 _last_daily_day  = None    # kunlik hisobot yuborilgan kun (ISO sana)
 _fail_count      = 0       # ketma-ket xatolar soni
@@ -117,6 +118,11 @@ def check_bill_requests():
 
 
 def check_low_inventory():
+    global _notified_low, _notified_low_day
+    today = datetime.date.today().isoformat()
+    if _notified_low_day != today:
+        _notified_low     = set()
+        _notified_low_day = today
     res = api("GET", "/api/inventory")
     items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):

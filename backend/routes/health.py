@@ -3,7 +3,6 @@ import os, logging
 
 from flask import Blueprint, request, jsonify, send_from_directory, redirect
 from database import USE_PG, get_conn as _get_conn_db, DATABASE_URL
-from helpers import check_auth
 
 log = logging.getLogger(__name__)
 bp = Blueprint('health', __name__)
@@ -39,7 +38,6 @@ def health_check():
 
 @bp.route("/api/client-errors", methods=["POST"])
 def client_errors():
-    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     try:
         data = request.get_json(silent=True) or {}
         msg     = str(data.get("message", ""))[:500]

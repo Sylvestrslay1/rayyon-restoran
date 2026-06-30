@@ -128,7 +128,7 @@ def get_attendance():
     limit  = _int_param("limit", 100, max_val=500)
     offset = _int_param("offset", 0, min_val=0)
     date   = request.args.get("date")
-    conn   = get_conn()
+    conn   = get_db()
     if date:
         cur = db_exec(conn,
             "SELECT * FROM attendance WHERE date=? ORDER BY check_in DESC LIMIT ? OFFSET ?",
@@ -145,7 +145,7 @@ def get_attendance():
 def staff_payroll():
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     month = request.args.get("month", datetime.datetime.utcnow().strftime("%Y-%m"))
-    conn  = get_conn()
+    conn  = get_db()
     cur   = db_exec(conn, "SELECT * FROM staff WHERE active=1 ORDER BY name")
     staff_list = rows_to_list(cur)
     result = []
