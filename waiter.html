@@ -285,17 +285,33 @@ function startApp() {
   loadMenu();
   loadTables();
   // SSE — real-time yangilanish (fallback timer bir marta)
-  _wes = new EventSource('/api/events');
-  _wes.addEventListener('item_ready', () => { loadReady(); loadTables(); });
-  _wes.addEventListener('new_order', () => loadTables());
-  _wes.onerror = () => {
-    if (_wes.readyState === EventSource.CLOSED) {
-      _wes.close();
-      if (!_wFallbackTimer) _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
-    }
-  };
+  function _wStartSSE() {
+    if (_wes) { try { _wes.close(); } catch(e){} }
+    _wes = new EventSource('/api/events');
+    _wes.addEventListener('connected', () => {
+      if (_wFallbackTimer) { clearInterval(_wFallbackTimer); _wFallbackTimer = null; }
+    });
+    _wes.addEventListener('item_ready', () => {
+      if (_wFallbackTimer) { clearInterval(_wFallbackTimer); _wFallbackTimer = null; }
+      loadReady(); loadTables();
+    });
+    _wes.addEventListener('new_order', () => {
+      if (_wFallbackTimer) { clearInterval(_wFallbackTimer); _wFallbackTimer = null; }
+      loadTables();
+    });
+    _wes.onerror = () => {
+      if (_wes.readyState === EventSource.CLOSED) {
+        _wes.close();
+        if (!_wFallbackTimer) _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+        setTimeout(_wStartSSE, 5000);
+      } else if (_wes.readyState === EventSource.CONNECTING) {
+        if (!_wFallbackTimer) _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
+      }
+    };
+  }
+  _wStartSSE();
   setTimeout(() => {
-    if (_wes.readyState !== EventSource.OPEN && !_wFallbackTimer) {
+    if (_wes && _wes.readyState !== EventSource.OPEN && !_wFallbackTimer) {
       _wFallbackTimer = setInterval(()=>{ loadTables(); loadReady(); }, 8000);
     }
   }, 5000);

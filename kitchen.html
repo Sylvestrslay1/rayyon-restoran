@@ -351,23 +351,36 @@ function startKFallback() {
   if (!_kFallbackTimer) _kFallbackTimer = setInterval(load, 5000);
 }
 
-const _es = new EventSource('/api/events');
-_es.addEventListener('new_order', e => {
-  if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; }
-  load();
-  try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(e) { console.warn('SSE parse xato:', e); }
-});
-_es.addEventListener('item_cooking', () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
-_es.addEventListener('item_ready',   () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
-_es.onerror = () => {
-  if (_es.readyState === EventSource.CLOSED) { _es.close(); startKFallback(); }
-  else if (_es.readyState === EventSource.CONNECTING) { startKFallback(); }
-};
-setTimeout(() => { if (_es.readyState !== EventSource.OPEN) startKFallback(); }, 5000);
+let _es = null;
+function _kStartSSE() {
+  if (_es) { try { _es.close(); } catch(e){} }
+  _es = new EventSource('/api/events');
+  _es.addEventListener('connected', () => {
+    if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; }
+  });
+  _es.addEventListener('new_order', e => {
+    if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; }
+    load();
+    try { const d = JSON.parse(e.data); kNotify('Yangi buyurtma! 🍽', `Stol #${d.table}: ${d.items}`); } catch(e) { console.warn('SSE parse xato:', e); }
+  });
+  _es.addEventListener('item_cooking', () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
+  _es.addEventListener('item_ready',   () => { if (_kFallbackTimer) { clearInterval(_kFallbackTimer); _kFallbackTimer = null; } load(); });
+  _es.onerror = () => {
+    if (_es.readyState === EventSource.CLOSED) {
+      _es.close();
+      startKFallback();
+      setTimeout(_kStartSSE, 5000);
+    } else if (_es.readyState === EventSource.CONNECTING) {
+      startKFallback();
+    }
+  };
+}
+_kStartSSE();
+setTimeout(() => { if (!_es || _es.readyState !== EventSource.OPEN) startKFallback(); }, 5000);
 
 // EventSource cleanup — sahifa yopilganda ulanishni to'g'ri yopish
 window.addEventListener('beforeunload', () => {
-  _es.close();
+  if (_es) _es.close();
   if (_kFallbackTimer) clearInterval(_kFallbackTimer);
 });
 

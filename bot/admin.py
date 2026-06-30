@@ -24,7 +24,8 @@ def main_menu(chat_id):
 
 
 def show_orders(chat_id):
-    items = api("GET", "/api/orders?status=new")
+    res   = api("GET", "/api/orders?status=new")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list) or not items:
         send_kb(chat_id, "📦 Yangi buyurtmalar yo'q.",
                 [[{"text": "🏠 Menyu", "callback_data": "main"}]])
@@ -47,7 +48,8 @@ def show_orders(chat_id):
 
 
 def show_reservations(chat_id):
-    items = api("GET", "/api/reservations")
+    res   = api("GET", "/api/reservations")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):
         send_kb(chat_id, "📅 Bronlar yo'q.",
                 [[{"text": "🏠 Menyu", "callback_data": "main"}]])

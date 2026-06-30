@@ -109,8 +109,9 @@ def shift_close(shift_id):
     methods_summary = {r["method"]: int(r["s"]) for r in methods}
 
     shift_opened = shift_rows[0].get("opened_at") or shift_rows[0].get("created_at") or ""
+    shift_date = str(shift_opened)[:10]
     exp_cur = db_exec(conn,
-        "SELECT COALESCE(SUM(amount),0) FROM expenses WHERE created_at >= ?", (shift_opened,))
+        "SELECT COALESCE(SUM(amount),0) FROM expenses WHERE date >= ?", (shift_date,))
     exp_row = exp_cur.fetchone()
     expenses = int(exp_row[0] if USE_PG else (exp_row[0] or 0)) if exp_row else 0
     net = total - expenses
