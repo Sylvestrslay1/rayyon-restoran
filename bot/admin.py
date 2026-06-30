@@ -144,22 +144,29 @@ def show_shifts(chat_id):
 
 def close_shift(chat_id, shift_id):
     res = api("POST", f"/api/shift/{shift_id}/close", {})
-    if not res or not (res.get('ok') or res.get('shift')):
+    if not res or not res.get('ok'):
         send_kb(chat_id, "❌ Smena yopilmadi.",
                 [[{"text": "💼 Smena", "callback_data": "shifts"},
                   {"text": "🏠 Menyu", "callback_data": "main"}]])
         return
-    shift    = res.get('shift') or res
-    revenue  = int(shift.get('total_collected') or shift.get('total_revenue') or 0)
-    sessions = shift.get('sessions_count', 0)
-    opened   = str(shift.get('opened_at', ''))[:16]
-    closed   = str(shift.get('closed_at', datetime.datetime.now().isoformat()))[:16]
-    send_kb(chat_id,
+    revenue  = int(res.get('total_collected') or res.get('total_revenue') or 0)
+    expenses = int(res.get('expenses') or 0)
+    net      = int(res.get('net') or revenue - expenses)
+    sessions = int(res.get('sessions_count') or 0)
+    by_meth  = res.get('by_method') or {}
+    meth_lines = "\n".join(f"   {k}: {v:,} so'm" for k, v in by_meth.items()) if by_meth else ""
+    closed   = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    msg = (
         f"✅ <b>Smena yopildi!</b>\n\n"
-        f"🕐 Boshlangan: {opened}\n"
-        f"🕑 Yopilgan:   {closed}\n"
-        f"🪑 Xizmatlar:  {sessions} ta\n"
-        f"💰 Tushum:     <b>{revenue:,} so'm</b>",
+        f"🕑 Yopilgan:  {closed}\n"
+        f"🪑 Xizmatlar: {sessions} ta\n"
+        f"💰 Tushum:    <b>{revenue:,} so'm</b>\n"
+        f"📋 Chiqim:    {expenses:,} so'm\n"
+        f"✅ Sof foyda: <b>{net:,} so'm</b>"
+    )
+    if meth_lines:
+        msg += f"\n\n💳 To'lov usullari:\n{meth_lines}"
+    send_kb(chat_id, msg,
         [[{"text": "📊 Bugun", "callback_data": "today"},
           {"text": "🏠 Menyu", "callback_data": "main"}]])
 
@@ -192,7 +199,8 @@ def show_staff(chat_id):
 
 
 def show_inventory(chat_id):
-    items = api("GET", "/api/inventory")
+    res   = api("GET", "/api/inventory")
+    items = res.get("data", res) if isinstance(res, dict) else res
     if not isinstance(items, list):
         send_msg(chat_id, "❌ Inventar ma'lumoti olinmadi.")
         return
