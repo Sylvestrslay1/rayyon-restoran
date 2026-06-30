@@ -3542,6 +3542,35 @@ if (custSearchEl) {
   const origHandler = custSearchEl.oninput;
   custSearchEl.oninput = debounce(function(e) { searchCustomers(e.target.value); }, 300);
 }
+
+// ===== PUSH NOTIFICATIONS =====
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    const keyRes = await fetch(`${API}/api/push/vapid-key`);
+    if (!keyRes.ok) return;
+    const { key } = await keyRes.json();
+    if (!key) return;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return;
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: Uint8Array.from(atob(key.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0)),
+    });
+    await fetch(`${API}/api/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+      body: JSON.stringify({ subscription: sub.toJSON() }),
+    });
+    console.log('Push notifications yoqildi');
+  } catch (e) {
+    console.warn('Push init xato:', e);
+  }
+}
+if (adminToken) initPushNotifications();
 </script>
 </body>
 </html>
