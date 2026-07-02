@@ -285,7 +285,7 @@
     <textarea class="reason-input" id="close-notes" placeholder="Izoh (ixtiyoriy)..." style="min-height:60px"></textarea>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal('close-shift-modal')">Bekor</button>
-      <button class="btn btn-danger" style="flex:1" onclick="doCloseShift()">Ha, yopish</button>
+      <button class="btn btn-danger" style="flex:1" id="close-shift-confirm-btn" onclick="doCloseShift()">Ha, yopish</button>
     </div>
   </div>
 </div>
@@ -922,6 +922,9 @@ function closeShiftConfirm() {
   document.getElementById('close-shift-modal').classList.remove('hidden');
 }
 async function doCloseShift(force=false) {
+  if (!SHIFT_ID) { showToast('Smena topilmadi', 'error'); closeModal('close-shift-modal'); return; }
+  const btn = document.getElementById('close-shift-confirm-btn');
+  if (btn) { if (btn.disabled) return; btn.disabled = true; }
   const notes = document.getElementById('close-notes').value.trim();
   try {
     const r = await fetch(`${API}/api/shift/${SHIFT_ID}/close`, {
@@ -931,14 +934,18 @@ async function doCloseShift(force=false) {
     const data = await r.json();
     if (r.status === 409 && data.active_sessions) {
       const ok = confirm(`${data.active_sessions} ta ochiq stol bor. Baribir smena yopilsinmi?`);
-      if (ok) doCloseShift(true);
+      if (ok) { if (btn) btn.disabled = false; doCloseShift(true); return; }
+      if (btn) btn.disabled = false;
       return;
     }
-    if (!r.ok) { showToast(data.error||'Xato','error'); return; }
+    if (!r.ok) { showToast(data.error||'Xato','error'); if (btn) btn.disabled = false; return; }
     closeModal('close-shift-modal');
     showToast(`Smena yopildi. Sof: ${fmt(data.net||data.total_collected)} so'm`, 'success');
     setTimeout(logout, 2000);
-  } catch(e) { showToast('Xato','error'); }
+  } catch(e) {
+    showToast('Xato','error');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ===== EMAIL HISOBOT =====

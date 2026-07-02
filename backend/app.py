@@ -8,6 +8,18 @@ from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from database import init_db
 
+# Lokal ishlab chiqish uchun .env faylni yuklaydi (mavjud bo'lsa).
+# Renderda bu fayl yo'q — haqiqiy muhit o'zgaruvchilari ustunlik qiladi.
+_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+if os.path.exists(_env_path):
+    with open(_env_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _val = _line.split("=", 1)
+            os.environ.setdefault(_key.strip(), _val.strip())
+
 logging.basicConfig(
     level=logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO")),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
