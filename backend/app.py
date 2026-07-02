@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='../frontend', static_url_path='')
+app = Flask(__name__, static_folder='..', static_url_path='')
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_urlsafe(32))
 
 # ===== CORS =====
@@ -100,13 +100,15 @@ def _close_db(error):
 # ===== BEFORE/AFTER REQUEST =====
 _CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _CSRF_PUBLIC_PATHS = {
+    "/api/login",
+    "/api/logout",
     "/api/staff/login",
     "/api/staff/checkin",
     "/api/orders",
     "/api/reservations",
     "/api/events",
     "/api/health",
-    "/api/logout",
+    "/api/client-errors",
 }
 
 @app.before_request

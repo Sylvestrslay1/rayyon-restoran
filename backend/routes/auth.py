@@ -83,8 +83,9 @@ def login():
 @bp.route("/api/logout", methods=["POST"])
 def logout():
     token = request.headers.get("X-Admin-Token", "")
-    revoke_admin_token(token)
-    audit("logout", "admin", user_name="admin")
+    if token:
+        revoke_admin_token(token)
+        audit("logout", "admin", user_name="admin")
     return jsonify({"ok": True})
 
 

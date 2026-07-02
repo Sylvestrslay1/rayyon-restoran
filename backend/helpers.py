@@ -370,19 +370,23 @@ def check_image_mime(file_stream) -> bool:
 
 # ===== SETTINGS HELPER =====
 def get_setting(key):
+    row = None
     try:
         conn = get_db()
         cur = conn.cursor()
         cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
         row = cur.fetchone()
     except Exception:
-        conn = get_conn()
         try:
-            cur = conn.cursor()
-            cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
-            row = cur.fetchone()
-        finally:
-            conn.close()
+            conn = get_conn()
+            try:
+                cur = conn.cursor()
+                cur.execute(q("SELECT value FROM settings WHERE key=?"), (key,))
+                row = cur.fetchone()
+            finally:
+                conn.close()
+        except Exception as e:
+            log.warning("get_setting(%s) xato: %s", key, e)
     if not row:
         return None
     return row["value"] if not USE_PG else row[0]
