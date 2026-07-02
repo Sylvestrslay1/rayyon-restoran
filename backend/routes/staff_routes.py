@@ -35,6 +35,8 @@ def add_staff():
     pin = str(d.get("pin", "0000"))
     if len(pin) < 4:
         return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
+    if check_staff_pin(pin):
+        return jsonify({"error": "Bu PIN allaqachon boshqa xodimda band. Boshqa PIN tanlang"}), 409
     pin_hash, pin_salt = hash_password(pin)
     conn = get_db()
     db_exec(conn, "INSERT INTO staff (name,role,pin,pin_salt,phone,salary_type,salary_amount) VALUES (?,?,?,?,?,?,?)",
@@ -54,6 +56,9 @@ def update_staff(sid):
         pin = str(d["pin"])
         if len(pin) < 4:
             return jsonify({"error": "PIN kamida 4 raqam bo'lishi kerak"}), 400
+        existing = check_staff_pin(pin, conn)
+        if existing and existing["id"] != sid:
+            return jsonify({"error": "Bu PIN allaqachon boshqa xodimda band. Boshqa PIN tanlang"}), 409
         pin_hash, pin_salt = hash_password(pin)
         db_exec(conn, "UPDATE staff SET name=?,role=?,pin=?,pin_salt=?,phone=?,salary_type=?,salary_amount=?,active=? WHERE id=?",
             (d.get("name"),d.get("role"),pin_hash,pin_salt,
