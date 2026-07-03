@@ -155,7 +155,7 @@ def api_raw(method, path, data=None, token=None):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["X-Admin-Token"] = token
-    body = json.dumps(data).encode() if data else None
+    body = json.dumps(data).encode() if data is not None else None
     req  = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
