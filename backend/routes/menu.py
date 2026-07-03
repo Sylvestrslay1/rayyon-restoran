@@ -2,7 +2,7 @@
 import logging
 
 from flask import Blueprint, request, jsonify
-from database import rows_to_list
+from database import rows_to_list, USE_PG
 from helpers import (
     check_auth, audit, _validate_str, db_exec, get_db, limiter,
 )
@@ -14,16 +14,24 @@ bp = Blueprint('menu', __name__)
 @bp.route("/api/menu/popular", methods=["GET"])
 @limiter.limit("120 per minute")
 def popular_menu():
-    limit = min(int(request.args.get("limit", 5)), 20)
-    conn  = get_db()
+    limit  = min(int(request.args.get("limit", 5)), 20)
+    period = request.args.get("period", "")
+    conn   = get_db()
+    date_filter = ""
+    if period == "today":
+        date_filter = ("AND oi.created_at >= CURRENT_DATE" if USE_PG
+                        else "AND date(oi.created_at,'localtime') = date('now','localtime')")
     try:
-        cur = db_exec(conn, """
-            SELECT oi.menu_item_id AS id, oi.item_name AS name, oi.item_emoji AS emoji,
+        # INNER JOIN + available=1 — taklif qilingan taom hozir ham menyuda,
+        # buyurtma qilsa bo'ladigan holatda bo'lishi shart (o'chirilgan/eskirgan
+        # taomni taklif qilib, keyin "Taom topilmadi" xatosiga olib kelmasligi uchun).
+        cur = db_exec(conn, f"""
+            SELECT m.id AS id, m.name AS name, m.emoji AS emoji,
                    m.price, SUM(oi.quantity) AS total_ordered
             FROM order_items oi
-            LEFT JOIN menu m ON oi.menu_item_id = m.id
-            WHERE oi.status != 'cancelled' AND oi.menu_item_id IS NOT NULL
-            GROUP BY oi.menu_item_id, oi.item_name, oi.item_emoji, m.price
+            JOIN menu m ON oi.menu_item_id = m.id
+            WHERE oi.status != 'cancelled' AND m.available = 1 {date_filter}
+            GROUP BY m.id, m.name, m.emoji, m.price
             ORDER BY total_ordered DESC
             LIMIT ?
         """, (limit,))

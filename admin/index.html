@@ -2298,8 +2298,8 @@ function showQR(tableId) {
   currentQRTable = t;
   const token = t.token || '';
   const url   = token
-    ? `${SITE_URL}/?table=${t.number}&token=${token}`
-    : `${SITE_URL}/?table=${t.number}`;
+    ? `${SITE_URL}/table-landing.html?table=${t.number}&token=${token}`
+    : `${SITE_URL}/table-landing.html?table=${t.number}`;
   document.getElementById('qr-title').textContent = `Stol #${t.number} QR`;
   document.getElementById('qr-url').textContent   = url;
   const canvas = document.getElementById('qr-canvas');
@@ -2336,7 +2336,7 @@ async function showQRModal() {
   }
 
   grid.innerHTML = tables.map(t => {
-    const url = `${SITE_URL}/?table=${t.number}`;
+    const url = `${SITE_URL}/table-landing.html?table=${t.number}`;
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=000000&margin=10`;
     const statusColor = t.status === 'free' ? '#00e676' : t.status === 'occupied' ? '#ff9800' : '#ff4444';
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">

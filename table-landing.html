@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Rayyon Restoran — Xush kelibsiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#030810;--card:#0d1420;--cyan:#00d4ff;--gold:#c8a96e;--muted:rgba(255,255,255,0.45);}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:#fff;font-family:'Inter',sans-serif;min-height:100vh;max-width:480px;margin:0 auto;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;}
+.logo{font-family:'Cinzel',serif;font-size:2.2rem;font-weight:700;letter-spacing:6px;margin-bottom:6px;}
+.logo .ray{color:var(--cyan);}.logo .yon{color:var(--gold);}
+.sub{color:var(--muted);letter-spacing:3px;font-size:0.75rem;margin-bottom:28px;font-family:'Rajdhani',sans-serif;}
+.table-badge{display:inline-block;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);
+  color:var(--cyan);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1rem;
+  letter-spacing:2px;padding:8px 24px;border-radius:20px;margin-bottom:36px;}
+.choice-title{font-size:0.95rem;color:rgba(255,255,255,0.75);margin-bottom:20px;line-height:1.5;}
+.choice-btn{display:flex;align-items:center;gap:14px;width:100%;background:var(--card);
+  border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:18px 20px;margin-bottom:14px;
+  text-decoration:none;color:#fff;text-align:left;transition:all 0.2s;}
+.choice-btn:active{transform:scale(0.98);}
+.choice-icon{font-size:2rem;flex-shrink:0;}
+.choice-text{flex:1;}
+.choice-name{font-weight:700;font-size:1rem;margin-bottom:2px;}
+.choice-desc{color:var(--muted);font-size:0.78rem;line-height:1.4;}
+.choice-web{border-color:rgba(0,212,255,0.25);}
+.choice-web:active{background:rgba(0,212,255,0.08);}
+.choice-bot{border-color:rgba(200,169,110,0.3);}
+.choice-bot:active{background:rgba(200,169,110,0.08);}
+.choice-bot .choice-name{color:var(--gold);}
+.badge-loyalty{display:inline-block;background:rgba(200,169,110,0.15);color:var(--gold);
+  font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:8px;margin-left:6px;letter-spacing:0.5px;}
+.footer-note{color:var(--muted);font-size:0.7rem;margin-top:24px;line-height:1.5;}
+.err{color:#ff4444;font-size:0.85rem;margin-top:20px;}
+</style>
+</head>
+<body>
+<div class="logo"><span class="ray">RAY</span><span class="yon">YON</span></div>
+<div class="sub">RESTORAN</div>
+<div class="table-badge" id="table-badge">Stol #—</div>
+
+<div id="choices">
+  <div class="choice-title">Buyurtma berish uchun usulni tanlang:</div>
+
+  <a class="choice-btn choice-web" id="web-link" href="#">
+    <div class="choice-icon">🌐</div>
+    <div class="choice-text">
+      <div class="choice-name">Saytdan buyurtma berish</div>
+      <div class="choice-desc">Ro'yxatdan o'tmasdan, tezkor buyurtma</div>
+    </div>
+  </a>
+
+  <a class="choice-btn choice-bot" id="bot-link" href="#" target="_blank">
+    <div class="choice-icon">🤖</div>
+    <div class="choice-text">
+      <div class="choice-name">Telegram orqali buyurtma <span class="badge-loyalty">BONUS</span></div>
+      <div class="choice-desc">Doimiy mijoz bo'ling — ballar va chegirmalar oling</div>
+    </div>
+  </a>
+</div>
+
+<div class="footer-note">Buyurtma yuborilgach, ofitsiant stolingizga kelib tasdiqlaydi.</div>
+
+<script>
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+const params = new URLSearchParams(location.search);
+const tableNum = parseInt(params.get('table') || '0');
+const token    = params.get('token') || '';
+
+if (!tableNum) {
+  document.getElementById('choices').innerHTML = '<div class="err">⚠ Stol raqami topilmadi. QR kodni qaytadan skanerlang.</div>';
+} else {
+  document.getElementById('table-badge').textContent = `Stol #${tableNum}`;
+
+  const webUrl = token
+    ? `/menu.html?table=${tableNum}&token=${encodeURIComponent(token)}`
+    : `/menu.html?table=${tableNum}`;
+  document.getElementById('web-link').href = webUrl;
+
+  // Bot username sozlamalardan olinadi, topilmasa standart qiymat ishlatiladi
+  fetch('/api/settings').then(r => r.json()).then(settings => {
+    let botUsername = 'rayyon_restoran_bot';
+    if (Array.isArray(settings)) {
+      const found = settings.find(s => s.key === 'telegram_bot');
+      if (found?.value) botUsername = found.value.replace(/^@/, '');
+    }
+    document.getElementById('bot-link').href = `https://t.me/${botUsername}?start=t${tableNum}`;
+  }).catch(() => {
+    document.getElementById('bot-link').href = `https://t.me/rayyon_restoran_bot?start=t${tableNum}`;
+  });
+}
+</script>
+</body>
+</html>

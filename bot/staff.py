@@ -5,6 +5,7 @@ from core import (
     get_staff, staff_logout, _staff_sessions, _waiter_carts,
     get_menu, CATS, ROLE_ICONS, WAITER_ROLES, KITCHEN_ROLES, CASHIER_ROLES,
     set_user_role,
+    set_waiter_available, is_waiter_available,
 )
 
 
@@ -40,10 +41,12 @@ def staff_main_menu(chat_id, staff=None):
     icon = ROLE_ICONS.get(role, '👤')
 
     if role in WAITER_ROLES:
+        avail_label = "🟢 Bo'shman" if not is_waiter_available(chat_id) else "🔴 Band"
         btns = [
             [{"text": "🪑 Mening stollarim",  "callback_data": "s_my_tables"},
              {"text": "✅ Tayyor buyurtmalar", "callback_data": "s_ready"}],
             [{"text": "📋 Barcha stollar",     "callback_data": "s_all_tables"}],
+            [{"text": avail_label,            "callback_data": "s_avail_toggle"}],
             [{"text": "🔓 Chiqish",            "callback_data": "s_logout"}],
         ]
     elif role in KITCHEN_ROLES:
@@ -322,6 +325,30 @@ def update_item_status(chat_id, session_id, item_id, status):
                 [[{"text": "🔄 Qayta", "callback_data": "s_kitchen"}]])
 
 
+def toggle_availability(chat_id):
+    staff = get_staff(chat_id)
+    if not staff:
+        staff_login_start(chat_id); return
+    set_waiter_available(chat_id, not is_waiter_available(chat_id))
+    staff_main_menu(chat_id, staff)
+
+
+def confirm_pending_order(chat_id, session_id, msg_id=None):
+    staff = get_staff(chat_id)
+    if not staff:
+        staff_login_start(chat_id); return
+    res = api("PUT", f"/api/session/{session_id}/order/confirm", {"pin": staff["pin"]})
+    if res and res.get('ok'):
+        confirmed = res.get('confirmed', 0)
+        text = f"✅ Buyurtma tasdiqlandi ({confirmed} ta taom) — oshxonaga yuborildi!" if confirmed else "✅ Allaqachon tasdiqlangan."
+        send_kb(chat_id, text,
+                [[{"text": "🪑 Stollar", "callback_data": "s_my_tables"},
+                  {"text": "🏠 Panel",  "callback_data": "s_main"}]])
+    else:
+        send_kb(chat_id, "❌ Tasdiqlashda xato.",
+                [[{"text": "🔄 Qayta", "callback_data": "s_main"}]])
+
+
 # ── Smena (kassir/manager) ────────────────────────────────────
 
 def show_shift_status(chat_id):
@@ -418,3 +445,8 @@ def handle_staff_callback(chat_id, data):
             except ValueError: pass
     elif data == "s_shift":
         show_shift_status(chat_id)
+    elif data == "s_avail_toggle":
+        toggle_availability(chat_id)
+    elif data.startswith("s_confirm_"):
+        try: confirm_pending_order(chat_id, int(data[10:]))
+        except ValueError: pass

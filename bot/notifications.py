@@ -3,6 +3,7 @@ import datetime, time
 from core import (
     api, send_kb, send_msg, log,
     ALLOWED_CHAT_IDS, _NOTIF_INTERVAL, _DAILY_REPORT_HOUR,
+    available_waiter_chat_ids, logged_in_waiter_chat_ids,
 )
 
 _notified_res    = set()   # bron ID lari — allaqachon xabar yuborilgan
@@ -15,6 +16,9 @@ _last_daily_day  = None    # kunlik hisobot yuborilgan kun (ISO sana)
 _fail_count      = 0       # ketma-ket xatolar soni
 _FAIL_THRESHOLD  = 3       # shu miqdordan keyin admin xabardor qilinadi
 _fail_notified   = False   # bir marta xabar yuborilgandan keyin takrorlanmasin
+
+_pending_confirm_seen  = {}    # session_id -> birinchi ko'rilgan vaqt (time.time())
+_PENDING_CONFIRM_REPING_SEC = 300   # 5 daqiqadan keyin qayta eslatma
 
 
 def _trim_set(s):
@@ -117,6 +121,52 @@ def check_bill_requests():
         log.info(f"Hisob so'rash xabari: stol #{t['number']}")
 
 
+def check_pending_confirmations():
+    """Mijoz o'zi (bot/sayt) bergan, hali ofitsiant tasdiqlamagan buyurtmalar."""
+    groups = api("GET", "/api/orders/pending-confirmation")
+    if not isinstance(groups, list):
+        return
+    now = time.time()
+    current_ids = set()
+    for g in groups:
+        sid = g.get("session_id")
+        if not sid:
+            continue
+        current_ids.add(sid)
+        first_seen = _pending_confirm_seen.get(sid)
+        is_new   = first_seen is None
+        is_stale = (not is_new) and (now - first_seen >= _PENDING_CONFIRM_REPING_SEC)
+        if not is_new and not is_stale:
+            continue
+        _pending_confirm_seen[sid] = now
+
+        table = g.get("table", "?")
+        items_str = ", ".join(f"{i.get('name')} x{i.get('quantity',1)}" for i in g.get("items", []))
+        text = (
+            f"🆕 <b>Mijoz buyurtma berdi — Stol #{table}</b>\n{items_str}\n\n"
+            f"Stol yoniga borib, buyurtmani mijoz bilan tasdiqlang."
+        )
+        if not is_new:
+            text = "⏰ <b>Eslatma</b> (hali tasdiqlanmagan):\n" + text
+
+        targets = available_waiter_chat_ids() or logged_in_waiter_chat_ids()
+        if not targets:
+            targets = list(ALLOWED_CHAT_IDS)
+            text = "⚠️ <b>Hech qanday ofitsiant tizimda emas!</b>\n" + text
+
+        btns = [[{"text": "✅ Tasdiqlash", "callback_data": f"s_confirm_{sid}"}]]
+        for cid in targets:
+            try:
+                send_kb(cid, text, btns)
+            except Exception as e:
+                log.error(f"check_pending_confirmations {cid}: {e}")
+        log.info(f"Tasdiqlash so'ralgan xabar: sessiya #{sid}, stol #{table}")
+
+    for sid in list(_pending_confirm_seen.keys()):
+        if sid not in current_ids:
+            _pending_confirm_seen.pop(sid, None)
+
+
 def check_low_inventory():
     global _notified_low, _notified_low_day
     today = datetime.date.today().isoformat()
@@ -183,6 +233,7 @@ def _notification_loop():
             check_new_reservations()
             check_new_orders()
             check_bill_requests()
+            check_pending_confirmations()
             check_low_inventory()
             send_daily_report()
             # Muvaffaqiyatli tsikl — hisoblagichni nollashtirish

@@ -173,16 +173,22 @@ def add_order_item(sid):
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
     waiter_name_fallback = staff["name"] if staff else ""
+    # Xodim (PIN) buyurtma kiritsa — to'g'ridan-to'g'ri oshxonaga ('pending').
+    # Mijoz o'zi (bot yoki sayt orqali, xodim tasdiqlamagan) — avval ofitsiant
+    # tasdiqlashi kerak ('pending_confirm'). Izoh: bot doim admin tokenidan
+    # foydalanadi, shuning uchun check_auth() bu yerda mijoz/xodimni ajrata olmaydi.
+    insert_status = "pending" if staff else "pending_confirm"
     for item in items:
         total = item.get("price",0) * item.get("quantity",1)
         db_exec(conn, """INSERT INTO order_items
             (session_id, table_number, menu_item_id, item_name, item_emoji, item_price, quantity,
-             total_price, comment, course, category, waiter_id, waiter_name)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             total_price, comment, course, category, waiter_id, waiter_name, status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (sid, s["table_number"], item.get("menu_item_id"), item.get("name"),
              item.get("emoji","🍽"), item.get("price",0), item.get("quantity",1),
              total, item.get("comment",""), item.get("course",1),
-             item.get("category",""), item.get("waiter_id"), item.get("waiter_name") or waiter_name_fallback))
+             item.get("category",""), item.get("waiter_id"), item.get("waiter_name") or waiter_name_fallback,
+             insert_status))
     conn.commit()
     cur2 = db_exec(conn, "SELECT SUM(total_price) FROM order_items WHERE session_id=? AND status!='cancelled'", (sid,))
     row  = cur2.fetchone()
@@ -190,9 +196,56 @@ def add_order_item(sid):
     db_exec(conn, "UPDATE sessions SET total_amount=? WHERE id=?", (total_sum, sid))
     conn.commit()
     names = ", ".join(f"{i.get('name')} x{i.get('quantity',1)}" for i in items)
+    if insert_status == "pending":
+        tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
+        _sse_broadcast("new_order", {"session_id": sid, "table": s["table_number"], "items": names})
+    return jsonify({"ok": True, "needs_confirmation": insert_status == "pending_confirm"})
+
+
+@bp.route("/api/session/<int:sid>/order/confirm", methods=["PUT"])
+def confirm_order(sid):
+    d = request.json or {}
+    staff = check_staff_pin(d.get("pin")) if d.get("pin") else None
+    if not check_auth() and not staff:
+        return jsonify({"ok": False, "error": "PIN yoki admin token kerak"}), 401
+    if staff and not has_role(staff, "waiter", "cashier", "manager"):
+        return jsonify({"ok": False, "error": "Faqat ofitsiant yoki kassir tasdiqlay oladi"}), 403
+    conn = get_db()
+    cur  = db_exec(conn, "SELECT * FROM sessions WHERE id=?", (sid,))
+    rows = rows_to_list(cur)
+    if not rows: return jsonify({"ok": False, "error": "Sessiya topilmadi"}), 404
+    s = rows[0]
+    pre_cur = db_exec(conn, "SELECT item_name, quantity FROM order_items WHERE session_id=? AND status='pending_confirm'", (sid,))
+    pre_items = rows_to_list(pre_cur)
+    if not pre_items:
+        return jsonify({"ok": True, "confirmed": 0})
+    db_exec(conn, "UPDATE order_items SET status='pending' WHERE session_id=? AND status='pending_confirm'", (sid,))
+    conn.commit()
+    names = ", ".join(f"{i['item_name']} x{i.get('quantity',1)}" for i in pre_items)
     tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
     _sse_broadcast("new_order", {"session_id": sid, "table": s["table_number"], "items": names})
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "confirmed": len(pre_items)})
+
+
+@bp.route("/api/orders/pending-confirmation", methods=["GET"])
+def pending_confirmation_orders():
+    if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
+    conn = get_db()
+    cur  = db_exec(conn, """
+        SELECT oi.session_id, s.table_number, oi.item_name, oi.quantity
+        FROM order_items oi
+        JOIN sessions s ON s.id = oi.session_id
+        WHERE oi.status='pending_confirm'
+        ORDER BY oi.session_id, oi.id
+    """)
+    rows = rows_to_list(cur)
+    grouped = {}
+    for r in rows:
+        sid_key = r["session_id"]
+        if sid_key not in grouped:
+            grouped[sid_key] = {"session_id": sid_key, "table": r["table_number"], "items": []}
+        grouped[sid_key]["items"].append({"name": r["item_name"], "quantity": r["quantity"]})
+    return jsonify(list(grouped.values()))
 
 
 @bp.route("/api/session/<int:sid>/item/<int:iid>/status", methods=["PUT"])

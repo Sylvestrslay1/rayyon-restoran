@@ -71,13 +71,18 @@ CASHIER_ROLES = ('cashier', 'manager', 'admin', 'director')
 
 def tg(method, **kwargs):
     url  = f"{BASE}/{method}"
+    # _client_timeout — urllib socket timeout. "timeout" (agar kwargs'da bo'lsa)
+    # Telegram'ning getUpdates uzoq-polling parametri — buni client_timeout bilan
+    # aralashtirmaslik kerak, aks holda client Telegram javob berishidan OLDIN
+    # uzilib qoladi (masalan timeout=30 yuborilsa-yu, socket 10s'da uzilsa).
+    client_timeout = kwargs.pop("_client_timeout", 10)
     data = urllib.parse.urlencode({
         k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
         for k, v in kwargs.items()
     }).encode()
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(url, data=data, method="POST"), timeout=10
+            urllib.request.Request(url, data=data, method="POST"), timeout=client_timeout
         ) as r:
             return json.loads(r.read())
     except Exception as e:
@@ -353,17 +358,40 @@ def cart_total(chat_id):
 
 # ── Xodim sessiyalari ─────────────────────────────────────────
 
-_staff_sessions = {}  # chat_id -> {name, role, id, pin}
-_waiter_carts   = {}  # chat_id -> {table_id, session_id, items:[]}
+_staff_sessions   = {}  # chat_id -> {name, role, id, pin}
+_waiter_carts     = {}  # chat_id -> {table_id, session_id, items:[]}
+_waiter_available = {}  # chat_id -> bool ("Bo'shman" deb belgilagan ofitsiantlar)
 
 
 def get_staff(chat_id):
     return _staff_sessions.get(chat_id)
 
 
+def set_waiter_available(chat_id, val: bool):
+    _waiter_available[chat_id] = val
+
+
+def is_waiter_available(chat_id) -> bool:
+    return _waiter_available.get(chat_id, False)
+
+
+def available_waiter_chat_ids():
+    """Hozir 'Bo'shman' deb belgilagan, tizimga kirgan ofitsiantlar chat_id lari."""
+    return [
+        cid for cid, staff in _staff_sessions.items()
+        if staff.get("role") == "waiter" and _waiter_available.get(cid)
+    ]
+
+
+def logged_in_waiter_chat_ids():
+    """Hozir tizimga kirgan barcha ofitsiantlar (bo'sh/band farqisiz)."""
+    return [cid for cid, staff in _staff_sessions.items() if staff.get("role") == "waiter"]
+
+
 def staff_logout(chat_id):
     _staff_sessions.pop(chat_id, None)
     _waiter_carts.pop(chat_id, None)
+    _waiter_available.pop(chat_id, None)
     clear_state(chat_id)
     set_user_role(chat_id, None)
 

@@ -34,9 +34,24 @@ def _cancel_timer(chat_id):
 
 
 def _suggest_popular(chat_id, lang):
-    """10 daqiqa inaktivlik → mashhur taomlarni taklif qil."""
+    """10 daqiqa inaktivlik/ikkilanish → avval taklif qilishni so'raydi."""
     _timers.pop(chat_id, None)
-    items = api_raw("GET", "/api/menu/popular?limit=5")
+    msgs = {
+        'uz': "⏰ Hali tanlay olmadingizmi?\n\nBugungi eng mashhur taomlarni ko'rsataymi?",
+        'ru': "⏰ Всё ещё выбираете?\n\nПоказать самые популярные блюда сегодня?",
+        'en': "⏰ Still deciding?\n\nWant to see today's most popular dishes?",
+    }
+    yes_lbl = {'uz': "✅ Ha, ko'rsating", 'ru': "✅ Да, покажите", 'en': "✅ Yes, show me"}
+    no_lbl  = {'uz': "❌ Yo'q, rahmat",   'ru': "❌ Нет, спасибо", 'en': "❌ No, thanks"}
+    send_kb(chat_id, msgs.get(lang, msgs['uz']),
+            [[{"text": yes_lbl.get(lang, yes_lbl['uz']), "callback_data": "c_suggest_yes"},
+              {"text": no_lbl.get(lang, no_lbl['uz']),   "callback_data": "c_suggest_no"}]])
+
+
+def show_popular_suggestions(chat_id):
+    """Mijoz taklifni ma'qullagach — bugungi eng mashhur taomlarni ko'rsatadi."""
+    lang  = get_lang(chat_id) or 'uz'
+    items = api_raw("GET", "/api/menu/popular?limit=5&period=today")
     if not isinstance(items, list) or not items:
         send_kb(chat_id, t(lang, 'popular_suggest', items='🍽 Menyuimizni ko\'ring!'),
                 [[{"text": t(lang, 'menu'), "callback_data": "c_menu"}]])
@@ -101,8 +116,7 @@ def customer_main(chat_id):
          {"text": t(lang, 'bron'),    "callback_data": "c_bron"}],
         [{"text": t(lang, 'ball'),    "callback_data": "c_ball"},
          {"text": "🎁 Aksiyalar",     "callback_data": "c_promos"}],
-        [{"text": t(lang, 'contact'), "callback_data": "c_contact"},
-         {"text": t(lang, 'staff'),   "callback_data": "s_login"}],
+        [{"text": t(lang, 'contact'), "callback_data": "c_contact"}],
     ]
     if cart:
         rows.insert(0, [{"text": t(lang, 'view_cart', count=len(cart)), "callback_data": "c_cart"}])
@@ -659,3 +673,9 @@ def handle_customer_callback(chat_id, data):
         show_contact(chat_id)
     elif data == "c_promos":
         show_promotions(chat_id)
+    elif data == "c_suggest_yes":
+        show_popular_suggestions(chat_id)
+    elif data == "c_suggest_no":
+        lang = get_lang(chat_id) or 'uz'
+        msgs = {'uz': "Xo'p, o'ylab ko'ring 😊", 'ru': "Хорошо, не спешите 😊", 'en': "Sure, take your time 😊"}
+        send_msg(chat_id, msgs.get(lang, msgs['uz']))

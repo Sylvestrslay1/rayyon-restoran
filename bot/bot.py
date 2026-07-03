@@ -298,7 +298,7 @@ def poll():
         log.warning("TELEGRAM_CHAT_ID o'rnatilmagan — barcha chatlar ruxsatli (test rejim)!")
 
     # Bot to'xtatilgan vaqtdagi eski xabarlarni o'tkazib yuboramiz
-    res = tg("getUpdates", offset=-1, timeout=0)
+    res = tg("getUpdates", offset=-1, timeout=0, _client_timeout=10)
     updates = res.get("result", [])
     offset = (updates[-1]["update_id"] + 1) if updates else 0
     log.info(f"Eski xabarlar o'tkazib yuborildi, offset={offset}")
@@ -306,7 +306,7 @@ def poll():
     threading.Thread(target=_notification_loop, daemon=True).start()
 
     while True:
-        res = tg("getUpdates", offset=offset, timeout=30)
+        res = tg("getUpdates", offset=offset, timeout=30, _client_timeout=35)
         for upd in res.get("result", []):
             offset = upd["update_id"] + 1
             try:
