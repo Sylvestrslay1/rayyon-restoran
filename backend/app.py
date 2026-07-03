@@ -157,8 +157,13 @@ def csrf_origin_check():
 
 @app.after_request
 def add_security_headers(response):
-    if request.path.startswith(("/css/", "/js/", "/assets/", "/uploads/", "/favicon")):
+    if request.path.startswith(("/uploads/", "/favicon")):
         response.headers["Cache-Control"] = "public, max-age=86400"
+    elif request.path.startswith(("/css/", "/js/", "/assets/")):
+        # Fayl nomlari versiyalanmagan (hash yo'q) — uzoq max-age deploy qilingan
+        # tuzatishlarni brauzerlarda soatlab yashirib qo'yardi. Har so'rovda
+        # serverdan tekshirtiramiz (ETag orqali arzon 304 bilan qaytadi).
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
     elif request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"

@@ -188,7 +188,7 @@ const TRANSLATIONS = {
     "toast.img":    "Rasm yuklandi",
     "toast.error":  "Xatolik",
     // CATEGORIES
-    "cat.milliy":"🇺🇿 Milliy","cat.grill":"🔥 Grill","cat.salad":"🥗 Salat","cat.drink":"🥤 Ichimlik",
+    "cat.milliy":"🇺🇿 Milliy","cat.grill":"🔥 Grill","cat.salad":"🥗 Salat","cat.drink":"🥤 Ichimlik","cat.dessert":"🍰 Shirinlik","cat.soup":"🍲 Sho'rva",
     // RECENT ORDERS
     "dash.recent":  "So'nggi buyurtmalar",
     "adm.accounting":   "Buxgalteriya",
@@ -447,7 +447,7 @@ const TRANSLATIONS = {
     "toast.updated":"Статус обновлён","toast.saved":"Сохранено",
     "toast.added":"Добавлено","toast.deleted":"Удалено",
     "toast.img":"Фото загружено","toast.error":"Ошибка",
-    "cat.milliy":"🇺🇿 Национальные","cat.grill":"🔥 Гриль","cat.salad":"🥗 Салаты","cat.drink":"🥤 Напитки",
+    "cat.milliy":"🇺🇿 Национальные","cat.grill":"🔥 Гриль","cat.salad":"🥗 Салаты","cat.drink":"🥤 Напитки","cat.dessert":"🍰 Десерты","cat.soup":"🍲 Супы",
     "dash.recent":"Последние заказы",
     "adm.accounting":   "Бухгалтерия",
     "adm.acc.title":    "Бухгалтерия",
@@ -695,7 +695,7 @@ const TRANSLATIONS = {
     "toast.updated":"Status updated","toast.saved":"Saved",
     "toast.added":"Added","toast.deleted":"Deleted",
     "toast.img":"Image uploaded","toast.error":"Error",
-    "cat.milliy":"🇺🇿 National","cat.grill":"🔥 Grill","cat.salad":"🥗 Salads","cat.drink":"🥤 Drinks",
+    "cat.milliy":"🇺🇿 National","cat.grill":"🔥 Grill","cat.salad":"🥗 Salads","cat.drink":"🥤 Drinks","cat.dessert":"🍰 Desserts","cat.soup":"🍲 Soups",
     "dash.recent":"Recent Orders",
     "adm.accounting":   "Accounting",
     "adm.acc.title":    "Accounting",

@@ -1,4 +1,4 @@
-const CACHE = 'rayyon-v5';
+const CACHE = 'rayyon-v6';
 const STATIC = [
   '/',
   '/index.html',
@@ -129,17 +129,16 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Statik fayllar — cache first, keyin network
+  // Statik fayllar (HTML/JS/CSS) — network first, kesh fallback.
+  // Cache-first bo'lganida deploy qilingan tuzatishlar ikkinchi reload'gacha
+  // ko'rinmas edi (xodim planshetlari uzoq vaqt eski buggy kodni ishlatardi).
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const net = fetch(e.request).then(res => {
-        if (res.ok && e.request.method === 'GET') {
-          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-        }
-        return res;
-      }).catch(() => cached);  // tarmoq uzilsa keshdan qaytaradi
-      return cached || net;
-    })
+    fetch(e.request).then(res => {
+      if (res.ok && e.request.method === 'GET') {
+        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
 
