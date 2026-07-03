@@ -4,6 +4,19 @@ Barcha modullar shu fayldan import qiladi.
 """
 import os, time, urllib.request, urllib.parse, urllib.error, json, logging
 
+# Lokal ishga tushirish uchun bot/.env faylni yuklaydi (mavjud bo'lsa).
+# start_bot.bat orqali ishga tushirilganda haqiqiy muhit o'zgaruvchilari
+# ustunlik qiladi (bu yerda faqat yo'q bo'lgan qiymatlar to'ldiriladi).
+_env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_path):
+    with open(_env_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _val = _line.split("=", 1)
+            os.environ.setdefault(_key.strip(), _val.strip())
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("rayyon-bot")
 

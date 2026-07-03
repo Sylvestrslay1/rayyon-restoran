@@ -258,7 +258,8 @@ def handle_callback(cb):
         if res.get("ok"):
             tg("editMessageText",
                chat_id=chat_id, message_id=msg_id,
-               text=f"✅ Buyurtma #{oid} → {label}", parse_mode="HTML")
+               text=f"✅ Buyurtma #{oid} → {label}", parse_mode="HTML",
+               reply_markup={"inline_keyboard": []})
         return
 
     if data.startswith("res_"):
@@ -268,7 +269,8 @@ def handle_callback(cb):
         if res.get("ok"):
             tg("editMessageText",
                chat_id=chat_id, message_id=msg_id,
-               text=f"✅ Bron #{rid} → {label}", parse_mode="HTML")
+               text=f"✅ Bron #{rid} → {label}", parse_mode="HTML",
+               reply_markup={"inline_keyboard": []})
         return
 
     # shift_close_confirm_ AVVAL tekshirilishi kerak (shift_close_ ham match qiladi)
