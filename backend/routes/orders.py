@@ -298,6 +298,8 @@ def update_item_status(sid, iid):
     conn = get_db()
     pre_cur = db_exec(conn, "SELECT * FROM order_items WHERE id=? AND session_id=?", (iid, sid))
     pre_rows = rows_to_list(pre_cur)
+    if pre_rows and pre_rows[0]["status"] == "pending_confirm" and status in ("cooking", "ready", "served"):
+        return jsonify({"error": "Bu buyurtma hali ofitsiant tomonidan tasdiqlanmagan"}), 409
     db_exec(conn, "UPDATE order_items SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND session_id=?",
         (status, iid, sid))
     if status == "cooking" and pre_rows:

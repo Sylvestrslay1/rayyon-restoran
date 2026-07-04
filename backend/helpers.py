@@ -415,7 +415,7 @@ def _csv_response(rows, filename):
     w.writeheader()
     w.writerows(rows)
     bom = "﻿"
-    return Response(bom + out.getvalue(), mimetype="text/csv; charset=utf-8",
+    return Response(bom + out.getvalue(), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 

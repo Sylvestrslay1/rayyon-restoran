@@ -45,9 +45,18 @@ def add_table():
     except (ValueError, TypeError):
         return jsonify({"error": "Stol raqami butun son bo'lishi kerak"}), 400
     conn = get_db()
-    db_exec(conn, "INSERT INTO tables (number, name, capacity) VALUES (?,?,?)",
-        (number, d.get("name", f"Stol {number}"), d.get("capacity", 4)))
-    conn.commit()
+    cur = db_exec(conn, "SELECT id FROM tables WHERE number=?", (number,))
+    if cur.fetchone():
+        return jsonify({"error": f"Stol #{number} allaqachon mavjud"}), 409
+    try:
+        db_exec(conn, "INSERT INTO tables (number, name, capacity) VALUES (?,?,?)",
+            (number, d.get("name", f"Stol {number}"), d.get("capacity", 4)))
+        conn.commit()
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("add_table DB xato: %s", _dbe)
+        return jsonify({"error": f"Stol #{number} allaqachon mavjud"}), 409
     return jsonify({"ok": True})
 
 
@@ -55,9 +64,20 @@ def add_table():
 def update_table(tid):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
     d = request.json or {}
+    number = d.get("number")
     conn = get_db()
-    db_exec(conn, "UPDATE tables SET number=?, name=?, capacity=? WHERE id=?",
-        (d.get("number"), d.get("name"), d.get("capacity", 4), tid))
+    if number is not None:
+        cur = db_exec(conn, "SELECT id FROM tables WHERE number=? AND id!=?", (number, tid))
+        if cur.fetchone():
+            return jsonify({"error": f"Stol #{number} allaqachon mavjud"}), 409
+    try:
+        db_exec(conn, "UPDATE tables SET number=?, name=?, capacity=? WHERE id=?",
+            (number, d.get("name"), d.get("capacity", 4), tid))
+    except Exception as _dbe:
+        try: conn.rollback()
+        except Exception: pass
+        log.error("update_table DB xato: %s", _dbe)
+        return jsonify({"error": f"Stol #{number} allaqachon mavjud"}), 409
     conn.commit()
     return jsonify({"ok": True})
 
