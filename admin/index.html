@@ -2158,7 +2158,7 @@ async function openTableSession(tableId) {
     if (!res) return;
     const s   = await res.json();
     const items = s.items || [];
-    const statusLabel = {'pending':'Kutmoqda','cooking':'Pishmoqda','ready':'Tayyor','served':'Berildi','cancelled':'Bekor'};
+    const statusLabel = {'pending_confirm':'⏳ Ofitsiant tasdiqlashini kutmoqda','pending':'Kutmoqda','cooking':'Pishmoqda','ready':'Tayyor','served':'Berildi','cancelled':'Bekor'};
     body.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
         <div style="background:rgba(0,212,255,0.05);padding:12px;border-radius:8px;border:1px solid rgba(0,212,255,0.1);">
