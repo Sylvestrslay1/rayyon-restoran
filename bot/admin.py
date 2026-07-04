@@ -68,10 +68,13 @@ def show_reservations(chat_id):
             + (f"📝 {r['note']}\n" if r.get("note") else "")
             + f"📊 {STATUS_LABELS.get(r.get('status'), r.get('status',''))}"
         )
-        btns = [[
-            {"text": "✅ Tasdiqlash", "callback_data": f"res_confirmed_{r['id']}"},
-            {"text": "❌ Bekor",      "callback_data": f"res_cancelled_{r['id']}"},
-        ]]
+        if r.get("status") == "new":
+            btns = [[
+                {"text": "✅ Tasdiqlash", "callback_data": f"res_confirmed_{r['id']}"},
+                {"text": "❌ Bekor",      "callback_data": f"res_cancelled_{r['id']}"},
+            ]]
+        else:
+            btns = [[{"text": "❌ Bekor", "callback_data": f"res_cancelled_{r['id']}"}]]
         send_kb(chat_id, txt, btns)
 
 

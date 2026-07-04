@@ -271,6 +271,12 @@ def handle_callback(cb):
                chat_id=chat_id, message_id=msg_id,
                text=f"✅ Bron #{rid} → {label}", parse_mode="HTML",
                reply_markup={"inline_keyboard": []})
+        else:
+            old_label = STATUS_LABELS.get(res.get("old_status"), res.get("old_status", "?"))
+            tg("editMessageText",
+               chat_id=chat_id, message_id=msg_id,
+               text=f"⚠️ Bron #{rid} allaqachon <b>{old_label}</b> holatida — o'zgartirib bo'lmadi.",
+               parse_mode="HTML", reply_markup={"inline_keyboard": []})
         return
 
     # shift_close_confirm_ AVVAL tekshirilishi kerak (shift_close_ ham match qiladi)

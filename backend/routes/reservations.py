@@ -64,6 +64,12 @@ def add_reservation():
     return jsonify({"ok": True})
 
 
+RESERVATION_TRANSITIONS = {
+    "new":       {"confirmed", "cancelled"},
+    "confirmed": {"cancelled", "done"},
+}
+
+
 @bp.route("/api/reservations/<int:res_id>", methods=["PUT"])
 def update_reservation(res_id):
     if not check_auth(): return jsonify({"error": "Ruxsat yo'q"}), 403
@@ -71,6 +77,16 @@ def update_reservation(res_id):
     status = d.get("status")
     conn   = get_conn()
     try:
+        cur0 = db_exec(conn, "SELECT status FROM reservations WHERE id=?", (res_id,))
+        row0 = cur0.fetchone()
+        if not row0:
+            return jsonify({"error": "Bron topilmadi"}), 404
+        old_status = row0[0] if USE_PG else row0["status"]
+        if status != old_status and status not in RESERVATION_TRANSITIONS.get(old_status, set()):
+            return jsonify({
+                "error": f"Bron allaqachon '{old_status}' holatida — bu o'zgarishga ruxsat yo'q",
+                "old_status": old_status,
+            }), 409
         db_exec(conn, "UPDATE reservations SET status=? WHERE id=?", (status, res_id))
         table_id = d.get("table_id")
         if status == "confirmed" and table_id:

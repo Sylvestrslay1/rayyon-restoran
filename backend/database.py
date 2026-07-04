@@ -759,6 +759,7 @@ def _init_db_inner(conn):
         "ALTER TABLE sessions ADD COLUMN shift_id INTEGER",
         "ALTER TABLE shifts ADD COLUMN opening_cash INTEGER DEFAULT 0",
         "ALTER TABLE shifts ADD COLUMN total_revenue INTEGER DEFAULT 0",
+        "ALTER TABLE reservations ADD COLUMN table_id INTEGER",
     ]
     for migration_sql in migrations:
         try:
