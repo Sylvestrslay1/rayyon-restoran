@@ -394,13 +394,14 @@ def close_session(sid):
                     "UPDATE customers SET total_spent=total_spent+?, visits=visits+1, loyalty_points=loyalty_points+? WHERE phone=?",
                     (server_total, earned_points, customer_phone))
                 new_points = (crows[0].get("loyalty_points") or 0) + earned_points
-                auto_disc = 15 if new_points >= 500 else (10 if new_points >= 200 else (5 if new_points >= 100 else 0))
-                if auto_disc > 0:
-                    db_exec(conn, "UPDATE customers SET discount_pct=? WHERE phone=?", (auto_disc, customer_phone))
             else:
                 db_exec(conn,
                     "INSERT INTO customers (name, phone, total_spent, visits, loyalty_points) VALUES (?,?,?,1,?)",
                     (customer_name_d, customer_phone, server_total, earned_points))
+                new_points = earned_points
+            auto_disc = 15 if new_points >= 500 else (10 if new_points >= 200 else (5 if new_points >= 100 else 0))
+            if auto_disc > 0:
+                db_exec(conn, "UPDATE customers SET discount_pct=? WHERE phone=?", (auto_disc, customer_phone))
 
         conn.commit()
     except Exception as e:
