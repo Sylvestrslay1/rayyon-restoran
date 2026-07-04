@@ -105,6 +105,39 @@ def open_session():
     return jsonify({"ok": True, "token": token, "session_id": sid, "table_number": tbl["number"]})
 
 
+@bp.route("/api/table-checkin", methods=["POST"])
+@limiter.limit("30 per minute")
+def table_checkin():
+    """Mijoz QR skanerlab kirganda chaqiriladi (autentifikatsiyasiz — faqat
+    stol raqami kifoya). Stolda faol sessiya bo'lsa uning tokenini qaytaradi,
+    bo'lmasa yangisini ochadi. open_session()'dan farqi — PIN/admin talab
+    qilmaydi, chunki mijozning o'z brauzeri hech qanday parolga ega emas."""
+    d = request.json or {}
+    table_num = d.get("table_number")
+    if not table_num:
+        return jsonify({"error": "Stol raqami kerak"}), 400
+    conn = get_db()
+    cur  = db_exec(conn, "SELECT * FROM tables WHERE number=?", (table_num,))
+    tbl  = rows_to_list(cur)
+    if not tbl: return jsonify({"error": "Stol topilmadi"}), 404
+    tbl  = tbl[0]
+    if tbl.get("current_session_id"):
+        cur2 = db_exec(conn, "SELECT * FROM sessions WHERE id=? AND status='active'", (tbl["current_session_id"],))
+        existing = rows_to_list(cur2)
+        if existing:
+            return jsonify({"ok": True, "token": existing[0]["token"],
+                             "session_id": existing[0]["id"], "table_number": tbl["number"]})
+    token = secrets.token_urlsafe(12)
+    db_exec(conn, "INSERT INTO sessions (table_id, table_number, token, waiter_name) VALUES (?,?,?,?)",
+            (tbl["id"], tbl["number"], token, "QR (mijoz)"))
+    cur3 = db_exec(conn, "SELECT id FROM sessions WHERE token=?", (token,))
+    row  = cur3.fetchone()
+    sid  = row[0] if USE_PG else row["id"]
+    db_exec(conn, "UPDATE tables SET status='occupied', current_session_id=? WHERE id=?", (sid, tbl["id"]))
+    conn.commit()
+    return jsonify({"ok": True, "token": token, "session_id": sid, "table_number": tbl["number"]})
+
+
 @bp.route("/api/session/validate", methods=["GET"])
 def validate_session():
     token = request.args.get("token")

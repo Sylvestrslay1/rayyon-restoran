@@ -72,17 +72,26 @@ function esc(s) {
 
 const params = new URLSearchParams(location.search);
 const tableNum = parseInt(params.get('table') || '0');
-const token    = params.get('token') || '';
 
 if (!tableNum) {
   document.getElementById('choices').innerHTML = '<div class="err">⚠ Stol raqami topilmadi. QR kodni qaytadan skanerlang.</div>';
 } else {
   document.getElementById('table-badge').textContent = `Stol #${tableNum}`;
 
-  const webUrl = token
-    ? `/menu.html?table=${tableNum}&token=${encodeURIComponent(token)}`
-    : `/menu.html?table=${tableNum}`;
-  document.getElementById('web-link').href = webUrl;
+  // Stolda faol sessiya bo'lmasa shu yerda ochamiz — aks holda menu.html'da
+  // token yo'qligi sababli "+" tugmalari yashirin qolib, mijoz buyurtma
+  // bera olmay qolardi (autentifikatsiyasiz — faqat stol raqami kifoya).
+  const webLink = document.getElementById('web-link');
+  webLink.href = `/menu.html?table=${tableNum}`;
+  fetch('/api/table-checkin', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({table_number: tableNum})
+  }).then(r => r.json()).then(d => {
+    if (d.ok && d.token) {
+      webLink.href = `/menu.html?table=${tableNum}&token=${encodeURIComponent(d.token)}`;
+    }
+  }).catch(() => {});
 
   // Bot username sozlamalardan olinadi, topilmasa standart qiymat ishlatiladi
   fetch('/api/settings').then(r => r.json()).then(settings => {
