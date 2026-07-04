@@ -226,9 +226,15 @@ def add_expense():
     except (ValueError, AttributeError):
         exp_date = datetime.date.today().isoformat()
     conn = get_db()
+    shift_id = d.get("shift_id")
+    if not shift_id:
+        open_cur = db_exec(conn, "SELECT id FROM shifts WHERE status='open'", ())
+        open_shifts = rows_to_list(open_cur)
+        if len(open_shifts) == 1:
+            shift_id = open_shifts[0]["id"]
     db_exec(conn,
-        "INSERT INTO expenses (category, description, amount, date) VALUES (?,?,?,?)",
-        (d.get("category"), d.get("description"), int(d.get("amount", 0) or 0), exp_date)
+        "INSERT INTO expenses (category, description, amount, date, shift_id) VALUES (?,?,?,?,?)",
+        (d.get("category"), d.get("description"), int(d.get("amount", 0) or 0), exp_date, shift_id)
     )
     conn.commit()
     audit("expense_add", "expense", user_name="admin",

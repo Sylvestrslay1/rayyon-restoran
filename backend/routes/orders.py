@@ -253,6 +253,9 @@ def confirm_order(sid):
     if not pre_items:
         return jsonify({"ok": True, "confirmed": 0})
     db_exec(conn, "UPDATE order_items SET status='pending' WHERE session_id=? AND status='pending_confirm'", (sid,))
+    if staff and not s.get("waiter_id"):
+        db_exec(conn, "UPDATE sessions SET waiter_id=?, waiter_name=? WHERE id=?",
+                (staff["id"], staff["name"], sid))
     conn.commit()
     names = ", ".join(f"{i['item_name']} x{i.get('quantity',1)}" for i in pre_items)
     tg_send(f"🍽 <b>Stol #{s['table_number']} — Yangi buyurtma!</b>\n{names}")
