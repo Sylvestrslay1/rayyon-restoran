@@ -1674,10 +1674,10 @@ async function loadDashboard() {
     const paymentsData = await r2.json();
     const pays = Array.isArray(paymentsData) ? paymentsData : (paymentsData.payments || []);
     const tbody = document.getElementById('dashOrdersBody');
-    if (!pays.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Bugun to'lov yo'q</td></tr>`; return; }
+    if (!pays.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="6">${t('dash.no_payments')}</td></tr>`; return; }
     tbody.innerHTML = pays.map(p => `<tr>
       <td style="color:var(--cyan);font-weight:700">#${p.id}</td>
-      <td>${esc(p.table_number ? 'Stol ' + p.table_number : '—')}</td>
+      <td>${esc(p.table_number ? t('th.table') + ' ' + p.table_number : '—')}</td>
       <td style="color:var(--gold);font-weight:700">${priceFmt(p.amount)}</td>
       <td>${esc(p.method || 'naqd')}</td>
       <td>${esc(p.cashier_name || '—')}</td>
@@ -1749,7 +1749,7 @@ function renderResTable(rows, dayTitle) {
   const tbody = document.getElementById('reservationsBody');
   const titleEl = document.getElementById('cal-day-title');
   if (titleEl) { titleEl.style.display = dayTitle ? 'block' : 'none'; if (dayTitle) titleEl.textContent = dayTitle; }
-  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">Bronlar yo'q</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">${t('empty.res')}</td></tr>`; return; }
   tbody.innerHTML = rows.map(row => `<tr>
     <td style="color:var(--cyan);font-weight:700">#${row.id}</td>
     <td>${esc(row.customer_name)}</td><td>${esc(row.customer_phone)}</td>
@@ -3200,7 +3200,7 @@ async function loadShifts(statusFilter, btnEl) {
   const rows = await r.json();
   const tbody = document.getElementById('shiftsBody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Smenalar yo'q</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${t('empty.shifts')}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(s => {
